@@ -34,7 +34,7 @@ except Exception as e:
     raise RuntimeError(f"❌ Không thể kết nối MongoDB: {e}")
 
 # ---- Danh sách NV được phép vào trang xem dữ liệu ----
-ALLOWED_IDS = {"Admin","Admin01", "Admin02", "Admin03"}
+ALLOWED_IDS = {"Admin", "Admin01", "Admin02", "Admin03"}
 
 
 # ---- API: Trang index ----
@@ -71,6 +71,9 @@ def build_query(filter_type, start_date, end_date, search):
     # ---- Lọc theo thời gian ----
     if filter_type == "custom" and start_date and end_date:
         query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
+    elif filter_type == "today":
+        today_str = today.strftime("%Y-%m-%d")
+        query["CheckinDate"] = today_str
     elif filter_type == "week":
         start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
         end = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
@@ -85,9 +88,14 @@ def build_query(filter_type, start_date, end_date, search):
         end = today.replace(month=12, day=31).strftime("%Y-%m-%d")
         query["CheckinDate"] = {"$gte": start, "$lte": end}
 
-    # ---- Lọc theo tên NV ----
+    # ---- Lọc theo NV (cả mã & tên) ----
     if search:
-        query["EmployeeId"] = {"$regex": re.compile(search, re.IGNORECASE)}
+        regex = re.compile(search, re.IGNORECASE)
+        query["$or"] = [
+            {"EmployeeId": {"$regex": regex}},
+            {"EmployeeName": {"$regex": regex}}
+        ]
+
     return query
 
 
@@ -115,7 +123,7 @@ def get_attendances():
             "OtherNote": 1,
             "Address": 1,
             "CheckinTime": 1,
-            "CheckType": 1,  # ✅ thay vì Shift
+            "CheckType": 1,
             "Status": 1,
             "FaceImage": 1
         }))
@@ -153,7 +161,7 @@ def export_to_excel():
             "OtherNote": 1,
             "Address": 1,
             "CheckinTime": 1,
-            "CheckType": 1,  # ✅ thay thế cột Shift
+            "CheckType": 1,
             "Status": 1
         }))
 
@@ -172,7 +180,7 @@ def export_to_excel():
             "OtherNote": "Khác",
             "Address": "Địa chỉ",
             "CheckinTime": "Thời gian",
-            "CheckType": "Loại điểm danh",  # ✅ Check-in / Check-out
+            "CheckType": "Loại điểm danh",
             "Status": "Trạng thái"
         }, inplace=True)
 
