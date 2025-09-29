@@ -87,6 +87,7 @@
     <!-- Bộ lọc nhanh -->
     <div class="controls">
       <label><b>Lọc nhanh:</b></label>
+      <button onclick="applyFilter('today', this)">Hôm nay</button>
       <button onclick="applyFilter('week', this)">Tuần này</button>
       <button onclick="applyFilter('month', this)">Tháng này</button>
       <button onclick="applyFilter('year', this)">Năm nay</button>
@@ -105,7 +106,7 @@
     <!-- Tìm kiếm -->
     <div class="controls">
       <label><b>Tìm kiếm:</b></label>
-      <input type="text" id="searchBox" placeholder="Nhập mã nhân viên...">
+      <input type="text" id="searchBox" placeholder="Nhập tên hoặc mã NV...">
       <button onclick="applySearch()">Tìm</button>
     </div>
 
