@@ -195,17 +195,19 @@ def export_to_excel():
 
             # Fill Check1..Check10
             for j, rec in enumerate(records[:10], start=1):
+                # ---- Parse giờ chấm công ----
                 checkin_time = rec.get("CheckinTime")
                 time_str = ""
                 if isinstance(checkin_time, datetime):
                     time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
                 elif isinstance(checkin_time, str) and checkin_time.strip():
                     try:
-                        parsed = datetime.fromisoformat(checkin_time.replace("Z", "+00:00"))
-                        time_str = parsed.astimezone(VN_TZ).strftime("%H:%M:%S")
+                        parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
+                        time_str = parsed.strftime("%H:%M:%S")
                     except Exception:
-                        time_str = checkin_time
+                        time_str = checkin_time  # fallback nếu không parse được
 
+                # ---- Build entry ----
                 parts = []
                 if time_str:
                     parts.append(f"Giờ chấm công: {time_str}")
@@ -219,7 +221,7 @@ def export_to_excel():
                 if rec.get("Address"):
                     parts.append(f"Địa chỉ: {rec['Address']}")
 
-                entry = "\n".join(parts)
+                entry = " ; ".join(parts)
                 ws.cell(row=row, column=3 + j, value=entry)
 
             # Border + align cả dòng
@@ -228,7 +230,7 @@ def export_to_excel():
                 cell.border = border
                 cell.alignment = align_left
 
-            # Auto-fit row height theo số dòng
+            # Auto-fit row height
             max_lines = max(
                 (str(ws.cell(row=row, column=col).value).count("\n") + 1 if ws.cell(row=row, column=col).value else 1)
                 for col in range(1, 14)
@@ -240,13 +242,9 @@ def export_to_excel():
             max_length = 0
             col_letter = col[0].column_letter
             for cell in col:
-                try:
-                    if cell.value:
-                        length = len(str(cell.value))
-                        if length > max_length:
-                            max_length = length
-                except:
-                    pass
+                if cell.value:
+                    length = len(str(cell.value))
+                    max_length = max(max_length, length)
             ws.column_dimensions[col_letter].width = max_length + 2
 
         # ---- Tạo tên file xuất ----
@@ -276,9 +274,6 @@ def export_to_excel():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
