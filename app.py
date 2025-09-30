@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 import calendar
 import re
 from openpyxl import load_workbook
+from openpyxl.styles import Border, Side, Alignment
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Border, Side
 
 app = Flask(__name__, template_folder="templates")
 CORS(app)
@@ -140,7 +140,6 @@ def get_attendances():
         return jsonify({"error": str(e)}), 500
 
 
-# ---- API: Xuất Excel theo form mẫu ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -187,8 +186,9 @@ def export_to_excel():
                 check_time = ""
 
             tasks = ", ".join(d["Tasks"]) if isinstance(d.get("Tasks"), list) else d.get("Tasks", "")
-
-            detail = f"{check_time}; {d.get('ProjectId','')}; {tasks}; {d.get('OtherNote','')}; {d.get('Address','')}"
+            details = [check_time, d.get("ProjectId", ""), tasks, d.get("OtherNote", ""), d.get("Address", "")]
+            # Chỉ lấy các phần có dữ liệu, loại bỏ chuỗi rỗng
+            detail = "; ".join([x for x in details if x])
             grouped[key].append(detail)
 
         # Load file mẫu
@@ -208,14 +208,31 @@ def export_to_excel():
             ws.cell(row=row, column=2, value=emp_name)     # Tên NV
             ws.cell(row=row, column=3, value=check_date)   # Ngày
 
-            for i, detail in enumerate(checks[:10], start=4):  # Check1..Check10 bắt đầu từ col=4
-                ws.cell(row=row, column=i, value=detail)
+            # Fill vào các cột Check1..Check10
+            for i in range(10):
+                col = 4 + i  # cột bắt đầu từ Check1
+                value = checks[i] if i < len(checks) else ""
+                ws.cell(row=row, column=col, value=value)
 
-            # Apply border cho toàn bộ hàng vừa ghi
-            for col in range(1, 14):  # 1 -> 13 (Mã NV đến Check10)
-                ws.cell(row=row, column=col).border = border
+            # Apply border cho tất cả các ô từ Mã NV -> Check10
+            for col in range(1, 14):  # 1 -> 13
+                cell = ws.cell(row=row, column=col)
+                cell.border = border
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
 
             row += 1
+
+        # Auto-fit column width
+        for col in ws.columns:
+            max_length = 0
+            col_letter = get_column_letter(col[0].column)
+            for cell in col:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            ws.column_dimensions[col_letter].width = min(max_length + 2, 60)  # giới hạn max 60
 
         # Xuất file ra BytesIO
         output = BytesIO()
@@ -238,6 +255,7 @@ def export_to_excel():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 if __name__ == "__main__":
