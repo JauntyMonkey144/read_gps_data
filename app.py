@@ -137,7 +137,6 @@ def get_attendances():
         return jsonify({"error": str(e)}), 500
 
 
-# ---- Xuất Excel ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -163,7 +162,6 @@ def export_to_excel():
             "CheckinDate": 1
         }))
 
-        # ---- Group theo EmployeeId + CheckinDate ----
         grouped = {}
         for d in data:
             emp_id = d.get("EmployeeId", "")
@@ -175,7 +173,6 @@ def export_to_excel():
             key = (emp_id, emp_name, date)
             grouped.setdefault(key, []).append(d)
 
-        # Load template
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
@@ -188,14 +185,13 @@ def export_to_excel():
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-        start_row = 2
+        start_row = 3
         for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
             ws.cell(row=row, column=1, value=emp_id)
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date)
 
-            # Fill Check1..Check10
             for j, rec in enumerate(records[:10], start=1):
                 time_str = ""
                 if isinstance(rec.get("CheckinTime"), datetime):
@@ -217,18 +213,33 @@ def export_to_excel():
                 entry = " ; ".join(parts)
                 ws.cell(row=row, column=3 + j, value=entry)
 
-            # Border + align full row đến Check10
-            for col in range(1, 14):
+            for col in range(1, 13):
                 cell = ws.cell(row=row, column=col)
                 cell.border = border
                 cell.alignment = align_left
 
-        # Xuất file
+        # 🔹 Auto width & height
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            ws.column_dimensions[col_letter].width = max_length + 2
+
+        for row in ws.iter_rows(min_row=start_row, max_row=ws.max_row, min_col=1, max_col=12):
+            max_lines = 1
+            for cell in row:
+                if cell.value:
+                    lines = str(cell.value).count("\n") + 1
+                    max_lines = max(max_lines, lines)
+            ws.row_dimensions[cell[0].row].height = max_lines * 15
+
         output = BytesIO()
         wb.save(output)
         output.seek(0)
 
-        filename = f"Cham_cong_{filter_type}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
+        filename = f"Chấm công theo {filter_type}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
         return send_file(
             output,
             as_attachment=True,
@@ -238,6 +249,7 @@ def export_to_excel():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 if __name__ == "__main__":
