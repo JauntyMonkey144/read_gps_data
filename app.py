@@ -235,7 +235,7 @@ def export_to_excel():
                 (str(ws.cell(row=row, column=col).value).count("\n") + 1 if ws.cell(row=row, column=col).value else 1)
                 for col in range(1, 14)
             )
-            ws.row_dimensions[row].height = max_lines * 15
+            ws.row_dimensions[row].height = max_lines * 20
 
         # Auto-fit column width
         for col in ws.columns:
