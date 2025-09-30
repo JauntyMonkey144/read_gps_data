@@ -216,7 +216,7 @@ def export_to_excel():
                 ws.cell(row=row, column=3 + j, value=entry)
 
             # Border + align cả dòng
-            for col in range(1, 13):
+            for col in range(1, 14):
                 cell = ws.cell(row=row, column=col)
                 cell.border = border
                 cell.alignment = align_left
