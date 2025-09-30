@@ -71,19 +71,19 @@ def build_query(filter_type, start_date, end_date, search):
 
     if filter_type == "custom" and start_date and end_date:
         query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
-    elif filter_type == "today":
+    elif filter_type == "hôm nay":
         today_str = today.strftime("%Y-%m-%d")
         query["CheckinDate"] = today_str
-    elif filter_type == "week":
+    elif filter_type == "tuần":
         start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
         end = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
         query["CheckinDate"] = {"$gte": start, "$lte": end}
-    elif filter_type == "month":
+    elif filter_type == "tháng":
         start = today.replace(day=1).strftime("%Y-%m-%d")
         last_day = calendar.monthrange(today.year, today.month)[1]
         end = today.replace(day=last_day).strftime("%Y-%m-%d")
         query["CheckinDate"] = {"$gte": start, "$lte": end}
-    elif filter_type == "year":
+    elif filter_type == "năm":
         start = today.replace(month=1, day=1).strftime("%Y-%m-%d")
         end = today.replace(month=12, day=31).strftime("%Y-%m-%d")
         query["CheckinDate"] = {"$gte": start, "$lte": end}
@@ -97,21 +97,20 @@ def build_query(filter_type, start_date, end_date, search):
     return query
 
 
-# ---- API: Lấy danh sách chấm công ----
+# ---- API lấy dữ liệu (cho HTML) ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
         emp_id = request.args.get("empId")
         if emp_id not in ALLOWED_IDS:
-            return jsonify({"error": "🚫 Không có quyền truy cập!"}), 403
+            return jsonify({"error": "🚫 Không có quyền!"}), 403
 
-        filter_type = request.args.get("filter", "all")
+        filter_type = request.args.get("filter", "all").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
 
         query = build_query(filter_type, start_date, end_date, search)
-
         data = list(collection.find(query, {
             "_id": 0,
             "EmployeeId": 1,
@@ -126,17 +125,16 @@ def get_attendances():
             "FaceImage": 1
         }))
 
-        # Format datetime
         for d in data:
             if isinstance(d.get("CheckinTime"), datetime):
                 d["CheckinTime"] = d["CheckinTime"].astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
 
         return jsonify(data), 200
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
+# ---- Xuất Excel ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -144,7 +142,7 @@ def export_to_excel():
         if emp_id not in ALLOWED_IDS:
             return jsonify({"error": "🚫 Không có quyền xuất Excel!"}), 403
 
-        filter_type = request.args.get("filter", "all")
+        filter_type = request.args.get("filter", "all").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
@@ -162,17 +160,19 @@ def export_to_excel():
             "CheckinDate": 1
         }))
 
+        # ---- Group theo EmployeeId + CheckinDate ----
         grouped = {}
         for d in data:
-            emp_id = d.get("EmployeeId", "")
-            emp_name = d.get("EmployeeName", "")
+            eid = d.get("EmployeeId", "")
+            ename = d.get("EmployeeName", "")
             date = d.get("CheckinDate") or (
                 d["CheckinTime"].astimezone(VN_TZ).strftime("%Y-%m-%d")
                 if isinstance(d.get("CheckinTime"), datetime) else ""
             )
-            key = (emp_id, emp_name, date)
+            key = (eid, ename, date)
             grouped.setdefault(key, []).append(d)
 
+        # Load template
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
@@ -186,12 +186,13 @@ def export_to_excel():
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
         start_row = 3
-        for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
+        for i, ((eid, ename, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
-            ws.cell(row=row, column=1, value=emp_id)
-            ws.cell(row=row, column=2, value=emp_name)
+            ws.cell(row=row, column=1, value=eid)
+            ws.cell(row=row, column=2, value=ename)
             ws.cell(row=row, column=3, value=date)
 
+            # Fill Check1..Check10
             for j, rec in enumerate(records[:10], start=1):
                 time_str = ""
                 if isinstance(rec.get("CheckinTime"), datetime):
@@ -218,28 +219,25 @@ def export_to_excel():
                 cell.border = border
                 cell.alignment = align_left
 
-        # 🔹 Auto width & height
-        for col in ws.columns:
-            max_length = 0
-            col_letter = col[0].column_letter
-            for cell in col:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-            ws.column_dimensions[col_letter].width = max_length + 2
+        # ---- Đặt tên file ----
+        today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
 
-        for row in ws.iter_rows(min_row=start_row, max_row=ws.max_row, min_col=1, max_col=12):
-            max_lines = 1
-            for cell in row:
-                if cell.value:
-                    lines = str(cell.value).count("\n") + 1
-                    max_lines = max(max_lines, lines)
-            ws.row_dimensions[cell[0].row].height = max_lines * 15
+        if search:  # Ưu tiên search
+            filename = f"Danh sách chấm công theo {search}_{today_str}.xlsx"
+        elif filter_type == "hôm nay":
+            filename = f"Danh sách chấm công_{today_str}.xlsx"
+        elif filter_type == "custom" and start_date and end_date:
+            start_fmt = datetime.strptime(start_date, "%Y-%m-%d").strftime("%d-%m-%Y")
+            end_fmt = datetime.strptime(end_date, "%Y-%m-%d").strftime("%d-%m-%Y")
+            filename = f"Danh sách chấm công từ {start_fmt} đến {end_fmt}_{today_str}.xlsx"
+        else:
+            filename = f"Danh sách chấm công_{filter_type}_{today_str}.xlsx"
 
+        # Xuất file
         output = BytesIO()
         wb.save(output)
         output.seek(0)
 
-        filename = f"Danh sách chấm công theo {filter_type}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
         return send_file(
             output,
             as_attachment=True,
@@ -249,7 +247,6 @@ def export_to_excel():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 
 if __name__ == "__main__":
