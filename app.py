@@ -179,7 +179,6 @@ def export_to_excel():
                 check_time = check_time.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
             tasks = ", ".join(d["Tasks"]) if isinstance(d.get("Tasks"), list) else d.get("Tasks", "")
 
-            ws.cell(row=row, column=1, value=i + 1)  # STT
             ws.cell(row=row, column=2, value=d.get("EmployeeId", ""))  # Mã NV
             ws.cell(row=row, column=3, value=d.get("EmployeeName", ""))  # Tên nhân viên
             ws.cell(row=row, column=4, value=d.get("ProjectId", ""))  # Mã dự án
