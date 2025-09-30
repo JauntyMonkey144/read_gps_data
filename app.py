@@ -141,20 +141,10 @@ def get_attendances():
         return jsonify({"error": str(e)}), 500
 
 
-# ---- API: Xuất Excel ----
-@app.route("/api/export-excel", methods=["GET"])
-def export_to_excel():
-    try:
-        emp_id = request.args.get("empId")
-        if emp_id not in ALLOWED_IDS:
-            return jsonify({"error": "🚫 Không có quyền xuất Excel!"}), 403
-
-        filter_type = request.args.get("filter", "all")
-        start_date = request.args.get("startDate")
-        end_date = request.args.get("endDate")
-        search = request.args.get("search", "").strip()
-
+ch", "").strip()
         query = build_query(filter_type, start_date, end_date, search)
+
+        # Query dữ liệu
         data = list(collection.find(query, {
             "_id": 0,
             "EmployeeId": 1,
@@ -166,86 +156,69 @@ def export_to_excel():
             "CheckinTime": 1
         }))
 
-        # Gom nhóm theo (EmployeeId, CheckinDate)
-        grouped = defaultdict(list)
+        # ---- Group theo EmployeeId + CheckinDate ----
+        grouped = {}
         for d in data:
             emp_id = d.get("EmployeeId", "")
             emp_name = d.get("EmployeeName", "")
-            project = d.get("ProjectId", "")
-            tasks = ", ".join(d["Tasks"]) if isinstance(d.get("Tasks"), list) else d.get("Tasks", "")
-            note = d.get("OtherNote", "")
-            addr = d.get("Address", "")
-            check_time = d.get("CheckinTime")
-            if isinstance(check_time, datetime):
-                check_time = check_time.astimezone(VN_TZ)
-                check_date = check_time.strftime("%Y-%m-%d")
-                check_time_str = check_time.strftime("%H:%M:%S")
-            else:
-                check_date = ""
-                check_time_str = ""
+            date = d.get("CheckinDate") or (
+                d["CheckinTime"].astimezone(VN_TZ).strftime("%Y-%m-%d")
+                if isinstance(d.get("CheckinTime"), datetime) else ""
+            )
+            key = (emp_id, emp_name, date)
+            grouped.setdefault(key, []).append(d)
 
-            # Format dữ liệu check
-            check_str = f"{check_time_str}"
-            if project: check_str += f" ; ID:{project}"
-            if tasks: check_str += f" ; Công việc:{tasks}"
-            if note: check_str += f" ; Ghi chú khác:{note}"
-            if addr: check_str += f" ; Địa chỉ:{addr}"
-
-            grouped[(emp_id, emp_name, check_date)].append(check_str)
-
-        # Load file mẫu
+        # Load template
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
 
-        thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
-                             top=Side(style="thin"), bottom=Side(style="thin"))
+        border = Border(
+            left=Side(border_style="thin", color="000000"),
+            right=Side(border_style="thin", color="000000"),
+            top=Side(border_style="thin", color="000000"),
+            bottom=Side(border_style="thin", color="000000")
+        )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
         start_row = 2
-        for i, ((eid, ename, cdate), checks) in enumerate(grouped.items(), start=0):
+        for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
+            ws.cell(row=row, column=1, value=emp_id)
+            ws.cell(row=row, column=2, value=emp_name)
+            ws.cell(row=row, column=3, value=date)
 
-            # Ghi dữ liệu cơ bản
-            ws.cell(row=row, column=1, value=eid)        # Mã NV
-            ws.cell(row=row, column=2, value=ename)      # Tên NV
-            ws.cell(row=row, column=3, value=cdate)      # Ngày
+            # Thêm dữ liệu check 1–10
+            for j, rec in enumerate(records[:10], start=1):
+                time_str = ""
+                if isinstance(rec.get("CheckinTime"), datetime):
+                    time_str = rec["CheckinTime"].astimezone(VN_TZ).strftime("%H:%M:%S")
 
-            # Fill các check 1 → 10
-            for j in range(10):
-                col = 4 + j  # Check1 bắt đầu ở cột 4
-                if j < len(checks):
-                    ws.cell(row=row, column=col, value=checks[j])
-                # Border + Alignment cho tất cả cell từ col 1 → col 13
-                ws.cell(row=row, column=col).border = thin_border
-                ws.cell(row=row, column=col).alignment = align_left
+                entry = f"{time_str}"
+                if rec.get("ProjectId"):
+                    entry += f" ; ID: {rec['ProjectId']}"
+                if rec.get("Tasks"):
+                    tasks = ", ".join(rec["Tasks"]) if isinstance(rec["Tasks"], list) else rec["Tasks"]
+                    entry += f" ; Công việc: {tasks}"
+                if rec.get("OtherNote"):
+                    entry += f" ; Ghi chú khác: {rec['OtherNote']}"
+                if rec.get("Address"):
+                    entry += f" ; Địa chỉ: {rec['Address']}"
 
-            # Border + Alignment cho 3 cột đầu
-            for col in [1, 2, 3]:
-                ws.cell(row=row, column=col).border = thin_border
-                ws.cell(row=row, column=col).alignment = align_left
+                ws.cell(row=row, column=3 + j, value=entry)
 
-        # Auto fit column width
-        for col in ws.columns:
-            max_length = 0
-            col_letter = get_column_letter(col[0].column)
-            for cell in col:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-            ws.column_dimensions[col_letter].width = max_length + 2
+            # ---- Áp dụng border + align cho cả row đến Check10 ----
+            for col in range(1, 13):  # 1..12 = Mã NV → Check 10
+                cell = ws.cell(row=row, column=col)
+                cell.alignment = align_left
+                cell.border = border
 
         # Xuất file
         output = BytesIO()
         wb.save(output)
         output.seek(0)
 
-        if start_date and end_date:
-            filename = f"Cham_cong_{start_date}_to_{end_date}.xlsx"
-        elif search:
-            filename = f"Cham_cong_{search}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
-        else:
-            filename = f"Cham_cong_{filter_type}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
-
+        filename = f"Cham_cong_{filter_type}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
         return send_file(
             output,
             as_attachment=True,
