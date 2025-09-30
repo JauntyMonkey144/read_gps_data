@@ -136,7 +136,6 @@ def get_attendances():
         return jsonify({"error": str(e)}), 500
 
 
-# ---- Xuất Excel ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -144,7 +143,7 @@ def export_to_excel():
         if emp_id not in ALLOWED_IDS:
             return jsonify({"error": "🚫 Không có quyền xuất Excel!"}), 403
 
-        filter_type = request.args.get("filter", "all")
+        filter_type = request.args.get("filter", "all").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
@@ -174,7 +173,7 @@ def export_to_excel():
             key = (emp_id, emp_name, date)
             grouped.setdefault(key, []).append(d)
 
-        # Load template
+        # Load template Excel
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
@@ -187,14 +186,14 @@ def export_to_excel():
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-        start_row = 3
+        start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
             ws.cell(row=row, column=1, value=emp_id)
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date)
 
-            # Fill Check1..Check10 chỉ HH:MM:SS
+            # Fill Check1..Check10
             for j, rec in enumerate(records[:10], start=1):
                 time_str = ""
                 if isinstance(rec.get("CheckinTime"), datetime):
@@ -216,30 +215,53 @@ def export_to_excel():
                 entry = " ; ".join(parts)
                 ws.cell(row=row, column=3 + j, value=entry)
 
-            # Border + align
+            # Border + align cả dòng
             for col in range(1, 13):
                 cell = ws.cell(row=row, column=col)
                 cell.border = border
                 cell.alignment = align_left
 
-        # Auto width + height
+            # Auto-fit row height theo số dòng (ước lượng: 15 đơn vị cho mỗi dòng)
+            max_lines = max(
+                (str(ws.cell(row=row, column=col).value).count("\n") + 1 if ws.cell(row=row, column=col).value else 1)
+                for col in range(1, 14)
+            )
+            ws.row_dimensions[row].height = max_lines * 15
+
+        # Auto-fit column width (tính theo độ dài text lớn nhất)
         for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
             for cell in col:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-            ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+                try:
+                    if cell.value:
+                        length = len(str(cell.value))
+                        if length > max_length:
+                            max_length = length
+                except:
+                    pass
+            ws.column_dimensions[col_letter].width = max_length + 2
 
-        for row in ws.iter_rows(min_row=start_row, max_row=ws.max_row):
-            ws.row_dimensions[row[0].row].height = 30
-
-        # ---- Tên file ----
+        # ---- Tạo tên file xuất ----
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
-        filename = f"Danh sách chấm công_{today_str}.xlsx"
+        if search:
+            filename = f"Danh sách chấm công theo {search}_{today_str}.xlsx"
+        elif filter_type == "today":
+            filename = f"Danh sách chấm công_{today_str}.xlsx"
+        elif filter_type == "custom" and start_date and end_date:
+            filename = f"Danh sách chấm công từ {start_date} đến {end_date}_{today_str}.xlsx"
+        elif filter_type == "all":
+            filename = f"Danh sách chấm công theo tất cả_{today_str}.xlsx"
+        else:
+            filename = f"Danh sách chấm công theo {filter_type}_{today_str}.xlsx"
+
+        # ---- Xuất file ----
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
 
         return send_file(
-            BytesIO(wb.save(BytesIO())),
+            output,
             as_attachment=True,
             download_name=filename,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -247,6 +269,7 @@ def export_to_excel():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 if __name__ == "__main__":
