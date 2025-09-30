@@ -87,7 +87,9 @@ def build_query(filter_type, start_date, end_date, search):
         start = today.replace(month=1, day=1).strftime("%Y-%m-%d")
         end = today.replace(month=12, day=31).strftime("%Y-%m-%d")
         query["CheckinDate"] = {"$gte": start, "$lte": end}
-
+    elif filter_type == "tất cả":
+        query = {}  # không giới hạn thời gian
+        
     if search:
         regex = re.compile(search, re.IGNORECASE)
         query["$or"] = [
@@ -225,13 +227,15 @@ def export_to_excel():
         if search:  # Ưu tiên search
             filename = f"Danh sách chấm công theo {search}_{today_str}.xlsx"
         elif filter_type == "hôm nay":
+            filename = f"Danh sách chấm công hôm nay_{today_str}.xlsx"
+        elif filter_type == "hôm nay":
             filename = f"Danh sách chấm công_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
             start_fmt = datetime.strptime(start_date, "%Y-%m-%d").strftime("%d-%m-%Y")
             end_fmt = datetime.strptime(end_date, "%Y-%m-%d").strftime("%d-%m-%Y")
             filename = f"Danh sách chấm công từ {start_fmt} đến {end_fmt}_{today_str}.xlsx"
         else:
-            filename = f"Danh sách chấm công_{filter_type}_{today_str}.xlsx"
+            filename = f"Danh sách chấm công theo {filter_type}_{today_str}.xlsx"
 
         # Xuất file
         output = BytesIO()
