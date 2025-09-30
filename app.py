@@ -213,12 +213,30 @@ def export_to_excel():
                 cell.border = border
                 cell.alignment = align_left
 
-            # Auto-fit row height theo số dòng (ước lượng: 15 đơn vị cho mỗi dòng)
-            max_lines = max(
-                (str(ws.cell(row=row, column=col).value).count("\n") + 1 if ws.cell(row=row, column=col).value else 1)
-                for col in range(1, 14)
-            )
-            ws.row_dimensions[row].height = max_lines * 15
+        # ---- Auto-fit chiều rộng ----
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    if cell.value:
+                        length = len(str(cell.value))
+                        if length > max_length:
+                            max_length = length
+                except:
+                    pass
+            adjusted_width = (max_length + 2)
+            ws.column_dimensions[col_letter].width = adjusted_width
+
+        # ---- Auto-fit chiều cao ----
+        for row in ws.iter_rows(min_row=start_row, max_row=ws.max_row):
+            row_idx = row[0].row
+            max_lines = 1
+            for cell in row:
+                if cell.value:
+                    lines = str(cell.value).count("\n") + 1
+                    max_lines = max(max_lines, lines)
+            ws.row_dimensions[row_idx].height = max_lines * 15
 
         # ---- Tạo tên file xuất ----
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
@@ -247,6 +265,7 @@ def export_to_excel():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 
