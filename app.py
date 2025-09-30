@@ -10,6 +10,7 @@ import re
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
 from openpyxl.utils import get_column_letter
+from collections import defaultdict
 
 app = Flask(__name__, template_folder="templates")
 CORS(app)
@@ -140,6 +141,7 @@ def get_attendances():
         return jsonify({"error": str(e)}), 500
 
 
+# ---- API: Xuất Excel ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -164,77 +166,75 @@ def export_to_excel():
             "CheckinTime": 1
         }))
 
-        # Gom dữ liệu theo (EmployeeId, EmployeeName, CheckinDate)
-        grouped = {}
+        # Gom nhóm theo (EmployeeId, CheckinDate)
+        grouped = defaultdict(list)
         for d in data:
             emp_id = d.get("EmployeeId", "")
             emp_name = d.get("EmployeeName", "")
-            check_date = d.get("CheckinTime")
-            if isinstance(check_date, datetime):
-                check_date = check_date.astimezone(VN_TZ).strftime("%Y-%m-%d")
-            else:
-                check_date = d.get("CheckinDate", "")
-
-            key = (emp_id, emp_name, check_date)
-            if key not in grouped:
-                grouped[key] = []
-
+            project = d.get("ProjectId", "")
+            tasks = ", ".join(d["Tasks"]) if isinstance(d.get("Tasks"), list) else d.get("Tasks", "")
+            note = d.get("OtherNote", "")
+            addr = d.get("Address", "")
             check_time = d.get("CheckinTime")
             if isinstance(check_time, datetime):
-                check_time = check_time.astimezone(VN_TZ).strftime("%H:%M:%S")
+                check_time = check_time.astimezone(VN_TZ)
+                check_date = check_time.strftime("%Y-%m-%d")
+                check_time_str = check_time.strftime("%H:%M:%S")
             else:
-                check_time = ""
+                check_date = ""
+                check_time_str = ""
 
-            tasks = ", ".join(d["Tasks"]) if isinstance(d.get("Tasks"), list) else d.get("Tasks", "")
-            details = [check_time, d.get("ProjectId", ""), tasks, d.get("OtherNote", ""), d.get("Address", "")]
-            # Chỉ lấy các phần có dữ liệu, loại bỏ chuỗi rỗng
-            detail = "; ".join([x for x in details if x])
-            grouped[key].append(detail)
+            # Format dữ liệu check
+            check_str = f"{check_time_str}"
+            if project: check_str += f" ; ID:{project}"
+            if tasks: check_str += f" ; Công việc:{tasks}"
+            if note: check_str += f" ; Ghi chú khác:{note}"
+            if addr: check_str += f" ; Địa chỉ:{addr}"
+
+            grouped[(emp_id, emp_name, check_date)].append(check_str)
 
         # Load file mẫu
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
 
+        thin_border = Border(left=Side(style="thin"), right=Side(style="thin"),
+                             top=Side(style="thin"), bottom=Side(style="thin"))
+        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
         start_row = 2
-        row = start_row
+        for i, ((eid, ename, cdate), checks) in enumerate(grouped.items(), start=0):
+            row = start_row + i
 
-        # Border style
-        thin = Side(border_style="thin", color="000000")
-        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+            # Ghi dữ liệu cơ bản
+            ws.cell(row=row, column=1, value=eid)        # Mã NV
+            ws.cell(row=row, column=2, value=ename)      # Tên NV
+            ws.cell(row=row, column=3, value=cdate)      # Ngày
 
-        for (emp_id, emp_name, check_date), checks in grouped.items():
-            ws.cell(row=row, column=1, value=emp_id)       # Mã NV
-            ws.cell(row=row, column=2, value=emp_name)     # Tên NV
-            ws.cell(row=row, column=3, value=check_date)   # Ngày
+            # Fill các check 1 → 10
+            for j in range(10):
+                col = 4 + j  # Check1 bắt đầu ở cột 4
+                if j < len(checks):
+                    ws.cell(row=row, column=col, value=checks[j])
+                # Border + Alignment cho tất cả cell từ col 1 → col 13
+                ws.cell(row=row, column=col).border = thin_border
+                ws.cell(row=row, column=col).alignment = align_left
 
-            # Fill vào các cột Check1..Check10
-            for i in range(10):
-                col = 4 + i  # cột bắt đầu từ Check1
-                value = checks[i] if i < len(checks) else ""
-                ws.cell(row=row, column=col, value=value)
+            # Border + Alignment cho 3 cột đầu
+            for col in [1, 2, 3]:
+                ws.cell(row=row, column=col).border = thin_border
+                ws.cell(row=row, column=col).alignment = align_left
 
-            # Apply border cho tất cả các ô từ Mã NV -> Check10
-            for col in range(1, 14):  # 1 -> 13
-                cell = ws.cell(row=row, column=col)
-                cell.border = border
-                cell.alignment = Alignment(wrap_text=True, vertical="top")
-
-            row += 1
-
-        # Auto-fit column width
+        # Auto fit column width
         for col in ws.columns:
             max_length = 0
             col_letter = get_column_letter(col[0].column)
             for cell in col:
-                try:
-                    if cell.value:
-                        max_length = max(max_length, len(str(cell.value)))
-                except:
-                    pass
-            ws.column_dimensions[col_letter].width = min(max_length + 2, 60)  # giới hạn max 60
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            ws.column_dimensions[col_letter].width = max_length + 2
 
-        # Xuất file ra BytesIO
+        # Xuất file
         output = BytesIO()
         wb.save(output)
         output.seek(0)
@@ -255,6 +255,7 @@ def export_to_excel():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 
