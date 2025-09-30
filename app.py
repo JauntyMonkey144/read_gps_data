@@ -251,7 +251,7 @@ def export_to_excel():
         elif filter_type == "custom" and start_date and end_date:
             filename = f"Danh sách chấm công từ {start_date} đến {end_date}_{today_str}.xlsx"
         elif filter_type == "tất cả":
-            filename = f"Danh sách chấm công theo tất cả_{today_str}.xlsx"
+            filename = f"Danh sách chấm công_{today_str}.xlsx"
         else:
             filename = f"Danh sách chấm công theo {filter_type}_{today_str}.xlsx"
 
