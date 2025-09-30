@@ -7,6 +7,8 @@ from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import calendar
 import re
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 app = Flask(__name__, template_folder="templates")
 CORS(app)
@@ -163,35 +165,42 @@ def export_to_excel():
             "Status": 1
         }))
 
-        for d in data:
-            if isinstance(d.get("CheckinTime"), datetime):
-                d["CheckinTime"] = d["CheckinTime"].astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
-            if isinstance(d.get("Tasks"), list):
-                d["Tasks"] = ", ".join(d["Tasks"])
+        # Load file mẫu
+        template_path = "templates/Copy of Form chấm công.xlsx"
+        wb = load_workbook(template_path)
+        ws = wb.active
 
-        df = pd.DataFrame(data)
-        df.rename(columns={
-            "EmployeeId": "Mã NV",
-            "EmployeeName": "Tên nhân viên",
-            "ProjectId": "Mã dự án",
-            "Tasks": "Công việc",
-            "OtherNote": "Khác",
-            "Address": "Địa chỉ",
-            "CheckinTime": "Thời gian",
-            "Status": "Trạng thái"
-        }, inplace=True)
+        # Giả sử dữ liệu bắt đầu từ dòng 2 (dòng 1 là header trong file mẫu)
+        start_row = 2
+        for i, d in enumerate(data, start=0):
+            row = start_row + i
+            check_time = d.get("CheckinTime")
+            if isinstance(check_time, datetime):
+                check_time = check_time.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
+            tasks = ", ".join(d["Tasks"]) if isinstance(d.get("Tasks"), list) else d.get("Tasks", "")
 
+            ws.cell(row=row, column=1, value=i + 1)  # STT
+            ws.cell(row=row, column=2, value=d.get("EmployeeId", ""))  # Mã NV
+            ws.cell(row=row, column=3, value=d.get("EmployeeName", ""))  # Tên nhân viên
+            ws.cell(row=row, column=4, value=d.get("ProjectId", ""))  # Mã dự án
+            ws.cell(row=row, column=5, value=tasks)  # Công việc
+            ws.cell(row=row, column=6, value=d.get("OtherNote", ""))  # Khác
+            ws.cell(row=row, column=7, value=d.get("Address", ""))  # Địa chỉ
+            ws.cell(row=row, column=8, value=check_time)  # Thời gian
+            ws.cell(row=row, column=9, value=d.get("Status", ""))  # Trạng thái
+
+        # Xuất file ra BytesIO
         output = BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, sheet_name="Chấm công", index=False)
+        wb.save(output)
         output.seek(0)
 
+        # Tạo tên file
         if start_date and end_date:
-            filename = f"Danh_sach_cham_cong_{start_date}_to_{end_date}.xlsx"
+            filename = f"Cham_cong_{start_date}_to_{end_date}.xlsx"
         elif search:
-            filename = f"Danh_sach_cham_cong_{search}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
+            filename = f"Cham_cong_{search}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
         else:
-            filename = f"Danh_sach_cham_cong_{filter_type}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
+            filename = f"Cham_cong_{filter_type}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
 
         return send_file(
             output,
@@ -199,6 +208,7 @@ def export_to_excel():
             download_name=filename,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
