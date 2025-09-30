@@ -199,21 +199,13 @@ def export_to_excel():
                 if isinstance(rec.get("CheckinTime"), datetime):
                     time_str = rec["CheckinTime"].astimezone(VN_TZ).strftime("%H:%M:%S")
 
-                parts = []
-                if time_str:
-                    parts.append(time_str)
-                if rec.get("ProjectId"):
-                    parts.append(f"ID: {rec['ProjectId']}")
-                if rec.get("Tasks"):
-                    tasks = ", ".join(rec["Tasks"]) if isinstance(rec["Tasks"], list) else rec["Tasks"]
-                    parts.append(f"Công việc: {tasks}")
-                if rec.get("OtherNote"):
-                    parts.append(f"Ghi chú khác: {rec['OtherNote']}")
-                if rec.get("Address"):
-                    parts.append(f"Địa chỉ: {rec['Address']}")
+                entry = f"Giờ chấm công: {time_str}" if time_str else "Giờ chấm công: "
+                entry += f" ; ID: {rec.get('ProjectId','') or ''}"
+                entry += f" ; Công việc: {', '.join(rec['Tasks']) if isinstance(rec.get('Tasks'), list) else (rec.get('Tasks') or '')}"
+                entry += f" ; Ghi chú khác: {rec.get('OtherNote','') or ''}"
+                entry += f" ; Địa chỉ: {rec.get('Address','') or ''}"
 
-                entry = " ; ".join(parts)
-                ws.cell(row=row, column=3 + j, value=entry)
+                ws.cell(row=row, column=3 + j, value=entry.strip(" ;"))
 
             # Border + align cả dòng
             for col in range(1, 14):
@@ -227,20 +219,6 @@ def export_to_excel():
                 for col in range(1, 14)
             )
             ws.row_dimensions[row].height = max_lines * 15
-
-        # Auto-fit column width (tính theo độ dài text lớn nhất)
-        for col in ws.columns:
-            max_length = 0
-            col_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if cell.value:
-                        length = len(str(cell.value))
-                        if length > max_length:
-                            max_length = length
-                except:
-                    pass
-            ws.column_dimensions[col_letter].width = max_length + 2
 
         # ---- Tạo tên file xuất ----
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
@@ -269,6 +247,7 @@ def export_to_excel():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 
