@@ -246,11 +246,11 @@ def export_to_excel():
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
         if search:
             filename = f"Danh sách chấm công theo {search}_{today_str}.xlsx"
-        elif filter_type == "today":
+        elif filter_type == "hôm nay":
             filename = f"Danh sách chấm công_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
             filename = f"Danh sách chấm công từ {start_date} đến {end_date}_{today_str}.xlsx"
-        elif filter_type == "all":
+        elif filter_type == "tất cả":
             filename = f"Danh sách chấm công theo tất cả_{today_str}.xlsx"
         else:
             filename = f"Danh sách chấm công theo {filter_type}_{today_str}.xlsx"
