@@ -148,7 +148,7 @@ def export_to_excel():
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-        start_row = 2
+        start_row = 3
         for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
             ws.cell(row=row, column=1, value=emp_id)
