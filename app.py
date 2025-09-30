@@ -2,15 +2,12 @@ from flask import Flask, render_template, jsonify, send_file, request
 from pymongo import MongoClient
 from flask_cors import CORS
 import os
-import pandas as pd
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import calendar
 import re
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
-from openpyxl.utils import get_column_letter
-from collections import defaultdict
 
 app = Flask(__name__, template_folder="templates")
 CORS(app)
@@ -41,13 +38,13 @@ except Exception as e:
 ALLOWED_IDS = {"Admin", "Admin01", "Admin02", "Admin03"}
 
 
-# ---- API: Trang index ----
+# ---- Trang index ----
 @app.route("/")
 def index():
     return render_template("index.html")
 
 
-# ---- API: Login ----
+# ---- Login ----
 @app.route("/login", methods=["GET"])
 def login():
     emp_id = request.args.get("empId")
@@ -64,15 +61,14 @@ def login():
             "EmployeeName": emp_name
         })
     else:
-        return jsonify({"success": False, "message": "🚫 Mã nhân viên của bạn không có quyền truy cập"}), 403
+        return jsonify({"success": False, "message": "🚫 Không có quyền"}), 403
 
 
-# ---- Xây dựng query cho filter ----
+# ---- Xây dựng query ----
 def build_query(filter_type, start_date, end_date, search):
     query = {}
     today = datetime.now(VN_TZ)
 
-    # ---- Lọc theo thời gian ----
     if filter_type == "custom" and start_date and end_date:
         query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
     elif filter_type == "today":
@@ -92,24 +88,22 @@ def build_query(filter_type, start_date, end_date, search):
         end = today.replace(month=12, day=31).strftime("%Y-%m-%d")
         query["CheckinDate"] = {"$gte": start, "$lte": end}
 
-    # ---- Lọc theo NV (cả mã & tên) ----
     if search:
         regex = re.compile(search, re.IGNORECASE)
         query["$or"] = [
             {"EmployeeId": {"$regex": regex}},
             {"EmployeeName": {"$regex": regex}}
         ]
-
     return query
 
 
-# ---- API: Lấy danh sách chấm công ----
-@app.route("/api/attendances", methods=["GET"])
-def get_attendances():
+# ---- Xuất Excel ----
+@app.route("/api/export-excel", methods=["GET"])
+def export_to_excel():
     try:
         emp_id = request.args.get("empId")
         if emp_id not in ALLOWED_IDS:
-            return jsonify({"error": "🚫 Không có quyền truy cập!"}), 403
+            return jsonify({"error": "🚫 Không có quyền xuất Excel!"}), 403
 
         filter_type = request.args.get("filter", "all")
         start_date = request.args.get("startDate")
@@ -117,7 +111,6 @@ def get_attendances():
         search = request.args.get("search", "").strip()
 
         query = build_query(filter_type, start_date, end_date, search)
-
         data = list(collection.find(query, {
             "_id": 0,
             "EmployeeId": 1,
@@ -127,33 +120,7 @@ def get_attendances():
             "OtherNote": 1,
             "Address": 1,
             "CheckinTime": 1,
-            "Status": 1,
-            "FaceImage": 1
-        }))
-
-        # Convert datetime -> string
-        for d in data:
-            if isinstance(d.get("CheckinTime"), datetime):
-                d["CheckinTime"] = d["CheckinTime"].astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
-
-        return jsonify(data), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-ch", "").strip()
-        query = build_query(filter_type, start_date, end_date, search)
-
-        # Query dữ liệu
-        data = list(collection.find(query, {
-            "_id": 0,
-            "EmployeeId": 1,
-            "EmployeeName": 1,
-            "ProjectId": 1,
-            "Tasks": 1,
-            "OtherNote": 1,
-            "Address": 1,
-            "CheckinTime": 1
+            "CheckinDate": 1
         }))
 
         # ---- Group theo EmployeeId + CheckinDate ----
@@ -174,10 +141,10 @@ ch", "").strip()
         ws = wb.active
 
         border = Border(
-            left=Side(border_style="thin", color="000000"),
-            right=Side(border_style="thin", color="000000"),
-            top=Side(border_style="thin", color="000000"),
-            bottom=Side(border_style="thin", color="000000")
+            left=Side(style="thin", color="000000"),
+            right=Side(style="thin", color="000000"),
+            top=Side(style="thin", color="000000"),
+            bottom=Side(style="thin", color="000000"),
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
@@ -188,30 +155,33 @@ ch", "").strip()
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date)
 
-            # Thêm dữ liệu check 1–10
+            # Fill Check1..Check10
             for j, rec in enumerate(records[:10], start=1):
                 time_str = ""
                 if isinstance(rec.get("CheckinTime"), datetime):
                     time_str = rec["CheckinTime"].astimezone(VN_TZ).strftime("%H:%M:%S")
 
-                entry = f"{time_str}"
+                parts = []
+                if time_str:
+                    parts.append(time_str)
                 if rec.get("ProjectId"):
-                    entry += f" ; ID: {rec['ProjectId']}"
+                    parts.append(f"ID: {rec['ProjectId']}")
                 if rec.get("Tasks"):
                     tasks = ", ".join(rec["Tasks"]) if isinstance(rec["Tasks"], list) else rec["Tasks"]
-                    entry += f" ; Công việc: {tasks}"
+                    parts.append(f"Công việc: {tasks}")
                 if rec.get("OtherNote"):
-                    entry += f" ; Ghi chú khác: {rec['OtherNote']}"
+                    parts.append(f"Ghi chú khác: {rec['OtherNote']}")
                 if rec.get("Address"):
-                    entry += f" ; Địa chỉ: {rec['Address']}"
+                    parts.append(f"Địa chỉ: {rec['Address']}")
 
+                entry = " ; ".join(parts)
                 ws.cell(row=row, column=3 + j, value=entry)
 
-            # ---- Áp dụng border + align cho cả row đến Check10 ----
-            for col in range(1, 13):  # 1..12 = Mã NV → Check 10
+            # Border + align full row đến Check10
+            for col in range(1, 13):
                 cell = ws.cell(row=row, column=col)
-                cell.alignment = align_left
                 cell.border = border
+                cell.alignment = align_left
 
         # Xuất file
         output = BytesIO()
@@ -228,8 +198,6 @@ ch", "").strip()
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
 
 
 if __name__ == "__main__":
