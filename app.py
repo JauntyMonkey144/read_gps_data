@@ -239,7 +239,7 @@ def export_to_excel():
         wb.save(output)
         output.seek(0)
 
-        filename = f"Chấm công theo {filter_type}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
+        filename = f"Danh sách chấm công theo {filter_type}_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
         return send_file(
             output,
             as_attachment=True,
