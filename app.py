@@ -97,6 +97,46 @@ def build_query(filter_type, start_date, end_date, search):
     return query
 
 
+# ---- API: Lấy danh sách chấm công ----
+@app.route("/api/attendances", methods=["GET"])
+def get_attendances():
+    try:
+        emp_id = request.args.get("empId")
+        if emp_id not in ALLOWED_IDS:
+            return jsonify({"error": "🚫 Không có quyền truy cập!"}), 403
+
+        filter_type = request.args.get("filter", "all")
+        start_date = request.args.get("startDate")
+        end_date = request.args.get("endDate")
+        search = request.args.get("search", "").strip()
+
+        query = build_query(filter_type, start_date, end_date, search)
+
+        data = list(collection.find(query, {
+            "_id": 0,
+            "EmployeeId": 1,
+            "EmployeeName": 1,
+            "ProjectId": 1,
+            "Tasks": 1,
+            "OtherNote": 1,
+            "Address": 1,
+            "CheckinTime": 1,
+            "CheckinDate": 1,
+            "Status": 1,
+            "FaceImage": 1
+        }))
+
+        # Format datetime
+        for d in data:
+            if isinstance(d.get("CheckinTime"), datetime):
+                d["CheckinTime"] = d["CheckinTime"].astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
+
+        return jsonify(data), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ---- Xuất Excel ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
