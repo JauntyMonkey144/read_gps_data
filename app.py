@@ -205,7 +205,7 @@ def export_to_excel():
                 entry += f" ; Ghi chú khác: {rec.get('OtherNote','') or ''}"
                 entry += f" ; Địa chỉ: {rec.get('Address','') or ''}"
 
-                ws.cell(row=row, column=3 + j, value=entry.strip(" ;"))
+                ws.cell(row=row, column=3 + j, value=entry.strip("\n"))
 
             # Border + align cả dòng
             for col in range(1, 14):
