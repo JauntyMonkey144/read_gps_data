@@ -221,7 +221,7 @@ def export_to_excel():
                 if rec.get("Address"):
                     parts.append(f"Địa chỉ: {rec['Address']}")
 
-                entry = " \n ".join(parts)
+                entry = "\n".join(parts)
                 ws.cell(row=row, column=3 + j, value=entry)
 
             # Border + align cả dòng
