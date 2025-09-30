@@ -82,7 +82,7 @@
       <button onclick="applyFilter('tuần', this)">Tuần này</button>
       <button onclick="applyFilter('tháng', this)">Tháng này</button>
       <button onclick="applyFilter('năm', this)">Năm nay</button>
-      <button onclick="applyFilter('all', this)" class="active">Tất cả</button>
+      <button onclick="applyFilter('tất cả', this)" class="active">Tất cả</button>
     </div>
 
     <div class="controls">
@@ -134,7 +134,7 @@
   </div>
 
   <script>
-    let currentFilter = "all", currentStartDate = "", currentEndDate = "", currentSearch = "";
+    let currentFilter = "tất cả", currentStartDate = "", currentEndDate = "", currentSearch = "";
     let rawData = [], currentSort = { column: null, order: null };
     let currentPage = 1, rowsPerPage = 10;
     let currentEmpId = null, currentEmpName = "";
