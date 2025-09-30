@@ -9,6 +9,7 @@ import calendar
 import re
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
+from openpyxl.styles import Border, Side
 
 app = Flask(__name__, template_folder="templates")
 CORS(app)
@@ -139,7 +140,7 @@ def get_attendances():
         return jsonify({"error": str(e)}), 500
 
 
-# ---- API: Xuất Excel ----
+# ---- API: Xuất Excel theo form mẫu ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -161,39 +162,66 @@ def export_to_excel():
             "Tasks": 1,
             "OtherNote": 1,
             "Address": 1,
-            "CheckinTime": 1,
-            "Status": 1
+            "CheckinTime": 1
         }))
+
+        # Gom dữ liệu theo (EmployeeId, EmployeeName, CheckinDate)
+        grouped = {}
+        for d in data:
+            emp_id = d.get("EmployeeId", "")
+            emp_name = d.get("EmployeeName", "")
+            check_date = d.get("CheckinTime")
+            if isinstance(check_date, datetime):
+                check_date = check_date.astimezone(VN_TZ).strftime("%Y-%m-%d")
+            else:
+                check_date = d.get("CheckinDate", "")
+
+            key = (emp_id, emp_name, check_date)
+            if key not in grouped:
+                grouped[key] = []
+
+            check_time = d.get("CheckinTime")
+            if isinstance(check_time, datetime):
+                check_time = check_time.astimezone(VN_TZ).strftime("%H:%M:%S")
+            else:
+                check_time = ""
+
+            tasks = ", ".join(d["Tasks"]) if isinstance(d.get("Tasks"), list) else d.get("Tasks", "")
+
+            detail = f"{check_time}; {d.get('ProjectId','')}; {tasks}; {d.get('OtherNote','')}; {d.get('Address','')}"
+            grouped[key].append(detail)
 
         # Load file mẫu
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
 
-        # Giả sử dữ liệu bắt đầu từ dòng 2 (dòng 1 là header trong file mẫu)
         start_row = 2
-        for i, d in enumerate(data, start=0):
-            row = start_row + i
-            check_time = d.get("CheckinTime")
-            if isinstance(check_time, datetime):
-                check_time = check_time.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
-            tasks = ", ".join(d["Tasks"]) if isinstance(d.get("Tasks"), list) else d.get("Tasks", "")
+        row = start_row
 
-            ws.cell(row=row, column=2, value=d.get("EmployeeId", ""))  # Mã NV
-            ws.cell(row=row, column=3, value=d.get("EmployeeName", ""))  # Tên nhân viên
-            ws.cell(row=row, column=4, value=d.get("ProjectId", ""))  # Mã dự án
-            ws.cell(row=row, column=5, value=tasks)  # Công việc
-            ws.cell(row=row, column=6, value=d.get("OtherNote", ""))  # Khác
-            ws.cell(row=row, column=7, value=d.get("Address", ""))  # Địa chỉ
-            ws.cell(row=row, column=8, value=check_time)  # Thời gian
-            ws.cell(row=row, column=9, value=d.get("Status", ""))  # Trạng thái
+        # Border style
+        thin = Side(border_style="thin", color="000000")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+        for (emp_id, emp_name, check_date), checks in grouped.items():
+            ws.cell(row=row, column=1, value=emp_id)       # Mã NV
+            ws.cell(row=row, column=2, value=emp_name)     # Tên NV
+            ws.cell(row=row, column=3, value=check_date)   # Ngày
+
+            for i, detail in enumerate(checks[:10], start=4):  # Check1..Check10 bắt đầu từ col=4
+                ws.cell(row=row, column=i, value=detail)
+
+            # Apply border cho toàn bộ hàng vừa ghi
+            for col in range(1, 14):  # 1 -> 13 (Mã NV đến Check10)
+                ws.cell(row=row, column=col).border = border
+
+            row += 1
 
         # Xuất file ra BytesIO
         output = BytesIO()
         wb.save(output)
         output.seek(0)
 
-        # Tạo tên file
         if start_date and end_date:
             filename = f"Cham_cong_{start_date}_to_{end_date}.xlsx"
         elif search:
