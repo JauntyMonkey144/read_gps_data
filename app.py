@@ -250,7 +250,7 @@ def export_to_excel():
         # ---- Tạo tên file xuất ----
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
         if search:
-            filename = f"Danh sách chấm công theo {search}_{today_str}.xlsx"
+            filename = f"Danh sách chấm công theo tìm kiếm_{today_str}.xlsx"
         elif filter_type == "hôm nay":
             filename = f"Danh sách chấm công_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
