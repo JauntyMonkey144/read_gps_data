@@ -123,7 +123,6 @@ def get_attendances():
             "OtherNote": 1,
             "Address": 1,
             "CheckinTime": 1,
-            "CheckType": 1,
             "Status": 1,
             "FaceImage": 1
         }))
@@ -161,7 +160,6 @@ def export_to_excel():
             "OtherNote": 1,
             "Address": 1,
             "CheckinTime": 1,
-            "CheckType": 1,
             "Status": 1
         }))
 
@@ -180,7 +178,6 @@ def export_to_excel():
             "OtherNote": "Khác",
             "Address": "Địa chỉ",
             "CheckinTime": "Thời gian",
-            "CheckType": "Loại điểm danh",
             "Status": "Trạng thái"
         }, inplace=True)
 
