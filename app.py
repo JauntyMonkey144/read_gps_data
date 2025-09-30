@@ -187,7 +187,7 @@ def export_to_excel():
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-        start_row = 3
+        start_row = 2
         for i, ((eid, ename, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
             ws.cell(row=row, column=1, value=eid)
@@ -216,7 +216,7 @@ def export_to_excel():
                 entry = " ; ".join(parts)
                 ws.cell(row=row, column=3 + j, value=entry)
 
-            for col in range(1, 13):
+            for col in range(1, 14):
                 cell = ws.cell(row=row, column=col)
                 cell.border = border
                 cell.alignment = align_left
