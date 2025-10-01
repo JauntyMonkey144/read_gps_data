@@ -266,11 +266,11 @@
     }
 
     function resetAll() {
-      currentFilter = "all"; currentStartDate = ""; currentEndDate = ""; currentSearch = "";
+      currentFilter = "hôm nay"; currentStartDate = ""; currentEndDate = ""; currentSearch = "";
       currentSort = { column: null, order: null }; currentPage = 1; rowsPerPage = 10;
       document.getElementById("startDate").value = ""; document.getElementById("endDate").value = "";
       document.getElementById("searchBox").value = ""; document.getElementById("rowsPerPage").value = "10";
-      setActiveButton(document.querySelector("button[onclick*='all']")); loadData();
+      setActiveButton(document.querySelector("button[onclick*='hôm nay']")); loadData();
     }
 
     window.onload = () => {
