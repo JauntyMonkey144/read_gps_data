@@ -121,6 +121,7 @@
             <th class="sortable" onclick="sortTable('Tasks')">Công việc</th>
             <th class="sortable" onclick="sortTable('OtherNote')">Khác</th>
             <th class="sortable" onclick="sortTable('Address')">Địa chỉ</th>
+            <th>Vị trí</th>
             <th class="sortable" onclick="sortTable('CheckinTime')">Thời gian</th>
             <th class="sortable" onclick="sortTable('Status')">Trạng thái</th>
             <th>Ảnh</th>
@@ -209,6 +210,11 @@
             <td>${row.Tasks ? (Array.isArray(row.Tasks) ? row.Tasks.join(", ") : row.Tasks) : ""}</td>
             <td>${row.OtherNote || ""}</td>
             <td>${row.Address || ""}</td>
+            <td>
+              ${row.Latitude && row.Longitude 
+                ? `<a href="https://www.google.com/maps?q=${row.Latitude},${row.Longitude}" target="_blank">📍 Xem</a>` 
+                : ""}
+            </td>
             <td>${row.CheckinTime || ""}</td>
             <td>${row.Status || ""}</td>
             <td>${row.FaceImage ? `<a href="${row.FaceImage}" target="_blank"><img src="${row.FaceImage}" class="face-thumb"></a>` : ""}</td>
