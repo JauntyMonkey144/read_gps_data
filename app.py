@@ -121,6 +121,8 @@ def get_attendances():
             "Tasks": 1,
             "OtherNote": 1,
             "Address": 1,
+            "Latitude": 1,     # ✅ thêm tọa độ
+            "Longitude": 1,    # ✅ thêm tọa độ
             "CheckinTime": 1,
             "CheckinDate": 1,
             "Status": 1,
@@ -136,6 +138,7 @@ def get_attendances():
         return jsonify({"error": str(e)}), 500
 
 
+# ---- API xuất Excel (không thay đổi) ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
