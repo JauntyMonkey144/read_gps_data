@@ -3,260 +3,160 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dữ liệu chấm công GPS</title>
+  <title>Hệ thống chấm công GPS</title>
   <style>
     body { font-family: Arial, sans-serif; background: #f4f6f9; padding: 20px; }
     h2 { text-align: center; margin-bottom: 20px; }
-    footer { margin-top: 40px; padding: 15px; background: #f5f5f5; text-align: center; color: #666; }
-
+    footer { margin-top: 40px; text-align: center; color: #666; }
     .login-box {
-      max-width: 400px; margin: 80px auto; padding: 25px;
-      background: #fff; border: 1px solid #ddd; border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1); text-align: center;
+      max-width: 400px; margin: 80px auto; padding: 25px; background: #fff;
+      border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
-    .login-box input {
-      width: 90%; padding: 10px; margin: 10px 0;
-      border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
+    input, button {
+      width: 100%; padding: 10px; margin: 8px 0;
+      border: 1px solid #ccc; border-radius: 4px;
     }
-    .login-box button {
-      padding: 8px 15px; background: #007bff; color: #fff;
-      border: none; border-radius: 4px; cursor: pointer;
-    }
-    .login-box button:hover { background: #0056b3; }
-    .login-box a { display: block; margin-top: 10px; color: #007bff; text-decoration: none; font-size: 13px; }
-    .login-box a:hover { text-decoration: underline; }
-
+    button { background: #007bff; color: white; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    a { color: #007bff; text-decoration: none; font-size: 13px; }
+    a:hover { text-decoration: underline; }
     .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-    .welcome { font-weight: bold; color: #333; }
-    .logout-btn {
-      padding: 5px 10px; background: #dc3545; color: #fff;
-      border: none; border-radius: 4px; cursor: pointer; font-size: 13px;
-    }
-
-    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
-    .controls input, .controls select, .controls button {
-      padding: 6px 12px; font-size: 14px; border: 1px solid #007bff; border-radius: 4px;
-      background: #fff; cursor: pointer; transition: all 0.2s;
-    }
-    .controls button:hover { background: #007bff; color: #fff; }
-    .controls button.active { background: #007bff; color: #fff; font-weight: bold; }
-
-    .table-container { max-height: 500px; overflow-y: auto; border: 1px solid #ccc; }
-    table { width: 100%; border-collapse: collapse; background: white; font-size: 14px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: middle; }
-    th {
-      background: #007bff; color: white; cursor: pointer; user-select: none;
-      position: sticky; top: 0; z-index: 2;
-    }
+    .logout-btn { background: #dc3545; color: #fff; border: none; padding: 6px 10px; border-radius: 4px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; }
+    th, td { border: 1px solid #ddd; padding: 6px; }
+    th { background: #007bff; color: white; position: sticky; top: 0; }
     tr:nth-child(even) { background: #f9f9f9; }
-    img.face-thumb { width: 60px; height: 45px; object-fit: cover; border-radius: 4px; border:1px solid #ccc; }
-
-    .pagination { margin-top: 15px; text-align: center; }
-    .pagination button { margin: 0 2px; padding: 5px 10px; }
-
-    #mainContent { display: none; }
   </style>
 </head>
 <body>
-  <h2>📌 Dữ liệu chấm công GPS</h2>
+  <h2>📌 HỆ THỐNG CHẤM CÔNG GPS</h2>
 
-  <!-- Form đăng nhập -->
+  <!-- Login Form -->
   <div id="loginBox" class="login-box">
-    <h3>Đăng nhập hệ thống</h3>
-    <input type="email" id="emailInput" placeholder="Nhập email">
-    <input type="password" id="passwordInput" placeholder="Nhập mật khẩu">
+    <h3>Đăng nhập</h3>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Mật khẩu">
     <button onclick="login()">Đăng nhập</button>
-    <a href="#" onclick="showForgotPassword()">Quên mật khẩu?</a>
-    <p id="loginMessage" style="color:red; font-size:14px;"></p>
+    <a href="#" onclick="showForgot()">Quên mật khẩu?</a>
+    <p id="loginMsg" style="color:red"></p>
   </div>
 
-  <!-- Form quên mật khẩu -->
+  <!-- Forgot Password -->
   <div id="forgotBox" class="login-box" style="display:none;">
-    <h3>Quên mật khẩu</h3>
-    <input type="email" id="forgotEmail" placeholder="Nhập email đăng ký">
-    <button onclick="resetPassword()">Gửi mã khôi phục</button>
+    <h3>Đặt lại mật khẩu</h3>
+    <input type="email" id="forgotEmail" placeholder="Nhập email">
+    <input type="password" id="newPassword" placeholder="Nhập mật khẩu mới">
+    <button onclick="resetPassword()">Cập nhật mật khẩu</button>
     <a href="#" onclick="showLogin()">← Quay lại đăng nhập</a>
-    <p id="forgotMessage" style="color:green; font-size:14px;"></p>
+    <p id="forgotMsg" style="color:green"></p>
   </div>
 
-  <!-- Nội dung chính -->
-  <div id="mainContent">
+  <!-- Main Content -->
+  <div id="mainContent" style="display:none;">
     <div class="top-bar">
-      <span class="welcome" id="welcomeMsg"></span>
+      <span id="welcome"></span>
       <button class="logout-btn" onclick="logout()">Đăng xuất</button>
     </div>
 
-    <!-- Bộ lọc -->
-    <div class="controls">
-      <label><b>Lọc nhanh:</b></label>
-      <button onclick="applyFilter('hôm nay', this)" class="active">Hôm nay</button>
-      <button onclick="applyFilter('tuần', this)">Tuần này</button>
-      <button onclick="applyFilter('tháng', this)">Tháng này</button>
-      <button onclick="applyFilter('năm', this)">Năm nay</button>
-      <button onclick="applyFilter('tất cả', this)">Tất cả</button>
-    </div>
-
-    <div class="controls">
-      <label><b>Từ ngày:</b></label><input type="date" id="startDate">
-      <label><b>Đến ngày:</b></label><input type="date" id="endDate">
-      <button onclick="applyDateRange()">Áp dụng</button>
-    </div>
-
-    <div class="controls">
-      <label><b>Tìm kiếm:</b></label>
-      <input type="text" id="searchBox" placeholder="Nhập tên hoặc mã NV...">
-      <button onclick="applySearch()">Tìm</button>
-    </div>
-
-    <div class="controls">
-      <label><b>Số dòng/trang:</b></label>
-      <select id="rowsPerPage" onchange="changeRowsPerPage()">
-        <option value="10" selected>10</option>
-        <option value="20">20</option>
-        <option value="50">50</option>
-      </select>
-      <button onclick="exportExcel()">📥 Xuất Excel</button>
+    <div>
       <button onclick="loadData()">🔄 Làm mới</button>
-      <button onclick="resetAll()">♻️ Reset</button>
+      <button onclick="exportExcel()">📥 Xuất Excel</button>
     </div>
 
-    <!-- Bảng dữ liệu -->
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>Mã NV</th>
-            <th>Tên NV</th>
-            <th>Ngày</th>
-            <th>ID Dự án</th>
-            <th>Công việc</th>
-            <th>Khác</th>
-            <th>Địa chỉ</th>
-            <th>Vị trí</th>
-            <th>Thời gian</th>
-            <th>Trạng thái</th>
-            <th>Ảnh</th>
-          </tr>
-        </thead>
-        <tbody id="dataBody"></tbody>
-      </table>
-    </div>
-
-    <div class="pagination" id="pagination"></div>
-    <footer>&copy; 2025 Sun Automation - Trang đọc dữ liệu chấm công GPS</footer>
+    <table>
+      <thead>
+        <tr>
+          <th>Mã NV</th><th>Tên NV</th><th>Ngày</th>
+          <th>Dự án</th><th>Công việc</th><th>Trạng thái</th><th>Địa chỉ</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
   </div>
 
-  <script>
-    let currentFilter = "hôm nay", currentStartDate = "", currentEndDate = "", currentSearch = "";
-    let rawData = [], currentSort = { column: null, order: null };
-    let currentPage = 1, rowsPerPage = 10;
-    let currentEmail = "", currentEmpName = "";
+  <footer>© 2025 Sun Automation - GPS Attendance</footer>
 
-    // ==== AUTH ====
+  <script>
     async function login() {
-      const email = document.getElementById("emailInput").value.trim();
-      const password = document.getElementById("passwordInput").value.trim();
-      if (!email || !password) {
-        document.getElementById("loginMessage").innerText = "Vui lòng nhập đầy đủ thông tin!";
-        return;
-      }
+      const email = emailInput.value.trim();
+      const password = passwordInput.value.trim();
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
       });
       const data = await res.json();
-      if (data.success) {
-        currentEmail = email;
-        currentEmpName = data.EmployeeName;
-        sessionStorage.setItem("Email", email);
-        sessionStorage.setItem("EmployeeName", data.EmployeeName);
+      if (res.ok) {
+        localStorage.setItem("email", email);
         document.getElementById("loginBox").style.display = "none";
         document.getElementById("mainContent").style.display = "block";
-        document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentEmpName}`;
+        document.getElementById("welcome").innerText = `👋 Xin chào, ${email}`;
         loadData();
       } else {
-        document.getElementById("loginMessage").innerText = data.message || "Sai thông tin đăng nhập!";
+        loginMsg.innerText = data.error || "Đăng nhập thất bại!";
       }
     }
 
     async function resetPassword() {
-      const email = document.getElementById("forgotEmail").value.trim();
-      if (!email) {
-        document.getElementById("forgotMessage").style.color = "red";
-        document.getElementById("forgotMessage").innerText = "Vui lòng nhập email!";
-        return;
-      }
-      const res = await fetch(`/api/reset-password?email=${encodeURIComponent(email)}`);
+      const email = forgotEmail.value.trim();
+      const new_password = newPassword.value.trim();
+      const res = await fetch("/api/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, new_password })
+      });
       const data = await res.json();
-      if (data.success) {
-        document.getElementById("forgotMessage").style.color = "green";
-        document.getElementById("forgotMessage").innerText = "✅ Mã khôi phục đã được gửi đến email của bạn!";
-      } else {
-        document.getElementById("forgotMessage").style.color = "red";
-        document.getElementById("forgotMessage").innerText = data.message;
-      }
+      forgotMsg.style.color = res.ok ? "green" : "red";
+      forgotMsg.innerText = data.message || data.error;
     }
 
-    function showForgotPassword() {
-      document.getElementById("loginBox").style.display = "none";
-      document.getElementById("forgotBox").style.display = "block";
+    function showForgot() {
+      loginBox.style.display = "none";
+      forgotBox.style.display = "block";
     }
     function showLogin() {
-      document.getElementById("forgotBox").style.display = "none";
-      document.getElementById("loginBox").style.display = "block";
+      forgotBox.style.display = "none";
+      loginBox.style.display = "block";
     }
 
-    function logout() {
-      sessionStorage.clear();
-      currentEmail = ""; currentEmpName = "";
-      document.getElementById("mainContent").style.display = "none";
-      document.getElementById("loginBox").style.display = "block";
-    }
-
-    // ==== LOAD DỮ LIỆU ====
     async function loadData() {
-      let url = `/api/attendances?filter=${currentFilter}&email=${currentEmail}`;
-      if (currentStartDate && currentEndDate) url += `&startDate=${currentStartDate}&endDate=${currentEndDate}`;
-      if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
-      const res = await fetch(url);
-      rawData = await res.json();
-      renderTable();
-    }
-
-    function renderTable() {
-      const start = (currentPage - 1) * rowsPerPage;
-      const pageData = rawData.slice(start, start + rowsPerPage);
-      const tbody = document.getElementById("dataBody");
-      tbody.innerHTML = pageData.map(row => `
+      const email = localStorage.getItem("email");
+      const res = await fetch(`/api/attendances?email=${email}`);
+      const data = await res.json();
+      const body = document.getElementById("tableBody");
+      body.innerHTML = data.map(r => `
         <tr>
-          <td>${row.EmployeeId || ""}</td>
-          <td>${row.EmployeeName || ""}</td>
-          <td>${row.CheckinDate || ""}</td>
-          <td>${row.ProjectId || ""}</td>
-          <td>${row.Tasks || ""}</td>
-          <td>${row.OtherNote || ""}</td>
-          <td>${row.Address || ""}</td>
-          <td>${row.Latitude && row.Longitude ? `<a href="https://www.google.com/maps?q=${row.Latitude},${row.Longitude}" target="_blank">Xem</a>` : ""}</td>
-          <td>${row.CheckinTime || ""}</td>
-          <td>${row.Status || ""}</td>
-          <td>${row.FaceImage ? `<a href="${row.FaceImage}" target="_blank"><img src="${row.FaceImage}" class="face-thumb"></a>` : ""}</td>
+          <td>${r.EmployeeId || ""}</td>
+          <td>${r.EmployeeName || ""}</td>
+          <td>${r.CheckinDate || ""}</td>
+          <td>${r.ProjectId || ""}</td>
+          <td>${r.Tasks || ""}</td>
+          <td>${r.Status || ""}</td>
+          <td>${r.Address || ""}</td>
         </tr>
       `).join("");
     }
 
+    async function exportExcel() {
+      const email = localStorage.getItem("email");
+      window.open(`/api/export-excel?email=${email}`);
+    }
+
+    function logout() {
+      localStorage.clear();
+      mainContent.style.display = "none";
+      loginBox.style.display = "block";
+    }
+
     window.onload = () => {
-      const savedEmail = sessionStorage.getItem("Email");
-      const savedName = sessionStorage.getItem("EmployeeName");
-      if (savedEmail) {
-        currentEmail = savedEmail;
-        currentEmpName = savedName;
+      const email = localStorage.getItem("email");
+      if (email) {
         document.getElementById("loginBox").style.display = "none";
         document.getElementById("mainContent").style.display = "block";
-        document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentEmpName}`;
+        document.getElementById("welcome").innerText = `👋 Xin chào, ${email}`;
         loadData();
       }
-    };
+    }
   </script>
 </body>
 </html>
