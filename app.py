@@ -22,44 +22,52 @@ MONGO_URI = os.getenv(
 )
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 
-if not MONGO_URI.strip():
-    raise ValueError("❌ Lỗi: MONGO_URI chưa được cấu hình!")
-
 # ---- Kết nối MongoDB ----
-try:
-    client = MongoClient(MONGO_URI)
-    db = client[DB_NAME]
-    collection = db["alt_checkins"]
-    idx_collection = db["idx_collection"]
-except Exception as e:
-    raise RuntimeError(f"❌ Không thể kết nối MongoDB: {e}")
+client = MongoClient(MONGO_URI)
+db = client[DB_NAME]
+collection = db["alt_checkins"]
+idx_collection = db["idx_collection"]
 
-# ---- Danh sách được phép truy cập ----
-ALLOWED_IDS = {"it.trankhanhvinh@gmail.com", "thinhnv@sunautomation.com.vn", "kimcuong@sunautomation.com.vn"}
+# ---- Danh sách email được phép ----
+ALLOWED_IDS = {
+    "it.trankhanhvinh@gmail.com",
+    "thinhnv@sunautomation.com.vn",
+    "kimcuong@sunautomation.com.vn"
+}
 
 # ---- Trang chủ ----
 @app.route("/")
 def index():
     return render_template("index.html")
 
-# ---- Login ----
+# ---- Login (xác thực bằng EmployeeId → lấy email trong DB để so với ALLOWED_IDS) ----
 @app.route("/login", methods=["GET"])
 def login():
-    emp_id = request.args.get("Email")
+    emp_id = request.args.get("EmployeeId")  # Nhập mã nhân viên
     if not emp_id:
-        return jsonify({"success": False, "message": "❌ Bạn cần nhập email"}), 400
+        return jsonify({"success": False, "message": "❌ Bạn cần nhập mã nhân viên"}), 400
 
-    if emp_id in ALLOWED_IDS:
-        emp = idx_collection.find_one({"Email": Email}, {"_id": 0, "EmployeeName": 1})
-        emp_name = emp["EmployeeName"] if emp else emp_id
+    # Tìm thông tin nhân viên trong DB
+    emp = idx_collection.find_one({"EmployeeId": emp_id}, {"_id": 0, "EmployeeName": 1, "Email": 1})
+    if not emp:
+        return jsonify({"success": False, "message": "❌ Không tìm thấy mã nhân viên trong hệ thống!"}), 404
+
+    emp_name = emp.get("EmployeeName", emp_id)
+    emp_email = emp.get("Email")
+
+    if emp_email in ALLOWED_IDS:
         return jsonify({
             "success": True,
             "message": "✅ Đăng nhập thành công",
             "EmployeeId": emp_id,
-            "EmployeeName": emp_name
+            "EmployeeName": emp_name,
+            "Email": emp_email
         })
     else:
-        return jsonify({"success": False, "message": "🚫 Không có quyền"}), 403
+        return jsonify({
+            "success": False,
+            "message": f"🚫 Email {emp_email} không có quyền truy cập!"
+        }), 403
 
 
 # ---- Xây dựng query ----
@@ -77,20 +85,14 @@ def build_query(filter_type, start_date, end_date, search):
         query["CheckinDate"] = {"$gte": start, "$lte": end}
     elif filter_type == "tháng":
         start = today.replace(day=1).strftime("%Y-%m-%d")
-        last_day = calendar.monthrange(today.year, today.month)[1]
-        end = today.replace(day=last_day).strftime("%Y-%m-%d")
+        end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).strftime("%Y-%m-%d")
         query["CheckinDate"] = {"$gte": start, "$lte": end}
     elif filter_type == "năm":
-        start = today.replace(month=1, day=1).strftime("%Y-%m-%d")
-        end = today.replace(month=12, day=31).strftime("%Y-%m-%d")
-        query["CheckinDate"] = {"$gte": start, "$lte": end}
+        query["CheckinDate"] = {"$regex": f"^{today.year}"}
 
     if search:
         regex = re.compile(search, re.IGNORECASE)
-        query["$or"] = [
-            {"EmployeeId": {"$regex": regex}},
-            {"EmployeeName": {"$regex": regex}}
-        ]
+        query["$or"] = [{"EmployeeId": {"$regex": regex}}, {"EmployeeName": {"$regex": regex}}]
     return query
 
 
@@ -98,9 +100,13 @@ def build_query(filter_type, start_date, end_date, search):
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
-        emp_id = request.args.get("empId")
-        if emp_id not in ALLOWED_IDS:
-            return jsonify({"error": "🚫 Không có quyền!"}), 403
+        emp_id = request.args.get("EmployeeId")
+        if not emp_id:
+            return jsonify({"error": "❌ Thiếu mã nhân viên"}), 400
+
+        emp = idx_collection.find_one({"EmployeeId": emp_id}, {"Email": 1, "_id": 0})
+        if not emp or emp.get("Email") not in ALLOWED_IDS:
+            return jsonify({"error": "🚫 Không có quyền xem dữ liệu!"}), 403
 
         filter_type = request.args.get("filter", "all").lower()
         start_date = request.args.get("startDate")
@@ -109,7 +115,7 @@ def get_attendances():
 
         query = build_query(filter_type, start_date, end_date, search)
         data = list(collection.find(query, {"_id": 0}))
-        return jsonify(data), 200
+        return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -118,8 +124,12 @@ def get_attendances():
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
-        emp_id = request.args.get("Email")
-        if emp_id not in ALLOWED_IDS:
+        emp_id = request.args.get("EmployeeId")
+        if not emp_id:
+            return jsonify({"error": "❌ Thiếu mã nhân viên"}), 400
+
+        emp = idx_collection.find_one({"EmployeeId": emp_id}, {"Email": 1, "_id": 0})
+        if not emp or emp.get("Email") not in ALLOWED_IDS:
             return jsonify({"error": "🚫 Không có quyền xuất Excel!"}), 403
 
         filter_type = request.args.get("filter", "all").lower()
@@ -159,10 +169,10 @@ def export_to_excel():
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date)
 
-            # ---- Kiểm tra nghỉ phép ----
+            # ---- Nếu là nghỉ phép ----
             leave_entries = [r for r in records if "Nghỉ phép" in (r.get("Tasks") or [])]
             if leave_entries:
-                r = leave_entries[-1]  # bản ghi nghỉ phép mới nhất
+                r = leave_entries[-1]
                 parts = ["Nghỉ phép"]
                 if r.get("OtherNote"):
                     parts.append(f"Lý do: {r['OtherNote']}")
@@ -173,7 +183,7 @@ def export_to_excel():
                     parts.append(r["Address"])
                 ws.cell(row=row, column=4, value="; ".join(parts))
             else:
-                # ---- Các bản ghi thường ----
+                # ---- Chấm công thường ----
                 for j, rec in enumerate(records[:10], start=1):
                     checkin_time = rec.get("CheckinTime")
                     time_str = ""
@@ -201,18 +211,15 @@ def export_to_excel():
 
                     ws.cell(row=row, column=3 + j, value="; ".join(parts))
 
-            # ---- Border + căn lề ----
             for col in range(1, 14):
                 cell = ws.cell(row=row, column=col)
                 cell.border = border
                 cell.alignment = align_left
-
-            # ---- Tự căn chiều cao dòng ----
             ws.row_dimensions[row].height = 25
 
-        # ---- Auto fit độ rộng cột ----
+        # ---- Auto-fit ----
         for col in ws.columns:
-            max_len = max(len(str(cell.value)) if cell.value else 0 for cell in col)
+            max_len = max(len(str(c.value)) if c.value else 0 for c in col)
             ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 80)
 
         # ---- Xuất file ----
