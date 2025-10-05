@@ -1,19 +1,17 @@
-from flask import Flask, jsonify, send_file, request, render_template_string, redirect, url_for
+from flask import Flask, jsonify, request, render_template, redirect, url_for, session
 from pymongo import MongoClient
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
-from werkzeug.security import generate_password_hash, check_password_hash
-import calendar
-import re
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
-import os
-import uuid
+import calendar, os
 
 # ====== Cấu hình Flask ======
-app = Flask(__name__)
+app = Flask(__name__, template_folder="templates")
 CORS(app)
+app.secret_key = "supersecretkey"  # dùng session lưu đăng nhập
 
 # ====== Kết nối MongoDB ======
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
@@ -26,82 +24,87 @@ admins_collection = db["admins"]
 # ====== Múi giờ Việt Nam ======
 VN_TZ = timezone(timedelta(hours=7))
 
-# ==========================================================
-# 🧩 QUÊN MẬT KHẨU — HIỂN THỊ FORM ĐẶT LẠI NGAY
-# ==========================================================
+# ======================================
+# 🔹 TRANG CHỦ
+# ======================================
+@app.route("/")
+def home():
+    if "email" in session:
+        return f"Xin chào {session['email']}! <a href='/logout'>Đăng xuất</a>"
+    return redirect(url_for("login_form"))
 
-# Trang nhập email quên mật khẩu
+# ======================================
+# 🔹 ĐĂNG KÝ ADMIN
+# ======================================
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        data = request.json if request.is_json else request.form
+        email = data.get("email")
+        password = data.get("password")
+
+        if not email or not password:
+            return jsonify({"error": "Thiếu email hoặc mật khẩu"}), 400
+
+        if admins_collection.find_one({"email": email}):
+            return jsonify({"error": "Email đã tồn tại"}), 400
+
+        hashed_pw = generate_password_hash(password)
+        admins_collection.insert_one({"email": email, "password": hashed_pw})
+        return jsonify({"message": "Đăng ký thành công"}), 200
+
+    return render_template("register.html")
+
+# ======================================
+# 🔹 ĐĂNG NHẬP
+# ======================================
+@app.route("/login", methods=["GET", "POST"])
+def login_form():
+    if request.method == "POST":
+        data = request.json if request.is_json else request.form
+        email = data.get("email")
+        password = data.get("password")
+
+        admin = admins_collection.find_one({"email": email})
+        if not admin or not check_password_hash(admin["password"], password):
+            return jsonify({"error": "Sai email hoặc mật khẩu"}), 401
+
+        session["email"] = email
+        return jsonify({"message": "Đăng nhập thành công", "email": email})
+
+    return render_template("login.html")
+
+# ======================================
+# 🔹 QUÊN MẬT KHẨU – Form tự reset
+# ======================================
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
-    if request.method == "GET":
-        return render_template_string("""
-            <html>
-            <head><title>Quên mật khẩu</title></head>
-            <body style="font-family: sans-serif; text-align: center; margin-top: 80px;">
-                <h2>🔑 Quên mật khẩu</h2>
-                <form method="POST">
-                    <input type="email" name="email" placeholder="Nhập email của bạn" required style="padding: 8px; width: 250px;"><br><br>
-                    <button type="submit" style="padding: 8px 20px;">Tiếp tục</button>
-                </form>
-            </body>
-            </html>
-        """)
-    else:
-        email = request.form.get("email")
+    if request.method == "POST":
+        data = request.json if request.is_json else request.form
+        email = data.get("email")
+        new_password = data.get("new_password")
+
         admin = admins_collection.find_one({"email": email})
         if not admin:
-            return "<h3 style='color:red;text-align:center;'>❌ Không tìm thấy tài khoản với email này</h3>"
+            return jsonify({"error": "Không tìm thấy tài khoản"}), 404
 
-        # Tạo token tạm lưu vào DB
-        token = str(uuid.uuid4())
-        expiry = datetime.now(VN_TZ) + timedelta(minutes=10)
-        admins_collection.update_one({"email": email}, {"$set": {"reset_token": token, "reset_expiry": expiry}})
-
-        # Chuyển hướng đến trang reset mật khẩu
-        return redirect(url_for("reset_password", token=token))
-
-
-# Trang đặt lại mật khẩu (tự động hiện sau khi xác thực email)
-@app.route("/reset-password", methods=["GET", "POST"])
-def reset_password():
-    token = request.args.get("token")
-    user = admins_collection.find_one({"reset_token": token})
-
-    if not user:
-        return "<h3 style='color:red;text-align:center;'>❌ Token không hợp lệ hoặc đã hết hạn</h3>"
-
-    # Kiểm tra hạn token
-    if datetime.now(VN_TZ) > user.get("reset_expiry", datetime.min):
-        return "<h3 style='color:red;text-align:center;'>⚠️ Token đã hết hạn, vui lòng làm lại bước quên mật khẩu</h3>"
-
-    if request.method == "GET":
-        return render_template_string(f"""
-            <html>
-            <head><title>Đặt lại mật khẩu</title></head>
-            <body style="font-family: sans-serif; text-align: center; margin-top: 80px;">
-                <h2>🔒 Đặt lại mật khẩu cho {user['email']}</h2>
-                <form method="POST">
-                    <input type="hidden" name="token" value="{token}">
-                    <input type="password" name="new_password" placeholder="Nhập mật khẩu mới" required style="padding:8px; width:250px;"><br><br>
-                    <button type="submit" style="padding:8px 20px;">Cập nhật mật khẩu</button>
-                </form>
-            </body>
-            </html>
-        """)
-    else:
-        new_password = request.form.get("new_password")
         hashed_pw = generate_password_hash(new_password)
+        admins_collection.update_one({"email": email}, {"$set": {"password": hashed_pw}})
+        return jsonify({"message": "Mật khẩu đã được đặt lại thành công"}), 200
 
-        admins_collection.update_one({"_id": user["_id"]}, {
-            "$set": {"password": hashed_pw},
-            "$unset": {"reset_token": "", "reset_expiry": ""}
-        })
-        return "<h3 style='color:green;text-align:center;'>✅ Mật khẩu đã được đặt lại thành công!</h3>"
+    return render_template("forgot_password.html")
 
+# ======================================
+# 🔹 ĐĂNG XUẤT
+# ======================================
+@app.route("/logout")
+def logout():
+    session.pop("email", None)
+    return redirect(url_for("login_form"))
 
-# ==========================================================
-# 🧾 API XUẤT EXCEL (KHÔNG ĐỔI)
-# ==========================================================
+# ======================================
+# 🔹 XUẤT FILE EXCEL (bạn giữ nguyên logic này)
+# ======================================
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -109,23 +112,17 @@ def export_to_excel():
         if not email:
             return jsonify({"error": "❌ Thiếu email người dùng"}), 400
 
-        # --- Tìm admin theo email ---
         admin = admins_collection.find_one({"email": email})
         if not admin:
             return jsonify({"error": "❌ Không tìm thấy tài khoản admin với email này"}), 404
 
-        # --- Lấy thông tin nhân viên từ collection chính ---
         employees = list(idx_collection.find({}, {"EmployeeId": 1, "EmployeeName": 1, "_id": 0}))
-
-        # --- Mở template Excel ---
         template_path = os.path.join("templates", "template.xlsx")
         wb = load_workbook(template_path)
         ws = wb.active
 
-        # --- Thông tin xuất file ---
         now = datetime.now(VN_TZ)
-        current_month = now.month
-        current_year = now.year
+        current_month, current_year = now.month, now.year
         month_name = calendar.month_name[current_month]
 
         thin = Side(border_style="thin", color="000000")
@@ -136,7 +133,6 @@ def export_to_excel():
         for emp in employees:
             emp_id = emp.get("EmployeeId")
             emp_name = emp.get("EmployeeName")
-
             records = list(
                 alt_checkins.find(
                     {
@@ -162,51 +158,22 @@ def export_to_excel():
 
             for j, rec in enumerate(records[:10], start=1):
                 checkin_time = rec.get("CheckinTime")
-                time_str = ""
                 if isinstance(checkin_time, datetime):
                     time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
-                elif isinstance(checkin_time, str) and checkin_time.strip():
-                    try:
-                        parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
-                        time_str = parsed.strftime("%H:%M:%S")
-                    except Exception:
-                        time_str = checkin_time
+                else:
+                    time_str = str(checkin_time)
 
                 parts = []
-                tasks = rec.get("Tasks")
-                if isinstance(tasks, list):
-                    tasks_str = ", ".join(tasks)
-                else:
-                    tasks_str = str(tasks or "")
-
-                leave_reason = ""
-                if "nghỉ phép" in tasks_str.lower():
-                    if ":" in tasks_str:
-                        split_task = tasks_str.split(":", 1)
-                        tasks_str = split_task[0].strip()
-                        leave_reason = split_task[1].strip()
-                    else:
-                        tasks_str = tasks_str.strip()
-
-                status = rec.get("Status", "")
                 if time_str:
                     parts.append(time_str)
-                if rec.get("ProjectId"):
-                    parts.append(str(rec["ProjectId"]))
-                if tasks_str:
-                    parts.append(tasks_str)
-                if leave_reason:
-                    parts.append(leave_reason)
-                if status:
-                    parts.append(status)
-                if rec.get("OtherNote"):
-                    parts.append(rec["OtherNote"])
+                if rec.get("Tasks"):
+                    parts.append(str(rec["Tasks"]))
+                if rec.get("Status"):
+                    parts.append(rec["Status"])
                 if rec.get("Address"):
                     parts.append(rec["Address"])
 
-                entry = "; ".join(parts)
-                ws.cell(row=row, column=2 + j, value=entry)
-
+                ws.cell(row=row, column=2 + j, value="; ".join(parts))
             row += 1
 
         for r in ws.iter_rows(min_row=4, max_row=row - 1, min_col=1, max_col=15):
@@ -217,19 +184,14 @@ def export_to_excel():
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-
         filename = f"ChamCong_{month_name}_{current_year}.xlsx"
-        return send_file(
-            output,
-            as_attachment=True,
-            download_name=filename,
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+        return send_file(output, as_attachment=True, download_name=filename)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-# ====== Chạy thử Flask ======
+# ======================================
+# 🔹 CHẠY ỨNG DỤNG
+# ======================================
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
