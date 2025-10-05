@@ -28,44 +28,33 @@ db = client[DB_NAME]
 collection = db["alt_checkins"]
 idx_collection = db["idx_collection"]
 
-# ---- Danh sách email được phép ----
-ALLOWED_IDS = {
-    "it.trankhanhvinh@gmail.com",
-    "thinhnv@sunautomation.com.vn",
-    "kimcuong@sunautomation.com.vn"
-}
-
 # ---- Trang chủ ----
 @app.route("/")
 def index():
     return render_template("index.html")
 
+
+# ---- Đăng nhập bằng Email ----
 @app.route("/login", methods=["GET"])
 def login():
-    email = request.args.get("Email")  # frontend nhập email
+    email = request.args.get("Email")
     if not email:
-        return jsonify({"success": False, "message": "❌ Bạn cần nhập email"}), 400
+        return jsonify({"success": False, "message": "❌ Vui lòng nhập email"}), 400
 
-    emp = idx_collection.find_one({"Email": email}, {"_id": 0, "EmployeeName": 1, "EmployeeId": 1})
+    emp = idx_collection.find_one({"Email": email}, {"_id": 0, "EmployeeName": 1, "EmployeeId": 1, "Email": 1})
     if not emp:
-        return jsonify({"success": False, "message": "❌ Email không tồn tại trong hệ thống!"}), 404
+        return jsonify({"success": False, "message": "🚫 Email không tồn tại trong hệ thống"}), 404
 
-    emp_name = emp.get("EmployeeName")
-    emp_id = emp.get("EmployeeId")
-
-    if email in ALLOWED_IDS:
-        return jsonify({
-            "success": True,
-            "message": "✅ Đăng nhập thành công",
-            "EmployeeId": emp_id,
-            "EmployeeName": emp_name,
-            "Email": email
-        })
-    else:
-        return jsonify({"success": False, "message": f"🚫 Email {email} không có quyền truy cập!"}), 403
+    return jsonify({
+        "success": True,
+        "message": "✅ Đăng nhập thành công",
+        "EmployeeId": emp["EmployeeId"],
+        "EmployeeName": emp["EmployeeName"],
+        "Email": emp["Email"]
+    })
 
 
-# ---- Xây dựng query ----
+# ---- Xây dựng query lọc ----
 def build_query(filter_type, start_date, end_date, search):
     query = {}
     today = datetime.now(VN_TZ)
@@ -87,21 +76,26 @@ def build_query(filter_type, start_date, end_date, search):
 
     if search:
         regex = re.compile(search, re.IGNORECASE)
-        query["$or"] = [{"EmployeeId": {"$regex": regex}}, {"EmployeeName": {"$regex": regex}}]
+        query["$or"] = [
+            {"EmployeeId": {"$regex": regex}},
+            {"EmployeeName": {"$regex": regex}}
+        ]
     return query
 
 
-# ---- API lấy dữ liệu ----
+# ---- API lấy dữ liệu chấm công ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
-        emp_id = request.args.get("EmployeeId")
-        if not emp_id:
-            return jsonify({"error": "❌ Thiếu mã nhân viên"}), 400
+        email = request.args.get("Email")
+        if not email:
+            return jsonify({"error": "❌ Thiếu email"}), 400
 
-        emp = idx_collection.find_one({"EmployeeId": emp_id}, {"Email": 1, "_id": 0})
-        if not emp or emp.get("Email") not in ALLOWED_IDS:
-            return jsonify({"error": "🚫 Không có quyền xem dữ liệu!"}), 403
+        emp = idx_collection.find_one({"Email": email}, {"EmployeeId": 1, "_id": 0})
+        if not emp:
+            return jsonify({"error": "🚫 Email không tồn tại"}), 403
+
+        emp_id = emp["EmployeeId"]
 
         filter_type = request.args.get("filter", "all").lower()
         start_date = request.args.get("startDate")
@@ -109,6 +103,8 @@ def get_attendances():
         search = request.args.get("search", "").strip()
 
         query = build_query(filter_type, start_date, end_date, search)
+        query["EmployeeId"] = emp_id  # Chỉ lấy dữ liệu của chính nhân viên đó
+
         data = list(collection.find(query, {"_id": 0}))
         return jsonify(data)
     except Exception as e:
@@ -119,13 +115,16 @@ def get_attendances():
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
-        emp_id = request.args.get("EmployeeId")
-        if not emp_id:
-            return jsonify({"error": "❌ Thiếu mã nhân viên"}), 400
+        email = request.args.get("Email")
+        if not email:
+            return jsonify({"error": "❌ Thiếu email"}), 400
 
-        emp = idx_collection.find_one({"EmployeeId": emp_id}, {"Email": 1, "_id": 0})
-        if not emp or emp.get("Email") not in ALLOWED_IDS:
-            return jsonify({"error": "🚫 Không có quyền xuất Excel!"}), 403
+        emp = idx_collection.find_one({"Email": email}, {"EmployeeId": 1, "EmployeeName": 1, "_id": 0})
+        if not emp:
+            return jsonify({"error": "🚫 Email không tồn tại"}), 403
+
+        emp_id = emp["EmployeeId"]
+        emp_name = emp["EmployeeName"]
 
         filter_type = request.args.get("filter", "all").lower()
         start_date = request.args.get("startDate")
@@ -133,18 +132,11 @@ def export_to_excel():
         search = request.args.get("search", "").strip()
 
         query = build_query(filter_type, start_date, end_date, search)
+        query["EmployeeId"] = emp_id
+
         data = list(collection.find(query, {"_id": 0}))
 
-        # ---- Group theo nhân viên + ngày ----
-        grouped = {}
-        for d in data:
-            emp_id = d.get("EmployeeId", "")
-            emp_name = d.get("EmployeeName", "")
-            date = d.get("CheckinDate")
-            key = (emp_id, emp_name, date)
-            grouped.setdefault(key, []).append(d)
-
-        # ---- Load template Excel ----
+        # ---- Load Excel Template ----
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
@@ -158,72 +150,25 @@ def export_to_excel():
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
         start_row = 2
-        for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
+        for i, rec in enumerate(data, start=0):
             row = start_row + i
             ws.cell(row=row, column=1, value=emp_id)
             ws.cell(row=row, column=2, value=emp_name)
-            ws.cell(row=row, column=3, value=date)
+            ws.cell(row=row, column=3, value=rec.get("CheckinDate"))
+            ws.cell(row=row, column=4, value=rec.get("Address"))
+            ws.cell(row=row, column=5, value=rec.get("Status"))
 
-            # ---- Nếu là nghỉ phép ----
-            leave_entries = [r for r in records if "Nghỉ phép" in (r.get("Tasks") or [])]
-            if leave_entries:
-                r = leave_entries[-1]
-                parts = ["Nghỉ phép"]
-                if r.get("OtherNote"):
-                    parts.append(f"Lý do: {r['OtherNote']}")
-                parts.append(r.get("Status", "Chờ duyệt"))
-                if r.get("ApprovedBy"):
-                    parts.append(f"Duyệt bởi {r['ApprovedBy']}")
-                if r.get("Address"):
-                    parts.append(r["Address"])
-                ws.cell(row=row, column=4, value="; ".join(parts))
-            else:
-                # ---- Chấm công thường ----
-                for j, rec in enumerate(records[:10], start=1):
-                    checkin_time = rec.get("CheckinTime")
-                    time_str = ""
-                    if isinstance(checkin_time, datetime):
-                        time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
-                    elif isinstance(checkin_time, str) and checkin_time.strip():
-                        try:
-                            parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
-                            time_str = parsed.strftime("%H:%M:%S")
-                        except Exception:
-                            time_str = checkin_time
-
-                    parts = []
-                    if time_str:
-                        parts.append(f"{time_str}")
-                    if rec.get("ProjectId"):
-                        parts.append(rec["ProjectId"])
-                    if rec.get("Tasks"):
-                        tasks = ", ".join(rec["Tasks"]) if isinstance(rec["Tasks"], list) else rec["Tasks"]
-                        parts.append(tasks)
-                    if rec.get("OtherNote"):
-                        parts.append(rec["OtherNote"])
-                    if rec.get("Address"):
-                        parts.append(rec["Address"])
-
-                    ws.cell(row=row, column=3 + j, value="; ".join(parts))
-
-            for col in range(1, 14):
+            for col in range(1, 6):
                 cell = ws.cell(row=row, column=col)
                 cell.border = border
                 cell.alignment = align_left
             ws.row_dimensions[row].height = 25
 
-        # ---- Auto-fit ----
-        for col in ws.columns:
-            max_len = max(len(str(c.value)) if c.value else 0 for c in col)
-            ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 80)
-
-        # ---- Xuất file ----
         output = BytesIO()
         wb.save(output)
         output.seek(0)
 
-        today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
-        filename = f"ChamCong_{today_str}.xlsx"
+        filename = f"ChamCong_{emp_name}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
 
         return send_file(
             output,
