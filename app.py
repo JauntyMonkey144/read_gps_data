@@ -197,18 +197,18 @@ def export_to_excel():
                 # ---- Build entry ----
                 parts = []
                 if time_str:
-                    parts.append(f"Giờ chấm công: {time_str}")
+                    parts.append(f"{time_str}")
                 if rec.get("ProjectId"):
-                    parts.append(f"ID: {rec['ProjectId']}")
+                    parts.append(f"{rec['ProjectId']}")
                 if rec.get("Tasks"):
                     tasks = ", ".join(rec["Tasks"]) if isinstance(rec["Tasks"], list) else rec["Tasks"]
-                    parts.append(f"Công việc: {tasks}")
+                    parts.append(f"{tasks}")
                 if rec.get("OtherNote"):
-                    parts.append(f"Ghi chú khác: {rec['OtherNote']}")
+                    parts.append(f"{rec['OtherNote']}")
                 if rec.get("Address"):
-                    parts.append(f"Địa chỉ: {rec['Address']}")
+                    parts.append(f"{rec['Address']}")
 
-                entry = "\n".join(parts)
+                entry = "; ".join(parts)
                 ws.cell(row=row, column=3 + j, value=entry)
 
             # Border + align cả dòng
