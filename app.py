@@ -35,7 +35,7 @@ except Exception as e:
     raise RuntimeError(f"❌ Không thể kết nối MongoDB: {e}")
 
 # ---- Danh sách NV được phép vào trang xem dữ liệu ----
-ALLOWED_IDS = {"Admin", "Admin01", "Admin02", "Admin03"}
+ALLOWED_IDS = {"it.trankhanhvinh@gmail.com", "thinhnv@sunautomation.com.vn", "kimcuong@sunautomation.com.vn"}
 
 
 # ---- Trang index ----
@@ -142,7 +142,7 @@ def get_attendances():
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
-        emp_id = request.args.get("empId")
+        emp_id = request.args.get("Email")
         if emp_id not in ALLOWED_IDS:
             return jsonify({"error": "🚫 Không có quyền xuất Excel!"}), 403
 
