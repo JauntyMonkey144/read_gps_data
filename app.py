@@ -45,7 +45,7 @@ def index():
 # ---- Login ----
 @app.route("/login", methods=["GET"])
 def login():
-    emp_id = request.args.get("empId")
+    emp_id = request.args.get("Email")
     if not emp_id:
         return jsonify({"success": False, "message": "❌ Bạn cần nhập mã nhân viên"}), 400
 
