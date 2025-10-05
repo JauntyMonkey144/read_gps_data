@@ -187,7 +187,7 @@
         document.getElementById("forgotMessage").innerText = "Vui lòng nhập email!";
         return;
       }
-      const res = await fetch(`/api/forgot-password?email=${encodeURIComponent(email)}`);
+      const res = await fetch(`/api/reset-password?email=${encodeURIComponent(email)}`);
       const data = await res.json();
       if (data.success) {
         document.getElementById("forgotMessage").style.color = "green";
