@@ -8,6 +8,7 @@
     body { font-family: Arial, sans-serif; background: #f4f6f9; padding: 20px; }
     h2 { text-align: center; margin-bottom: 20px; }
     footer { margin-top: 40px; padding: 15px; background: #f5f5f5; text-align: center; color: #666; }
+
     .login-box {
       max-width: 400px; margin: 80px auto; padding: 20px;
       background: #fff; border: 1px solid #ddd; border-radius: 8px;
@@ -25,8 +26,10 @@
 
     .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
     .welcome { font-weight: bold; color: #333; }
-    .logout-btn { padding: 5px 10px; background: #dc3545; color: #fff;
-      border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .logout-btn {
+      padding: 5px 10px; background: #dc3545; color: #fff;
+      border: none; border-radius: 4px; cursor: pointer; font-size: 13px;
+    }
 
     .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
     .controls input, .controls select, .controls button {
@@ -62,7 +65,7 @@
 
   <!-- Form đăng nhập -->
   <div id="loginBox" class="login-box">
-    <input type="text" id="empIdInput" placeholder="Nhập mã nhân viên">
+    <input type="email" id="emailInput" placeholder="Nhập email nhân viên">
     <br>
     <button onclick="login()">Đăng nhập</button>
     <p id="loginMessage" style="color:red; font-size:14px;"></p>
@@ -139,7 +142,7 @@
     let currentFilter = "hôm nay", currentStartDate = "", currentEndDate = "", currentSearch = "";
     let rawData = [], currentSort = { column: null, order: null };
     let currentPage = 1, rowsPerPage = 10;
-    let currentEmpId = null, currentEmpName = "";
+    let currentEmail = "", currentEmpName = "";
 
     function setActiveButton(btn) {
       document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
@@ -147,17 +150,17 @@
     }
 
     async function login() {
-      const empId = document.getElementById("empIdInput").value.trim();
-      if (!empId) {
-        document.getElementById("loginMessage").innerText = "Vui lòng nhập mã nhân viên!";
+      const email = document.getElementById("emailInput").value.trim();
+      if (!email) {
+        document.getElementById("loginMessage").innerText = "Vui lòng nhập email!";
         return;
       }
-      const res = await fetch(`/login?empId=${empId}`);
+      const res = await fetch(`/login?email=${encodeURIComponent(email)}`);
       const data = await res.json();
       if (data.success) {
-        currentEmpId = empId;
+        currentEmail = email;
         currentEmpName = data.EmployeeName;
-        sessionStorage.setItem("EmployeeId", empId);
+        sessionStorage.setItem("Email", email);
         sessionStorage.setItem("EmployeeName", currentEmpName);
         document.getElementById("loginBox").style.display = "none";
         document.getElementById("mainContent").style.display = "block";
@@ -170,13 +173,13 @@
 
     function logout() {
       sessionStorage.clear();
-      currentEmpId = null; currentEmpName = "";
+      currentEmail = ""; currentEmpName = "";
       document.getElementById("mainContent").style.display = "none";
       document.getElementById("loginBox").style.display = "block";
     }
 
     async function loadData() {
-      let url = `/api/attendances?filter=${currentFilter}&empId=${currentEmpId}`;
+      let url = `/api/attendances?filter=${currentFilter}&email=${currentEmail}`;
       if (currentStartDate && currentEndDate) url += `&startDate=${currentStartDate}&endDate=${currentEndDate}`;
       if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
       const res = await fetch(url);
@@ -210,11 +213,7 @@
             <td>${row.Tasks ? (Array.isArray(row.Tasks) ? row.Tasks.join(", ") : row.Tasks) : ""}</td>
             <td>${row.OtherNote || ""}</td>
             <td>${row.Address || ""}</td>
-            <td>
-              ${row.Latitude && row.Longitude 
-                ? `<a href="https://www.google.com/maps?q=${row.Latitude},${row.Longitude}" target="_blank">Xem</a>` 
-                : ""}
-            </td>
+            <td>${row.Latitude && row.Longitude ? `<a href="https://www.google.com/maps?q=${row.Latitude},${row.Longitude}" target="_blank">Xem</a>` : ""}</td>
             <td>${row.CheckinTime || ""}</td>
             <td>${row.Status || ""}</td>
             <td>${row.FaceImage ? `<a href="${row.FaceImage}" target="_blank"><img src="${row.FaceImage}" class="face-thumb"></a>` : ""}</td>
@@ -232,6 +231,7 @@
         container.innerHTML += `<button onclick="goToPage(${i})" ${i===currentPage ? "style='font-weight:bold;'" : ""}>${i}</button>`;
       }
     }
+
     function goToPage(page) { currentPage = page; renderTable(); }
 
     function sortTable(column) {
@@ -265,7 +265,7 @@
     function changeRowsPerPage() { rowsPerPage = parseInt(document.getElementById("rowsPerPage").value); currentPage = 1; renderTable(); }
 
     function exportExcel() {
-      let url = `/api/export-excel?filter=${currentFilter}&empId=${currentEmpId}`;
+      let url = `/api/export-excel?filter=${currentFilter}&email=${currentEmail}`;
       if (currentStartDate && currentEndDate) url += `&startDate=${currentStartDate}&endDate=${currentEndDate}`;
       if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
       window.location.href = url;
@@ -280,10 +280,10 @@
     }
 
     window.onload = () => {
-      const savedId = sessionStorage.getItem("EmployeeId");
+      const savedEmail = sessionStorage.getItem("Email");
       const savedName = sessionStorage.getItem("EmployeeName");
-      if (savedId) {
-        currentEmpId = savedId; currentEmpName = savedName || "";
+      if (savedEmail) {
+        currentEmail = savedEmail; currentEmpName = savedName || "";
         document.getElementById("loginBox").style.display = "none";
         document.getElementById("mainContent").style.display = "block";
         document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentEmpName}`;
