@@ -203,7 +203,6 @@ def export_to_excel():
             ws.cell(row=row, column=3, value=date)
 
             for j, rec in enumerate(records[:10], start=1):
-                # ---- Parse giờ ----
                 checkin_time = rec.get("CheckinTime")
                 time_str = ""
                 if isinstance(checkin_time, datetime):
@@ -215,39 +214,42 @@ def export_to_excel():
                     except Exception:
                         time_str = checkin_time
 
-                # ---- Build nội dung ô ----
                 parts = []
 
+                # ---- Xử lý Tasks ----
                 tasks = rec.get("Tasks")
                 if isinstance(tasks, list):
                     tasks_str = ", ".join(tasks)
                 else:
                     tasks_str = str(tasks or "")
 
-                status = rec.get("Status", "")
-                is_leave = "nghỉ phép" in tasks_str.lower()
+                # ---- Nếu là nghỉ phép có lý do dạng "Nghỉ phép: xxx" ----
+                leave_reason = ""
+                if "nghỉ phép" in tasks_str.lower():
+                    if ":" in tasks_str:
+                        split_task = tasks_str.split(":", 1)
+                        tasks_str = split_task[0].strip()       # → "Nghỉ phép"
+                        leave_reason = split_task[1].strip()    # → "Sức khoẻ"
+                    else:
+                        tasks_str = tasks_str.strip()
+                else:
+                    tasks_str = tasks_str.strip()
 
-                # ---- Giờ ----
+                status = rec.get("Status", "")
+
+                # ---- Build nội dung xuất Excel ----
                 if time_str:
                     parts.append(time_str)
-
-                # ---- Project ID ----
                 if rec.get("ProjectId"):
                     parts.append(str(rec["ProjectId"]))
-
-                # ---- Tasks ----
                 if tasks_str:
                     parts.append(tasks_str)
-
-                # ---- Status nếu là nghỉ phép ----
-                if is_leave and status:
+                if leave_reason:
+                    parts.append(leave_reason)
+                if status:
                     parts.append(status)
-
-                # ---- Ghi chú khác ----
                 if rec.get("OtherNote"):
                     parts.append(rec["OtherNote"])
-
-                # ---- Địa chỉ ----
                 if rec.get("Address"):
                     parts.append(rec["Address"])
 
