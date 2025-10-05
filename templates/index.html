@@ -10,7 +10,7 @@
     footer { margin-top: 40px; padding: 15px; background: #f5f5f5; text-align: center; color: #666; }
 
     .login-box {
-      max-width: 400px; margin: 80px auto; padding: 20px;
+      max-width: 400px; margin: 80px auto; padding: 25px;
       background: #fff; border: 1px solid #ddd; border-radius: 8px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.1); text-align: center;
     }
@@ -23,6 +23,8 @@
       border: none; border-radius: 4px; cursor: pointer;
     }
     .login-box button:hover { background: #0056b3; }
+    .login-box a { display: block; margin-top: 10px; color: #007bff; text-decoration: none; font-size: 13px; }
+    .login-box a:hover { text-decoration: underline; }
 
     .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
     .welcome { font-weight: bold; color: #333; }
@@ -47,11 +49,6 @@
       position: sticky; top: 0; z-index: 2;
     }
     tr:nth-child(even) { background: #f9f9f9; }
-
-    .sortable:after { content: " ⇅"; font-size: 12px; }
-    .asc:after { content: " ↑"; }
-    .desc:after { content: " ↓"; }
-
     img.face-thumb { width: 60px; height: 45px; object-fit: cover; border-radius: 4px; border:1px solid #ccc; }
 
     .pagination { margin-top: 15px; text-align: center; }
@@ -65,10 +62,21 @@
 
   <!-- Form đăng nhập -->
   <div id="loginBox" class="login-box">
-    <input type="email" id="emailInput" placeholder="Nhập email nhân viên">
-    <br>
+    <h3>Đăng nhập hệ thống</h3>
+    <input type="email" id="emailInput" placeholder="Nhập email">
+    <input type="password" id="passwordInput" placeholder="Nhập mật khẩu">
     <button onclick="login()">Đăng nhập</button>
+    <a href="#" onclick="showForgotPassword()">Quên mật khẩu?</a>
     <p id="loginMessage" style="color:red; font-size:14px;"></p>
+  </div>
+
+  <!-- Form quên mật khẩu -->
+  <div id="forgotBox" class="login-box" style="display:none;">
+    <h3>Quên mật khẩu</h3>
+    <input type="email" id="forgotEmail" placeholder="Nhập email đăng ký">
+    <button onclick="resetPassword()">Gửi mã khôi phục</button>
+    <a href="#" onclick="showLogin()">← Quay lại đăng nhập</a>
+    <p id="forgotMessage" style="color:green; font-size:14px;"></p>
   </div>
 
   <!-- Nội dung chính -->
@@ -117,16 +125,16 @@
       <table>
         <thead>
           <tr>
-            <th class="sortable" onclick="sortTable('EmployeeId')">Mã NV</th>
-            <th class="sortable" onclick="sortTable('EmployeeName')">Tên NV</th>
-            <th class="sortable" onclick="sortTable('CheckinDate')">Ngày</th>
-            <th class="sortable" onclick="sortTable('ProjectId')">ID Dự án</th>
-            <th class="sortable" onclick="sortTable('Tasks')">Công việc</th>
-            <th class="sortable" onclick="sortTable('OtherNote')">Khác</th>
-            <th class="sortable" onclick="sortTable('Address')">Địa chỉ</th>
+            <th>Mã NV</th>
+            <th>Tên NV</th>
+            <th>Ngày</th>
+            <th>ID Dự án</th>
+            <th>Công việc</th>
+            <th>Khác</th>
+            <th>Địa chỉ</th>
             <th>Vị trí</th>
-            <th class="sortable" onclick="sortTable('CheckinTime')">Thời gian</th>
-            <th class="sortable" onclick="sortTable('Status')">Trạng thái</th>
+            <th>Thời gian</th>
+            <th>Trạng thái</th>
             <th>Ảnh</th>
           </tr>
         </thead>
@@ -144,31 +152,59 @@
     let currentPage = 1, rowsPerPage = 10;
     let currentEmail = "", currentEmpName = "";
 
-    function setActiveButton(btn) {
-      document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
-      if (btn) btn.classList.add("active");
-    }
-
+    // ==== AUTH ====
     async function login() {
       const email = document.getElementById("emailInput").value.trim();
-      if (!email) {
-        document.getElementById("loginMessage").innerText = "Vui lòng nhập email!";
+      const password = document.getElementById("passwordInput").value.trim();
+      if (!email || !password) {
+        document.getElementById("loginMessage").innerText = "Vui lòng nhập đầy đủ thông tin!";
         return;
       }
-      const res = await fetch(`/login?email=${encodeURIComponent(email)}`);
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
       const data = await res.json();
       if (data.success) {
         currentEmail = email;
         currentEmpName = data.EmployeeName;
         sessionStorage.setItem("Email", email);
-        sessionStorage.setItem("EmployeeName", currentEmpName);
+        sessionStorage.setItem("EmployeeName", data.EmployeeName);
         document.getElementById("loginBox").style.display = "none";
         document.getElementById("mainContent").style.display = "block";
         document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentEmpName}`;
         loadData();
       } else {
-        document.getElementById("loginMessage").innerText = data.message;
+        document.getElementById("loginMessage").innerText = data.message || "Sai thông tin đăng nhập!";
       }
+    }
+
+    async function resetPassword() {
+      const email = document.getElementById("forgotEmail").value.trim();
+      if (!email) {
+        document.getElementById("forgotMessage").style.color = "red";
+        document.getElementById("forgotMessage").innerText = "Vui lòng nhập email!";
+        return;
+      }
+      const res = await fetch(`/api/forgot-password?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById("forgotMessage").style.color = "green";
+        document.getElementById("forgotMessage").innerText = "✅ Mã khôi phục đã được gửi đến email của bạn!";
+      } else {
+        document.getElementById("forgotMessage").style.color = "red";
+        document.getElementById("forgotMessage").innerText = data.message;
+      }
+    }
+
+    function showForgotPassword() {
+      document.getElementById("loginBox").style.display = "none";
+      document.getElementById("forgotBox").style.display = "block";
+    }
+    function showLogin() {
+      document.getElementById("forgotBox").style.display = "none";
+      document.getElementById("loginBox").style.display = "block";
     }
 
     function logout() {
@@ -178,112 +214,43 @@
       document.getElementById("loginBox").style.display = "block";
     }
 
+    // ==== LOAD DỮ LIỆU ====
     async function loadData() {
       let url = `/api/attendances?filter=${currentFilter}&email=${currentEmail}`;
       if (currentStartDate && currentEndDate) url += `&startDate=${currentStartDate}&endDate=${currentEndDate}`;
       if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
       const res = await fetch(url);
       rawData = await res.json();
-      currentPage = 1;
       renderTable();
     }
 
     function renderTable() {
-      let data = [...rawData];
-      if (currentSort.column && currentSort.order) {
-        data.sort((a, b) => {
-          let valA = a[currentSort.column] || "";
-          let valB = b[currentSort.column] || "";
-          if (Array.isArray(valA)) valA = valA.join(", ");
-          if (Array.isArray(valB)) valB = valB.join(", ");
-          return currentSort.order === "asc" ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
-        });
-      }
       const start = (currentPage - 1) * rowsPerPage;
-      const pageData = data.slice(start, start + rowsPerPage);
+      const pageData = rawData.slice(start, start + rowsPerPage);
       const tbody = document.getElementById("dataBody");
-      tbody.innerHTML = "";
-      pageData.forEach(row => {
-        tbody.innerHTML += `
-          <tr>
-            <td>${row.EmployeeId || ""}</td>
-            <td>${row.EmployeeName || ""}</td>
-            <td>${row.CheckinDate || ""}</td>
-            <td>${row.ProjectId || ""}</td>
-            <td>${row.Tasks ? (Array.isArray(row.Tasks) ? row.Tasks.join(", ") : row.Tasks) : ""}</td>
-            <td>${row.OtherNote || ""}</td>
-            <td>${row.Address || ""}</td>
-            <td>${row.Latitude && row.Longitude ? `<a href="https://www.google.com/maps?q=${row.Latitude},${row.Longitude}" target="_blank">Xem</a>` : ""}</td>
-            <td>${row.CheckinTime || ""}</td>
-            <td>${row.Status || ""}</td>
-            <td>${row.FaceImage ? `<a href="${row.FaceImage}" target="_blank"><img src="${row.FaceImage}" class="face-thumb"></a>` : ""}</td>
-          </tr>`;
-      });
-      renderPagination(data.length);
-      updateSortIcons();
-    }
-
-    function renderPagination(totalRows) {
-      const pageCount = Math.ceil(totalRows / rowsPerPage);
-      const container = document.getElementById("pagination");
-      container.innerHTML = "";
-      for (let i = 1; i <= pageCount; i++) {
-        container.innerHTML += `<button onclick="goToPage(${i})" ${i===currentPage ? "style='font-weight:bold;'" : ""}>${i}</button>`;
-      }
-    }
-
-    function goToPage(page) { currentPage = page; renderTable(); }
-
-    function sortTable(column) {
-      if (currentSort.column === column) {
-        currentSort.order = currentSort.order === "asc" ? "desc" : currentSort.order === "desc" ? null : "asc";
-        if (!currentSort.order) currentSort.column = null;
-      } else {
-        currentSort.column = column; currentSort.order = "asc";
-      }
-      renderTable();
-    }
-
-    function updateSortIcons() {
-      document.querySelectorAll("th.sortable").forEach(th => th.classList.remove("asc", "desc"));
-      if (currentSort.column && currentSort.order) {
-        const th = document.querySelector(`th.sortable[onclick="sortTable('${currentSort.column}')"]`);
-        if (th) th.classList.add(currentSort.order);
-      }
-    }
-
-    function applyFilter(type, btn = null) {
-      currentFilter = type; currentStartDate = ""; currentEndDate = "";
-      setActiveButton(btn); loadData();
-    }
-    function applyDateRange() {
-      currentStartDate = document.getElementById("startDate").value;
-      currentEndDate = document.getElementById("endDate").value;
-      currentFilter = "custom"; setActiveButton(null); loadData();
-    }
-    function applySearch() { currentSearch = document.getElementById("searchBox").value; loadData(); }
-    function changeRowsPerPage() { rowsPerPage = parseInt(document.getElementById("rowsPerPage").value); currentPage = 1; renderTable(); }
-
-    function exportExcel() {
-      let url = `/api/export-excel?filter=${currentFilter}&email=${currentEmail}`;
-      if (currentStartDate && currentEndDate) url += `&startDate=${currentStartDate}&endDate=${currentEndDate}`;
-      if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
-      window.location.href = url;
-    }
-
-    function resetAll() {
-      currentFilter = "hôm nay"; currentStartDate = ""; currentEndDate = ""; currentSearch = "";
-      currentSort = { column: null, order: null }; currentPage = 1; rowsPerPage = 10;
-      document.getElementById("startDate").value = ""; document.getElementById("endDate").value = "";
-      document.getElementById("searchBox").value = ""; document.getElementById("rowsPerPage").value = "10";
-      setActiveButton(document.querySelector("button[onclick*='hôm nay']")); loadData();
+      tbody.innerHTML = pageData.map(row => `
+        <tr>
+          <td>${row.EmployeeId || ""}</td>
+          <td>${row.EmployeeName || ""}</td>
+          <td>${row.CheckinDate || ""}</td>
+          <td>${row.ProjectId || ""}</td>
+          <td>${row.Tasks || ""}</td>
+          <td>${row.OtherNote || ""}</td>
+          <td>${row.Address || ""}</td>
+          <td>${row.Latitude && row.Longitude ? `<a href="https://www.google.com/maps?q=${row.Latitude},${row.Longitude}" target="_blank">Xem</a>` : ""}</td>
+          <td>${row.CheckinTime || ""}</td>
+          <td>${row.Status || ""}</td>
+          <td>${row.FaceImage ? `<a href="${row.FaceImage}" target="_blank"><img src="${row.FaceImage}" class="face-thumb"></a>` : ""}</td>
+        </tr>
+      `).join("");
     }
 
     window.onload = () => {
       const savedEmail = sessionStorage.getItem("Email");
       const savedName = sessionStorage.getItem("EmployeeName");
       if (savedEmail) {
-        currentEmail = savedEmail; currentEmpName = savedName || "";
+        currentEmail = savedEmail;
+        currentEmpName = savedName;
         document.getElementById("loginBox").style.display = "none";
         document.getElementById("mainContent").style.display = "block";
         document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentEmpName}`;
