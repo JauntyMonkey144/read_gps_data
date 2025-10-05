@@ -136,11 +136,31 @@ def export_to_excel():
         search = request.args.get("search", "").strip()
 
         query = build_query(filter_type, start_date, end_date, search)
-        query["EmployeeId"] = emp_id
+        data = list(collection.find(query, {
+            "_id": 0,
+            "EmployeeId": 1,
+            "EmployeeName": 1,
+            "ProjectId": 1,
+            "Tasks": 1,
+            "OtherNote": 1,
+            "Address": 1,
+            "CheckinTime": 1,
+            "CheckinDate": 1
+        }))
 
-        data = list(collection.find(query, {"_id": 0}))
+        # ---- Group theo EmployeeId + CheckinDate ----
+        grouped = {}
+        for d in data:
+            emp_id = d.get("EmployeeId", "")
+            emp_name = d.get("EmployeeName", "")
+            date = d.get("CheckinDate") or (
+                d["CheckinTime"].astimezone(VN_TZ).strftime("%Y-%m-%d")
+                if isinstance(d.get("CheckinTime"), datetime) else ""
+            )
+            key = (emp_id, emp_name, date)
+            grouped.setdefault(key, []).append(d)
 
-        # ---- Load Excel Template ----
+        # Load template Excel
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
@@ -154,25 +174,83 @@ def export_to_excel():
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
         start_row = 2
-        for i, rec in enumerate(data, start=0):
+        for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
             ws.cell(row=row, column=1, value=emp_id)
             ws.cell(row=row, column=2, value=emp_name)
-            ws.cell(row=row, column=3, value=rec.get("CheckinDate"))
-            ws.cell(row=row, column=4, value=rec.get("Address"))
-            ws.cell(row=row, column=5, value=rec.get("Status"))
+            ws.cell(row=row, column=3, value=date)
 
-            for col in range(1, 6):
+            # Fill Check1..Check10
+            for j, rec in enumerate(records[:10], start=1):
+                # ---- Parse giờ chấm công ----
+                checkin_time = rec.get("CheckinTime")
+                time_str = ""
+                if isinstance(checkin_time, datetime):
+                    time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
+                elif isinstance(checkin_time, str) and checkin_time.strip():
+                    try:
+                        parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
+                        time_str = parsed.strftime("%H:%M:%S")
+                    except Exception:
+                        time_str = checkin_time  # fallback nếu không parse được
+
+                # ---- Build entry ----
+                parts = []
+                if time_str:
+                    parts.append(f"Giờ chấm công: {time_str}")
+                if rec.get("ProjectId"):
+                    parts.append(f"ID: {rec['ProjectId']}")
+                if rec.get("Tasks"):
+                    tasks = ", ".join(rec["Tasks"]) if isinstance(rec["Tasks"], list) else rec["Tasks"]
+                    parts.append(f"Công việc: {tasks}")
+                if rec.get("OtherNote"):
+                    parts.append(f"Ghi chú khác: {rec['OtherNote']}")
+                if rec.get("Address"):
+                    parts.append(f"Địa chỉ: {rec['Address']}")
+
+                entry = "\n".join(parts)
+                ws.cell(row=row, column=3 + j, value=entry)
+
+            # Border + align cả dòng
+            for col in range(1, 14):
                 cell = ws.cell(row=row, column=col)
                 cell.border = border
                 cell.alignment = align_left
-            ws.row_dimensions[row].height = 25
 
+            # Auto-fit row height
+            max_lines = max(
+                (str(ws.cell(row=row, column=col).value).count("\n") + 1 if ws.cell(row=row, column=col).value else 1)
+                for col in range(1, 14)
+            )
+            ws.row_dimensions[row].height = max_lines * 20
+
+        # Auto-fit column width
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                if cell.value:
+                    length = len(str(cell.value))
+                    max_length = max(max_length, length)
+            ws.column_dimensions[col_letter].width = max_length + 2
+
+        # ---- Tạo tên file xuất ----
+        today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
+        if search:
+            filename = f"Danh sách chấm công theo tìm kiếm_{today_str}.xlsx"
+        elif filter_type == "hôm nay":
+            filename = f"Danh sách chấm công_{today_str}.xlsx"
+        elif filter_type == "custom" and start_date and end_date:
+            filename = f"Danh sách chấm công từ {start_date} đến {end_date}_{today_str}.xlsx"
+        elif filter_type == "tất cả":
+            filename = f"Danh sách chấm công_{today_str}.xlsx"
+        else:
+            filename = f"Danh sách chấm công theo {filter_type}_{today_str}.xlsx"
+
+        # ---- Xuất file ----
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-
-        filename = f"ChamCong_{emp_name}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
 
         return send_file(
             output,
@@ -180,6 +258,7 @@ def export_to_excel():
             download_name=filename,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
