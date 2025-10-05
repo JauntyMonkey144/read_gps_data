@@ -40,34 +40,29 @@ ALLOWED_IDS = {
 def index():
     return render_template("index.html")
 
-# ---- Login (xác thực bằng EmployeeId → lấy email trong DB để so với ALLOWED_IDS) ----
 @app.route("/login", methods=["GET"])
 def login():
-    emp_id = request.args.get("Email")  # Nhập mã nhân viên
-    if not emp_id:
-        return jsonify({"success": False, "message": "❌ Bạn cần nhập mã nhân viên"}), 400
+    email = request.args.get("Email")  # frontend nhập email
+    if not email:
+        return jsonify({"success": False, "message": "❌ Bạn cần nhập email"}), 400
 
-    # Tìm thông tin nhân viên trong DB
-    emp = idx_collection.find_one({"Email": emp_id}, {"_id": 0, "EmployeeName": 1, "Email": 1})
+    emp = idx_collection.find_one({"Email": email}, {"_id": 0, "EmployeeName": 1, "EmployeeId": 1})
     if not emp:
-        return jsonify({"success": False, "message": "❌ Không tìm thấy mã nhân viên trong hệ thống!"}), 404
+        return jsonify({"success": False, "message": "❌ Email không tồn tại trong hệ thống!"}), 404
 
-    emp_name = emp.get("EmployeeName", emp_id)
-    emp_email = emp.get("Email")
+    emp_name = emp.get("EmployeeName")
+    emp_id = emp.get("EmployeeId")
 
-    if emp_email in ALLOWED_IDS:
+    if email in ALLOWED_IDS:
         return jsonify({
             "success": True,
             "message": "✅ Đăng nhập thành công",
             "EmployeeId": emp_id,
             "EmployeeName": emp_name,
-            "Email": emp_email
+            "Email": email
         })
     else:
-        return jsonify({
-            "success": False,
-            "message": f"🚫 Email {emp_email} không có quyền truy cập!"
-        }), 403
+        return jsonify({"success": False, "message": f"🚫 Email {email} không có quyền truy cập!"}), 403
 
 
 # ---- Xây dựng query ----
