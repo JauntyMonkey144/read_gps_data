@@ -227,15 +227,6 @@ def export_to_excel():
                 status = rec.get("Status", "")
                 is_leave = "nghỉ phép" in tasks_str.lower()
 
-                if is_leave:
-                    # ---- Thêm số hiệu trạng thái ----
-                    if "đã duyệt" in status.lower():
-                        parts.append("1")
-                    elif "từ chối" in status.lower():
-                        parts.append("3")
-                    else:
-                        parts.append("2")  # Chờ duyệt
-
                 # ---- Giờ ----
                 if time_str:
                     parts.append(time_str)
