@@ -1,244 +1,295 @@
-from flask import Flask, render_template, jsonify, send_file, request
-from pymongo import MongoClient
-from flask_cors import CORS
-import os
-from io import BytesIO
-from datetime import datetime, timedelta, timezone
-import calendar
-import re
-from openpyxl import load_workbook
-from openpyxl.styles import Border, Side, Alignment
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dữ liệu chấm công GPS</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f6f9; padding: 20px; }
+    h2 { text-align: center; margin-bottom: 20px; }
+    footer { margin-top: 40px; padding: 15px; background: #f5f5f5; text-align: center; color: #666; }
+    .login-box {
+      max-width: 400px; margin: 80px auto; padding: 20px;
+      background: #fff; border: 1px solid #ddd; border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1); text-align: center;
+    }
+    .login-box input {
+      width: 90%; padding: 10px; margin: 10px 0;
+      border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
+    }
+    .login-box button {
+      padding: 8px 15px; background: #007bff; color: #fff;
+      border: none; border-radius: 4px; cursor: pointer;
+    }
+    .login-box button:hover { background: #0056b3; }
 
-app = Flask(__name__, template_folder="templates")
-CORS(app)
+    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .welcome { font-weight: bold; color: #333; }
+    .logout-btn { padding: 5px 10px; background: #dc3545; color: #fff;
+      border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
 
-# ---- Timezone VN ----
-VN_TZ = timezone(timedelta(hours=7))
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
+    .controls input, .controls select, .controls button {
+      padding: 6px 12px; font-size: 14px; border: 1px solid #007bff; border-radius: 4px;
+      background: #fff; cursor: pointer; transition: all 0.2s;
+    }
+    .controls button:hover { background: #007bff; color: #fff; }
+    .controls button.active { background: #007bff; color: #fff; font-weight: bold; }
 
-# ---- MongoDB Config ----
-MONGO_URI = os.getenv(
-    "MONGO_URI",
-    "mongodb+srv://banhbaobeo2205:lm2hiCLXp6B0D7hq@cluster0.festnla.mongodb.net/?retryWrites=true&w=majority"
-)
-DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
+    .table-container { max-height: 500px; overflow-y: auto; border: 1px solid #ccc; }
+    table { width: 100%; border-collapse: collapse; background: white; font-size: 14px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: middle; }
+    th {
+      background: #007bff; color: white; cursor: pointer; user-select: none;
+      position: sticky; top: 0; z-index: 2;
+    }
+    tr:nth-child(even) { background: #f9f9f9; }
 
-# ---- Kết nối MongoDB ----
-client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
-collection = db["alt_checkins"]
-idx_collection = db["idx_collection"]
+    .sortable:after { content: " ⇅"; font-size: 12px; }
+    .asc:after { content: " ↑"; }
+    .desc:after { content: " ↓"; }
 
-# ---- Danh sách email được phép ----
-ALLOWED_IDS = {
-    "it.trankhanhvinh@gmail.com",
-    "thinhnv@sunautomation.com.vn",
-    "kimcuong@sunautomation.com.vn"
-}
+    img.face-thumb { width: 60px; height: 45px; object-fit: cover; border-radius: 4px; border:1px solid #ccc; }
 
-# ---- Trang chủ ----
-@app.route("/")
-def index():
-    return render_template("index.html")
+    .pagination { margin-top: 15px; text-align: center; }
+    .pagination button { margin: 0 2px; padding: 5px 10px; }
 
-# ---- Login (xác thực bằng EmployeeId → lấy email trong DB để so với ALLOWED_IDS) ----
-@app.route("/login", methods=["GET"])
-def login():
-    emp_id = request.args.get("EmployeeId")  # Nhập mã nhân viên
-    if not emp_id:
-        return jsonify({"success": False, "message": "❌ Bạn cần nhập mã nhân viên"}), 400
+    #mainContent { display: none; }
+  </style>
+</head>
+<body>
+  <h2>📌 Dữ liệu chấm công GPS</h2>
 
-    # Tìm thông tin nhân viên trong DB
-    emp = idx_collection.find_one({"EmployeeId": emp_id}, {"_id": 0, "EmployeeName": 1, "Email": 1})
-    if not emp:
-        return jsonify({"success": False, "message": "❌ Không tìm thấy mã nhân viên trong hệ thống!"}), 404
+  <!-- Form đăng nhập -->
+  <div id="loginBox" class="login-box">
+    <input type="text" id="empIdInput" placeholder="Nhập mã nhân viên">
+    <br>
+    <button onclick="login()">Đăng nhập</button>
+    <p id="loginMessage" style="color:red; font-size:14px;"></p>
+  </div>
 
-    emp_name = emp.get("EmployeeName", emp_id)
-    emp_email = emp.get("Email")
+  <!-- Nội dung chính -->
+  <div id="mainContent">
+    <div class="top-bar">
+      <span class="welcome" id="welcomeMsg"></span>
+      <button class="logout-btn" onclick="logout()">Đăng xuất</button>
+    </div>
 
-    if emp_email in ALLOWED_IDS:
-        return jsonify({
-            "success": True,
-            "message": "✅ Đăng nhập thành công",
-            "EmployeeId": emp_id,
-            "EmployeeName": emp_name,
-            "Email": emp_email
-        })
-    else:
-        return jsonify({
-            "success": False,
-            "message": f"🚫 Email {emp_email} không có quyền truy cập!"
-        }), 403
+    <!-- Bộ lọc -->
+    <div class="controls">
+      <label><b>Lọc nhanh:</b></label>
+      <button onclick="applyFilter('hôm nay', this)" class="active">Hôm nay</button>
+      <button onclick="applyFilter('tuần', this)">Tuần này</button>
+      <button onclick="applyFilter('tháng', this)">Tháng này</button>
+      <button onclick="applyFilter('năm', this)">Năm nay</button>
+      <button onclick="applyFilter('tất cả', this)">Tất cả</button>
+    </div>
 
+    <div class="controls">
+      <label><b>Từ ngày:</b></label><input type="date" id="startDate">
+      <label><b>Đến ngày:</b></label><input type="date" id="endDate">
+      <button onclick="applyDateRange()">Áp dụng</button>
+    </div>
 
-# ---- Xây dựng query ----
-def build_query(filter_type, start_date, end_date, search):
-    query = {}
-    today = datetime.now(VN_TZ)
+    <div class="controls">
+      <label><b>Tìm kiếm:</b></label>
+      <input type="text" id="searchBox" placeholder="Nhập tên hoặc mã NV...">
+      <button onclick="applySearch()">Tìm</button>
+    </div>
 
-    if filter_type == "custom" and start_date and end_date:
-        query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
-    elif filter_type == "hôm nay":
-        query["CheckinDate"] = today.strftime("%Y-%m-%d")
-    elif filter_type == "tuần":
-        start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
-        end = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
-        query["CheckinDate"] = {"$gte": start, "$lte": end}
-    elif filter_type == "tháng":
-        start = today.replace(day=1).strftime("%Y-%m-%d")
-        end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).strftime("%Y-%m-%d")
-        query["CheckinDate"] = {"$gte": start, "$lte": end}
-    elif filter_type == "năm":
-        query["CheckinDate"] = {"$regex": f"^{today.year}"}
+    <div class="controls">
+      <label><b>Số dòng/trang:</b></label>
+      <select id="rowsPerPage" onchange="changeRowsPerPage()">
+        <option value="10" selected>10</option>
+        <option value="20">20</option>
+        <option value="50">50</option>
+      </select>
+      <button onclick="exportExcel()">📥 Xuất Excel</button>
+      <button onclick="loadData()">🔄 Làm mới</button>
+      <button onclick="resetAll()">♻️ Reset</button>
+    </div>
 
-    if search:
-        regex = re.compile(search, re.IGNORECASE)
-        query["$or"] = [{"EmployeeId": {"$regex": regex}}, {"EmployeeName": {"$regex": regex}}]
-    return query
+    <!-- Bảng dữ liệu -->
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th class="sortable" onclick="sortTable('EmployeeId')">Mã NV</th>
+            <th class="sortable" onclick="sortTable('EmployeeName')">Tên NV</th>
+            <th class="sortable" onclick="sortTable('CheckinDate')">Ngày</th>
+            <th class="sortable" onclick="sortTable('ProjectId')">ID Dự án</th>
+            <th class="sortable" onclick="sortTable('Tasks')">Công việc</th>
+            <th class="sortable" onclick="sortTable('OtherNote')">Khác</th>
+            <th class="sortable" onclick="sortTable('Address')">Địa chỉ</th>
+            <th>Vị trí</th>
+            <th class="sortable" onclick="sortTable('CheckinTime')">Thời gian</th>
+            <th class="sortable" onclick="sortTable('Status')">Trạng thái</th>
+            <th>Ảnh</th>
+          </tr>
+        </thead>
+        <tbody id="dataBody"></tbody>
+      </table>
+    </div>
 
+    <div class="pagination" id="pagination"></div>
+    <footer>&copy; 2025 Sun Automation - Trang đọc dữ liệu chấm công GPS</footer>
+  </div>
 
-# ---- API lấy dữ liệu ----
-@app.route("/api/attendances", methods=["GET"])
-def get_attendances():
-    try:
-        emp_id = request.args.get("EmployeeId")
-        if not emp_id:
-            return jsonify({"error": "❌ Thiếu mã nhân viên"}), 400
+  <script>
+    let currentFilter = "hôm nay", currentStartDate = "", currentEndDate = "", currentSearch = "";
+    let rawData = [], currentSort = { column: null, order: null };
+    let currentPage = 1, rowsPerPage = 10;
+    let currentEmpId = null, currentEmpName = "";
 
-        emp = idx_collection.find_one({"EmployeeId": emp_id}, {"Email": 1, "_id": 0})
-        if not emp or emp.get("Email") not in ALLOWED_IDS:
-            return jsonify({"error": "🚫 Không có quyền xem dữ liệu!"}), 403
+    function setActiveButton(btn) {
+      document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
+      if (btn) btn.classList.add("active");
+    }
 
-        filter_type = request.args.get("filter", "all").lower()
-        start_date = request.args.get("startDate")
-        end_date = request.args.get("endDate")
-        search = request.args.get("search", "").strip()
+    async function login() {
+      const empId = document.getElementById("empIdInput").value.trim();
+      if (!empId) {
+        document.getElementById("loginMessage").innerText = "Vui lòng nhập mã nhân viên!";
+        return;
+      }
+      const res = await fetch(`/login?empId=${empId}`);
+      const data = await res.json();
+      if (data.success) {
+        currentEmpId = empId;
+        currentEmpName = data.EmployeeName;
+        sessionStorage.setItem("EmployeeId", empId);
+        sessionStorage.setItem("EmployeeName", currentEmpName);
+        document.getElementById("loginBox").style.display = "none";
+        document.getElementById("mainContent").style.display = "block";
+        document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentEmpName}`;
+        loadData();
+      } else {
+        document.getElementById("loginMessage").innerText = data.message;
+      }
+    }
 
-        query = build_query(filter_type, start_date, end_date, search)
-        data = list(collection.find(query, {"_id": 0}))
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    function logout() {
+      sessionStorage.clear();
+      currentEmpId = null; currentEmpName = "";
+      document.getElementById("mainContent").style.display = "none";
+      document.getElementById("loginBox").style.display = "block";
+    }
 
+    async function loadData() {
+      let url = `/api/attendances?filter=${currentFilter}&empId=${currentEmpId}`;
+      if (currentStartDate && currentEndDate) url += `&startDate=${currentStartDate}&endDate=${currentEndDate}`;
+      if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
+      const res = await fetch(url);
+      rawData = await res.json();
+      currentPage = 1;
+      renderTable();
+    }
 
-# ---- API xuất Excel ----
-@app.route("/api/export-excel", methods=["GET"])
-def export_to_excel():
-    try:
-        emp_id = request.args.get("EmployeeId")
-        if not emp_id:
-            return jsonify({"error": "❌ Thiếu mã nhân viên"}), 400
+    function renderTable() {
+      let data = [...rawData];
+      if (currentSort.column && currentSort.order) {
+        data.sort((a, b) => {
+          let valA = a[currentSort.column] || "";
+          let valB = b[currentSort.column] || "";
+          if (Array.isArray(valA)) valA = valA.join(", ");
+          if (Array.isArray(valB)) valB = valB.join(", ");
+          return currentSort.order === "asc" ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+        });
+      }
+      const start = (currentPage - 1) * rowsPerPage;
+      const pageData = data.slice(start, start + rowsPerPage);
+      const tbody = document.getElementById("dataBody");
+      tbody.innerHTML = "";
+      pageData.forEach(row => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${row.EmployeeId || ""}</td>
+            <td>${row.EmployeeName || ""}</td>
+            <td>${row.CheckinDate || ""}</td>
+            <td>${row.ProjectId || ""}</td>
+            <td>${row.Tasks ? (Array.isArray(row.Tasks) ? row.Tasks.join(", ") : row.Tasks) : ""}</td>
+            <td>${row.OtherNote || ""}</td>
+            <td>${row.Address || ""}</td>
+            <td>
+              ${row.Latitude && row.Longitude 
+                ? `<a href="https://www.google.com/maps?q=${row.Latitude},${row.Longitude}" target="_blank">Xem</a>` 
+                : ""}
+            </td>
+            <td>${row.CheckinTime || ""}</td>
+            <td>${row.Status || ""}</td>
+            <td>${row.FaceImage ? `<a href="${row.FaceImage}" target="_blank"><img src="${row.FaceImage}" class="face-thumb"></a>` : ""}</td>
+          </tr>`;
+      });
+      renderPagination(data.length);
+      updateSortIcons();
+    }
 
-        emp = idx_collection.find_one({"EmployeeId": emp_id}, {"Email": 1, "_id": 0})
-        if not emp or emp.get("Email") not in ALLOWED_IDS:
-            return jsonify({"error": "🚫 Không có quyền xuất Excel!"}), 403
+    function renderPagination(totalRows) {
+      const pageCount = Math.ceil(totalRows / rowsPerPage);
+      const container = document.getElementById("pagination");
+      container.innerHTML = "";
+      for (let i = 1; i <= pageCount; i++) {
+        container.innerHTML += `<button onclick="goToPage(${i})" ${i===currentPage ? "style='font-weight:bold;'" : ""}>${i}</button>`;
+      }
+    }
+    function goToPage(page) { currentPage = page; renderTable(); }
 
-        filter_type = request.args.get("filter", "all").lower()
-        start_date = request.args.get("startDate")
-        end_date = request.args.get("endDate")
-        search = request.args.get("search", "").strip()
+    function sortTable(column) {
+      if (currentSort.column === column) {
+        currentSort.order = currentSort.order === "asc" ? "desc" : currentSort.order === "desc" ? null : "asc";
+        if (!currentSort.order) currentSort.column = null;
+      } else {
+        currentSort.column = column; currentSort.order = "asc";
+      }
+      renderTable();
+    }
 
-        query = build_query(filter_type, start_date, end_date, search)
-        data = list(collection.find(query, {"_id": 0}))
+    function updateSortIcons() {
+      document.querySelectorAll("th.sortable").forEach(th => th.classList.remove("asc", "desc"));
+      if (currentSort.column && currentSort.order) {
+        const th = document.querySelector(`th.sortable[onclick="sortTable('${currentSort.column}')"]`);
+        if (th) th.classList.add(currentSort.order);
+      }
+    }
 
-        # ---- Group theo nhân viên + ngày ----
-        grouped = {}
-        for d in data:
-            emp_id = d.get("EmployeeId", "")
-            emp_name = d.get("EmployeeName", "")
-            date = d.get("CheckinDate")
-            key = (emp_id, emp_name, date)
-            grouped.setdefault(key, []).append(d)
+    function applyFilter(type, btn = null) {
+      currentFilter = type; currentStartDate = ""; currentEndDate = "";
+      setActiveButton(btn); loadData();
+    }
+    function applyDateRange() {
+      currentStartDate = document.getElementById("startDate").value;
+      currentEndDate = document.getElementById("endDate").value;
+      currentFilter = "custom"; setActiveButton(null); loadData();
+    }
+    function applySearch() { currentSearch = document.getElementById("searchBox").value; loadData(); }
+    function changeRowsPerPage() { rowsPerPage = parseInt(document.getElementById("rowsPerPage").value); currentPage = 1; renderTable(); }
 
-        # ---- Load template Excel ----
-        template_path = "templates/Copy of Form chấm công.xlsx"
-        wb = load_workbook(template_path)
-        ws = wb.active
+    function exportExcel() {
+      let url = `/api/export-excel?filter=${currentFilter}&empId=${currentEmpId}`;
+      if (currentStartDate && currentEndDate) url += `&startDate=${currentStartDate}&endDate=${currentEndDate}`;
+      if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
+      window.location.href = url;
+    }
 
-        border = Border(
-            left=Side(style="thin", color="000000"),
-            right=Side(style="thin", color="000000"),
-            top=Side(style="thin", color="000000"),
-            bottom=Side(style="thin", color="000000"),
-        )
-        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    function resetAll() {
+      currentFilter = "hôm nay"; currentStartDate = ""; currentEndDate = ""; currentSearch = "";
+      currentSort = { column: null, order: null }; currentPage = 1; rowsPerPage = 10;
+      document.getElementById("startDate").value = ""; document.getElementById("endDate").value = "";
+      document.getElementById("searchBox").value = ""; document.getElementById("rowsPerPage").value = "10";
+      setActiveButton(document.querySelector("button[onclick*='hôm nay']")); loadData();
+    }
 
-        start_row = 2
-        for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
-            row = start_row + i
-            ws.cell(row=row, column=1, value=emp_id)
-            ws.cell(row=row, column=2, value=emp_name)
-            ws.cell(row=row, column=3, value=date)
-
-            # ---- Nếu là nghỉ phép ----
-            leave_entries = [r for r in records if "Nghỉ phép" in (r.get("Tasks") or [])]
-            if leave_entries:
-                r = leave_entries[-1]
-                parts = ["Nghỉ phép"]
-                if r.get("OtherNote"):
-                    parts.append(f"Lý do: {r['OtherNote']}")
-                parts.append(r.get("Status", "Chờ duyệt"))
-                if r.get("ApprovedBy"):
-                    parts.append(f"Duyệt bởi {r['ApprovedBy']}")
-                if r.get("Address"):
-                    parts.append(r["Address"])
-                ws.cell(row=row, column=4, value="; ".join(parts))
-            else:
-                # ---- Chấm công thường ----
-                for j, rec in enumerate(records[:10], start=1):
-                    checkin_time = rec.get("CheckinTime")
-                    time_str = ""
-                    if isinstance(checkin_time, datetime):
-                        time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
-                    elif isinstance(checkin_time, str) and checkin_time.strip():
-                        try:
-                            parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
-                            time_str = parsed.strftime("%H:%M:%S")
-                        except Exception:
-                            time_str = checkin_time
-
-                    parts = []
-                    if time_str:
-                        parts.append(f"{time_str}")
-                    if rec.get("ProjectId"):
-                        parts.append(rec["ProjectId"])
-                    if rec.get("Tasks"):
-                        tasks = ", ".join(rec["Tasks"]) if isinstance(rec["Tasks"], list) else rec["Tasks"]
-                        parts.append(tasks)
-                    if rec.get("OtherNote"):
-                        parts.append(rec["OtherNote"])
-                    if rec.get("Address"):
-                        parts.append(rec["Address"])
-
-                    ws.cell(row=row, column=3 + j, value="; ".join(parts))
-
-            for col in range(1, 14):
-                cell = ws.cell(row=row, column=col)
-                cell.border = border
-                cell.alignment = align_left
-            ws.row_dimensions[row].height = 25
-
-        # ---- Auto-fit ----
-        for col in ws.columns:
-            max_len = max(len(str(c.value)) if c.value else 0 for c in col)
-            ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 80)
-
-        # ---- Xuất file ----
-        output = BytesIO()
-        wb.save(output)
-        output.seek(0)
-
-        today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
-        filename = f"ChamCong_{today_str}.xlsx"
-
-        return send_file(
-            output,
-            as_attachment=True,
-            download_name=filename,
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    window.onload = () => {
+      const savedId = sessionStorage.getItem("EmployeeId");
+      const savedName = sessionStorage.getItem("EmployeeName");
+      if (savedId) {
+        currentEmpId = savedId; currentEmpName = savedName || "";
+        document.getElementById("loginBox").style.display = "none";
+        document.getElementById("mainContent").style.display = "block";
+        document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentEmpName}`;
+        loadData();
+      }
+    };
+  </script>
+</body>
+</html>
