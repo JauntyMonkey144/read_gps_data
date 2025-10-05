@@ -43,12 +43,12 @@ def index():
 # ---- Login (xác thực bằng EmployeeId → lấy email trong DB để so với ALLOWED_IDS) ----
 @app.route("/login", methods=["GET"])
 def login():
-    emp_id = request.args.get("EmployeeId")  # Nhập mã nhân viên
+    emp_id = request.args.get("Email")  # Nhập mã nhân viên
     if not emp_id:
         return jsonify({"success": False, "message": "❌ Bạn cần nhập mã nhân viên"}), 400
 
     # Tìm thông tin nhân viên trong DB
-    emp = idx_collection.find_one({"EmployeeId": emp_id}, {"_id": 0, "EmployeeName": 1, "Email": 1})
+    emp = idx_collection.find_one({"Email": emp_id}, {"_id": 0, "EmployeeName": 1, "Email": 1})
     if not emp:
         return jsonify({"success": False, "message": "❌ Không tìm thấy mã nhân viên trong hệ thống!"}), 404
 
