@@ -37,11 +37,15 @@ def index():
 # ---- Đăng nhập bằng Email ----
 @app.route("/login", methods=["GET"])
 def login():
-    email = request.args.get("Email")
+    email = request.args.get("email")  # ✅ trùng key với front-end
     if not email:
         return jsonify({"success": False, "message": "❌ Vui lòng nhập email"}), 400
 
-    emp = idx_collection.find_one({"Email": email}, {"_id": 0, "EmployeeName": 1, "EmployeeId": 1, "Email": 1})
+    emp = idx_collection.find_one(
+        {"Email": email},
+        {"_id": 0, "EmployeeName": 1, "EmployeeId": 1, "Email": 1}
+    )
+
     if not emp:
         return jsonify({"success": False, "message": "🚫 Email không tồn tại trong hệ thống"}), 404
 
@@ -54,7 +58,7 @@ def login():
     })
 
 
-# ---- Xây dựng query lọc ----
+# ---- Hàm dựng query lọc ----
 def build_query(filter_type, start_date, end_date, search):
     query = {}
     today = datetime.now(VN_TZ)
@@ -87,7 +91,7 @@ def build_query(filter_type, start_date, end_date, search):
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
-        email = request.args.get("Email")
+        email = request.args.get("email")  # ✅ trùng key với front-end
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
 
@@ -103,7 +107,7 @@ def get_attendances():
         search = request.args.get("search", "").strip()
 
         query = build_query(filter_type, start_date, end_date, search)
-        query["EmployeeId"] = emp_id  # Chỉ lấy dữ liệu của chính nhân viên đó
+        query["EmployeeId"] = emp_id  # chỉ lấy dữ liệu của chính nhân viên
 
         data = list(collection.find(query, {"_id": 0}))
         return jsonify(data)
@@ -115,7 +119,7 @@ def get_attendances():
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
-        email = request.args.get("Email")
+        email = request.args.get("email")  # ✅ trùng key với front-end
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
 
