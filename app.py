@@ -47,10 +47,10 @@ def index():
 def login():
     emp_id = request.args.get("Email")
     if not emp_id:
-        return jsonify({"success": False, "message": "❌ Bạn cần nhập mã nhân viên"}), 400
+        return jsonify({"success": False, "message": "❌ Bạn cần nhập email"}), 400
 
     if emp_id in ALLOWED_IDS:
-        emp = idx_collection.find_one({"EmployeeId": emp_id}, {"_id": 0, "EmployeeName": 1})
+        emp = idx_collection.find_one({"Email": Email}, {"_id": 0, "EmployeeName": 1})
         emp_name = emp["EmployeeName"] if emp else emp_id
         return jsonify({
             "success": True,
