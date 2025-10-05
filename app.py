@@ -15,14 +15,14 @@ CORS(app)
 # ---- Timezone VN ----
 VN_TZ = timezone(timedelta(hours=7))
 
-# ---- Load MONGO_URI ----
+# ---- MongoDB Config ----
 MONGO_URI = os.getenv(
     "MONGO_URI",
     "mongodb+srv://banhbaobeo2205:lm2hiCLXp6B0D7hq@cluster0.festnla.mongodb.net/?retryWrites=true&w=majority"
 )
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 
-if not MONGO_URI or MONGO_URI.strip() == "":
+if not MONGO_URI.strip():
     raise ValueError("❌ Lỗi: MONGO_URI chưa được cấu hình!")
 
 # ---- Kết nối MongoDB ----
@@ -34,15 +34,13 @@ try:
 except Exception as e:
     raise RuntimeError(f"❌ Không thể kết nối MongoDB: {e}")
 
-# ---- Danh sách NV được phép vào trang xem dữ liệu ----
+# ---- Danh sách được phép truy cập ----
 ALLOWED_IDS = {"it.trankhanhvinh@gmail.com", "thinhnv@sunautomation.com.vn", "kimcuong@sunautomation.com.vn"}
 
-
-# ---- Trang index ----
+# ---- Trang chủ ----
 @app.route("/")
 def index():
     return render_template("index.html")
-
 
 # ---- Login ----
 @app.route("/login", methods=["GET"])
@@ -72,8 +70,7 @@ def build_query(filter_type, start_date, end_date, search):
     if filter_type == "custom" and start_date and end_date:
         query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
     elif filter_type == "hôm nay":
-        today_str = today.strftime("%Y-%m-%d")
-        query["CheckinDate"] = today_str
+        query["CheckinDate"] = today.strftime("%Y-%m-%d")
     elif filter_type == "tuần":
         start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
         end = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
@@ -87,9 +84,7 @@ def build_query(filter_type, start_date, end_date, search):
         start = today.replace(month=1, day=1).strftime("%Y-%m-%d")
         end = today.replace(month=12, day=31).strftime("%Y-%m-%d")
         query["CheckinDate"] = {"$gte": start, "$lte": end}
-    elif filter_type == "tất cả":
-        query = {}  # không giới hạn thời gian
-        
+
     if search:
         regex = re.compile(search, re.IGNORECASE)
         query["$or"] = [
@@ -99,7 +94,7 @@ def build_query(filter_type, start_date, end_date, search):
     return query
 
 
-# ---- API lấy dữ liệu (cho HTML) ----
+# ---- API lấy dữ liệu ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
@@ -113,32 +108,13 @@ def get_attendances():
         search = request.args.get("search", "").strip()
 
         query = build_query(filter_type, start_date, end_date, search)
-        data = list(collection.find(query, {
-            "_id": 0,
-            "EmployeeId": 1,
-            "EmployeeName": 1,
-            "ProjectId": 1,
-            "Tasks": 1,
-            "OtherNote": 1,
-            "Address": 1,
-            "Latitude": 1,     # ✅ thêm tọa độ
-            "Longitude": 1,    # ✅ thêm tọa độ
-            "CheckinTime": 1,
-            "CheckinDate": 1,
-            "Status": 1,
-            "FaceImage": 1
-        }))
-
-        for d in data:
-            if isinstance(d.get("CheckinTime"), datetime):
-                d["CheckinTime"] = d["CheckinTime"].astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
-
+        data = list(collection.find(query, {"_id": 0}))
         return jsonify(data), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-# ---- API xuất Excel (không thay đổi) ----
+# ---- API xuất Excel ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -152,31 +128,18 @@ def export_to_excel():
         search = request.args.get("search", "").strip()
 
         query = build_query(filter_type, start_date, end_date, search)
-        data = list(collection.find(query, {
-            "_id": 0,
-            "EmployeeId": 1,
-            "EmployeeName": 1,
-            "ProjectId": 1,
-            "Tasks": 1,
-            "OtherNote": 1,
-            "Address": 1,
-            "CheckinTime": 1,
-            "CheckinDate": 1
-        }))
+        data = list(collection.find(query, {"_id": 0}))
 
-        # ---- Group theo EmployeeId + CheckinDate ----
+        # ---- Group theo nhân viên + ngày ----
         grouped = {}
         for d in data:
             emp_id = d.get("EmployeeId", "")
             emp_name = d.get("EmployeeName", "")
-            date = d.get("CheckinDate") or (
-                d["CheckinTime"].astimezone(VN_TZ).strftime("%Y-%m-%d")
-                if isinstance(d.get("CheckinTime"), datetime) else ""
-            )
+            date = d.get("CheckinDate")
             key = (emp_id, emp_name, date)
             grouped.setdefault(key, []).append(d)
 
-        # Load template Excel
+        # ---- Load template Excel ----
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
@@ -196,77 +159,69 @@ def export_to_excel():
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date)
 
-            # Fill Check1..Check10
-            for j, rec in enumerate(records[:10], start=1):
-                # ---- Parse giờ chấm công ----
-                checkin_time = rec.get("CheckinTime")
-                time_str = ""
-                if isinstance(checkin_time, datetime):
-                    time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
-                elif isinstance(checkin_time, str) and checkin_time.strip():
-                    try:
-                        parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
-                        time_str = parsed.strftime("%H:%M:%S")
-                    except Exception:
-                        time_str = checkin_time  # fallback nếu không parse được
+            # ---- Kiểm tra nghỉ phép ----
+            leave_entries = [r for r in records if "Nghỉ phép" in (r.get("Tasks") or [])]
+            if leave_entries:
+                r = leave_entries[-1]  # bản ghi nghỉ phép mới nhất
+                parts = ["Nghỉ phép"]
+                if r.get("OtherNote"):
+                    parts.append(f"Lý do: {r['OtherNote']}")
+                parts.append(r.get("Status", "Chờ duyệt"))
+                if r.get("ApprovedBy"):
+                    parts.append(f"Duyệt bởi {r['ApprovedBy']}")
+                if r.get("Address"):
+                    parts.append(r["Address"])
+                ws.cell(row=row, column=4, value="; ".join(parts))
+            else:
+                # ---- Các bản ghi thường ----
+                for j, rec in enumerate(records[:10], start=1):
+                    checkin_time = rec.get("CheckinTime")
+                    time_str = ""
+                    if isinstance(checkin_time, datetime):
+                        time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
+                    elif isinstance(checkin_time, str) and checkin_time.strip():
+                        try:
+                            parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
+                            time_str = parsed.strftime("%H:%M:%S")
+                        except Exception:
+                            time_str = checkin_time
 
-                # ---- Build entry ----
-                parts = []
-                if time_str:
-                    parts.append(f"{time_str}")
-                if rec.get("ProjectId"):
-                    parts.append(f"{rec['ProjectId']}")
-                if rec.get("Tasks"):
-                    tasks = ", ".join(rec["Tasks"]) if isinstance(rec["Tasks"], list) else rec["Tasks"]
-                    parts.append(f"{tasks}")
-                if rec.get("OtherNote"):
-                    parts.append(f"{rec['OtherNote']}")
-                if rec.get("Address"):
-                    parts.append(f"{rec['Address']}")
+                    parts = []
+                    if time_str:
+                        parts.append(f"{time_str}")
+                    if rec.get("ProjectId"):
+                        parts.append(rec["ProjectId"])
+                    if rec.get("Tasks"):
+                        tasks = ", ".join(rec["Tasks"]) if isinstance(rec["Tasks"], list) else rec["Tasks"]
+                        parts.append(tasks)
+                    if rec.get("OtherNote"):
+                        parts.append(rec["OtherNote"])
+                    if rec.get("Address"):
+                        parts.append(rec["Address"])
 
-                entry = "; ".join(parts)
-                ws.cell(row=row, column=3 + j, value=entry)
+                    ws.cell(row=row, column=3 + j, value="; ".join(parts))
 
-            # Border + align cả dòng
+            # ---- Border + căn lề ----
             for col in range(1, 14):
                 cell = ws.cell(row=row, column=col)
                 cell.border = border
                 cell.alignment = align_left
 
-            # Auto-fit row height
-            max_lines = max(
-                (str(ws.cell(row=row, column=col).value).count("\n") + 1 if ws.cell(row=row, column=col).value else 1)
-                for col in range(1, 14)
-            )
-            ws.row_dimensions[row].height = max_lines * 20
+            # ---- Tự căn chiều cao dòng ----
+            ws.row_dimensions[row].height = 25
 
-        # Auto-fit column width
+        # ---- Auto fit độ rộng cột ----
         for col in ws.columns:
-            max_length = 0
-            col_letter = col[0].column_letter
-            for cell in col:
-                if cell.value:
-                    length = len(str(cell.value))
-                    max_length = max(max_length, length)
-            ws.column_dimensions[col_letter].width = max_length + 2
-
-        # ---- Tạo tên file xuất ----
-        today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
-        if search:
-            filename = f"Danh sách chấm công theo tìm kiếm_{today_str}.xlsx"
-        elif filter_type == "hôm nay":
-            filename = f"Danh sách chấm công_{today_str}.xlsx"
-        elif filter_type == "custom" and start_date and end_date:
-            filename = f"Danh sách chấm công từ {start_date} đến {end_date}_{today_str}.xlsx"
-        elif filter_type == "tất cả":
-            filename = f"Danh sách chấm công_{today_str}.xlsx"
-        else:
-            filename = f"Danh sách chấm công theo {filter_type}_{today_str}.xlsx"
+            max_len = max(len(str(cell.value)) if cell.value else 0 for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 80)
 
         # ---- Xuất file ----
         output = BytesIO()
         wb.save(output)
         output.seek(0)
+
+        today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
+        filename = f"ChamCong_{today_str}.xlsx"
 
         return send_file(
             output,
@@ -274,9 +229,9 @@ def export_to_excel():
             download_name=filename,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
