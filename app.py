@@ -115,28 +115,48 @@ def get_attendances():
         return jsonify({"error": str(e)}), 500
 
 
-# ---- API xuất Excel ----
+from flask import send_file, jsonify, request
+from openpyxl import load_workbook
+from openpyxl.styles import Border, Side, Alignment
+from io import BytesIO
+from datetime import datetime
+
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
-        email = request.args.get("email")  # ✅ trùng key với front-end
+        email = request.args.get("email")  # email người xuất file
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
 
-        emp = idx_collection.find_one({"Email": email}, {"EmployeeId": 1, "EmployeeName": 1, "_id": 0})
+        emp = db.idx_collection.find_one({"Email": email}, {"EmployeeId": 1, "EmployeeName": 1, "_id": 0})
         if not emp:
             return jsonify({"error": "🚫 Email không tồn tại"}), 403
 
         emp_id = emp["EmployeeId"]
         emp_name = emp["EmployeeName"]
 
+        # ---- Tham số lọc ----
         filter_type = request.args.get("filter", "all").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
 
-        query = build_query(filter_type, start_date, end_date, search)
-        data = list(collection.find(query, {
+        # ---- Tạo query ----
+        query = {}
+        if filter_type == "hôm nay":
+            query["CheckinDate"] = datetime.now(VN_TZ).strftime("%Y-%m-%d")
+        elif filter_type == "custom" and start_date and end_date:
+            query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
+        if search:
+            query["$or"] = [
+                {"EmployeeName": {"$regex": search, "$options": "i"}},
+                {"EmployeeId": {"$regex": search, "$options": "i"}},
+                {"Tasks": {"$regex": search, "$options": "i"}},
+                {"ProjectId": {"$regex": search, "$options": "i"}},
+            ]
+
+        # ---- Lấy dữ liệu ----
+        data = list(db.alt_checkins.find(query, {
             "_id": 0,
             "EmployeeId": 1,
             "EmployeeName": 1,
@@ -145,10 +165,11 @@ def export_to_excel():
             "OtherNote": 1,
             "Address": 1,
             "CheckinTime": 1,
-            "CheckinDate": 1
+            "CheckinDate": 1,
+            "Status": 1
         }))
 
-        # ---- Group theo EmployeeId + CheckinDate ----
+        # ---- Nhóm theo nhân viên + ngày ----
         grouped = {}
         for d in data:
             emp_id = d.get("EmployeeId", "")
@@ -160,7 +181,7 @@ def export_to_excel():
             key = (emp_id, emp_name, date)
             grouped.setdefault(key, []).append(d)
 
-        # Load template Excel
+        # ---- Load template Excel ----
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
@@ -173,6 +194,7 @@ def export_to_excel():
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
+        # ---- Điền dữ liệu ----
         start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
@@ -180,9 +202,8 @@ def export_to_excel():
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date)
 
-            # Fill Check1..Check10
             for j, rec in enumerate(records[:10], start=1):
-                # ---- Parse giờ chấm công ----
+                # ---- Parse giờ ----
                 checkin_time = rec.get("CheckinTime")
                 time_str = ""
                 if isinstance(checkin_time, datetime):
@@ -192,39 +213,70 @@ def export_to_excel():
                         parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
                         time_str = parsed.strftime("%H:%M:%S")
                     except Exception:
-                        time_str = checkin_time  # fallback nếu không parse được
+                        time_str = checkin_time
 
-                # ---- Build entry ----
+                # ---- Build nội dung ô ----
                 parts = []
+
+                tasks = rec.get("Tasks")
+                if isinstance(tasks, list):
+                    tasks_str = ", ".join(tasks)
+                else:
+                    tasks_str = str(tasks or "")
+
+                status = rec.get("Status", "")
+                is_leave = "nghỉ phép" in tasks_str.lower()
+
+                if is_leave:
+                    # ---- Thêm số hiệu trạng thái ----
+                    if "đã duyệt" in status.lower():
+                        parts.append("1")
+                    elif "từ chối" in status.lower():
+                        parts.append("3")
+                    else:
+                        parts.append("2")  # Chờ duyệt
+
+                # ---- Giờ ----
                 if time_str:
-                    parts.append(f"{time_str}")
+                    parts.append(time_str)
+
+                # ---- Project ID ----
                 if rec.get("ProjectId"):
-                    parts.append(f"{rec['ProjectId']}")
-                if rec.get("Tasks"):
-                    tasks = ", ".join(rec["Tasks"]) if isinstance(rec["Tasks"], list) else rec["Tasks"]
-                    parts.append(f"{tasks}")
+                    parts.append(str(rec["ProjectId"]))
+
+                # ---- Tasks ----
+                if tasks_str:
+                    parts.append(tasks_str)
+
+                # ---- Status nếu là nghỉ phép ----
+                if is_leave and status:
+                    parts.append(status)
+
+                # ---- Ghi chú khác ----
                 if rec.get("OtherNote"):
-                    parts.append(f"{rec['OtherNote']}")
+                    parts.append(rec["OtherNote"])
+
+                # ---- Địa chỉ ----
                 if rec.get("Address"):
-                    parts.append(f"{rec['Address']}")
+                    parts.append(rec["Address"])
 
                 entry = "; ".join(parts)
                 ws.cell(row=row, column=3 + j, value=entry)
 
-            # Border + align cả dòng
+            # ---- Border + căn chỉnh ----
             for col in range(1, 14):
                 cell = ws.cell(row=row, column=col)
                 cell.border = border
                 cell.alignment = align_left
 
-            # Auto-fit row height
+            # ---- Auto-fit row height ----
             max_lines = max(
                 (str(ws.cell(row=row, column=col).value).count("\n") + 1 if ws.cell(row=row, column=col).value else 1)
                 for col in range(1, 14)
             )
             ws.row_dimensions[row].height = max_lines * 20
 
-        # Auto-fit column width
+        # ---- Auto-fit column width ----
         for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -234,7 +286,7 @@ def export_to_excel():
                     max_length = max(max_length, length)
             ws.column_dimensions[col_letter].width = max_length + 2
 
-        # ---- Tạo tên file xuất ----
+        # ---- Xuất file ----
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
         if search:
             filename = f"Danh sách chấm công theo tìm kiếm_{today_str}.xlsx"
@@ -242,12 +294,9 @@ def export_to_excel():
             filename = f"Danh sách chấm công_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
             filename = f"Danh sách chấm công từ {start_date} đến {end_date}_{today_str}.xlsx"
-        elif filter_type == "tất cả":
-            filename = f"Danh sách chấm công_{today_str}.xlsx"
         else:
-            filename = f"Danh sách chấm công theo {filter_type}_{today_str}.xlsx"
+            filename = f"Danh sách chấm công_{today_str}.xlsx"
 
-        # ---- Xuất file ----
         output = BytesIO()
         wb.save(output)
         output.seek(0)
@@ -260,7 +309,9 @@ def export_to_excel():
         )
 
     except Exception as e:
+        print("❌ Lỗi export:", e)
         return jsonify({"error": str(e)}), 500
+
 
 
 if __name__ == "__main__":
