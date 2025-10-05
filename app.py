@@ -12,9 +12,9 @@ app = Flask(__name__, template_folder="templates")
 CORS(app)
 
 # === MongoDB ===
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://banhbaobeo2205:lm2hiCLXp6B0D7hq@cluster0.festnla.mongodb.net/?retryWrites=true&w=majority")
 client = MongoClient(MONGO_URI)
-db = client["gps_attendance"]
+db = client["Sun_Database_1"]
 admins = db["admins"]
 idx = db["idx_collection"]
 checkins = db["alt_checkins"]
