@@ -20,7 +20,7 @@
     }
     .login-box button {
       padding: 8px 15px; background: #007bff; color: #fff;
-      border: none; border-radius: 4px; cursor: pointer;
+      border: none; border-radius: 4px; cursor: pointer; width: 95%;
     }
     .login-box button:hover { background: #0056b3; }
 
@@ -66,7 +66,8 @@
 
   <!-- Form đăng nhập -->
   <div id="loginBox" class="login-box">
-    <input type="email" id="emailInput" placeholder="Nhập email admin (từ collection admins)">
+    <input type="email" id="emailInput" placeholder="Nhập email admin">
+    <input type="password" id="passwordInput" placeholder="Nhập mật khẩu">
     <br>
     <button onclick="login()">Đăng nhập</button>
     <p id="loginMessage" style="color:red; font-size:14px;"></p>
@@ -144,7 +145,7 @@
     let currentFilter = "hôm nay", currentStartDate = "", currentEndDate = "", currentSearch = "";
     let rawData = [], currentSort = { column: null, order: null };
     let currentPage = 1, rowsPerPage = 10;
-    let currentEmail = "", currentUsername = "";  // Đổi thành username từ admins
+    let currentEmail = "", currentUsername = "";
 
     function setActiveButton(btn) {
       document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
@@ -153,24 +154,33 @@
 
     async function login() {
       const email = document.getElementById("emailInput").value.trim();
-      if (!email) {
-        document.getElementById("loginMessage").innerText = "Vui lòng nhập email!";
+      const password = document.getElementById("passwordInput").value.trim();  // ✅ Lấy password
+      if (!email || !password) {
+        document.getElementById("loginMessage").innerText = "Vui lòng nhập email và mật khẩu!";
         return;
       }
+      const formData = new FormData();  // ✅ Sử dụng FormData cho POST
+      formData.append("email", email);
+      formData.append("password", password);
       try {
-        const res = await fetch(`/login?email=${encodeURIComponent(email)}`);
+        const res = await fetch("/login", {
+          method: "POST",
+          body: formData  // ✅ POST form data
+        });
         const data = await res.json();
         if (data.success) {
           currentEmail = email;
-          currentUsername = data.username;  // Lấy username từ admins
+          currentUsername = data.username;  // Lấy username từ response
           sessionStorage.setItem("Email", email);
           sessionStorage.setItem("Username", currentUsername);
           document.getElementById("loginBox").style.display = "none";
           document.getElementById("mainContent").style.display = "block";
           document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentUsername}`;
+          document.getElementById("loginMessage").innerText = "";  // Clear message
           loadData();  // Load default "hôm nay"
         } else {
           document.getElementById("loginMessage").innerText = data.message;
+          document.getElementById("passwordInput").value = "";  // Clear password on error
         }
       } catch (err) {
         document.getElementById("loginMessage").innerText = "Lỗi kết nối server!";
@@ -182,6 +192,8 @@
       currentEmail = ""; currentUsername = "";
       document.getElementById("mainContent").style.display = "none";
       document.getElementById("loginBox").style.display = "block";
+      document.getElementById("emailInput").value = "";
+      document.getElementById("passwordInput").value = "";
       document.getElementById("loginMessage").innerText = "";
       document.getElementById("errorMsg").style.display = "none";
     }
