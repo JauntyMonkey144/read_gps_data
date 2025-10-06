@@ -90,7 +90,7 @@ def forgot_password():
                     <input type="email" name="email" placeholder="Email" required>
                     <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
                     <button type="submit">Cập nhật mật khẩu</button>
-                    <a href="/forgot-password">🔒 Quên mật khẩu?</a>
+                    <a href="/">Quay về trang chủ</a>
                 </form>
             </div>
         </body>
