@@ -1,17 +1,12 @@
-from flask import Flask, render_template, jsonify, send_file, request, redirect, url_for
+from flask import Flask, render_template, jsonify, request, redirect, url_for
 from pymongo import MongoClient
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta, timezone
-import calendar
-import re
-from openpyxl import load_workbook
-from openpyxl.styles import Border, Side, Alignment
-from io import BytesIO
 import os
 
 app = Flask(__name__, template_folder="templates")
-CORS(app, methods=['GET', 'POST'])  # ✅ Thêm POST cho CORS
+CORS(app, methods=["GET", "POST"])
 
 # ---- Timezone VN ----
 VN_TZ = timezone(timedelta(hours=7))
@@ -26,105 +21,41 @@ DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 # ---- Kết nối MongoDB ----
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
-collection = db["alt_checkins"]
-admins = db["admins"]  # ✅ Collection admins cho login/reset
+admins = db["admins"]
 
-# ---- Trang chủ ----
+# ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
 def index():
-    return render_template("index.html")
+    success = request.args.get("success")  # nếu =1 -> hiển thị thông báo
+    return render_template("index.html", success=success)
 
 
-# ---- Đăng nhập bằng Email + Password (POST khớp HTML, GET fallback form) ----
-@app.route("/login", methods=["GET", "POST"])
+# ---- Đăng nhập API ----
+@app.route("/login", methods=["POST", "GET"])
 def login():
     if request.method == "GET":
-        # Fallback form nếu truy cập trực tiếp (không dùng trong HTML)
-        return f"""
-        <!DOCTYPE html>
-        <html lang="vi">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Đăng nhập Admin</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
-                .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
-                button {{ background: #007bff; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
-                button:hover {{ background: #0056b3; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h2>🔐 Đăng nhập Admin</h2>
-                <form method="POST">
-                    <input type="email" name="email" placeholder="Email" required>
-                    <input type="password" name="password" placeholder="Mật khẩu" required>
-                    <button type="submit">Đăng nhập</button>
-                </form>
-            </div>
-        </body>
-        </html>
-        """
+        # Không hiển thị form nữa, chuyển về trang chủ
+        return redirect(url_for("index"))
 
-    if request.method == "POST":
-        email = request.form.get("email")  # ✅ Từ form data (HTML POST)
-        password = request.form.get("password")
-        if not email or not password:
-            return jsonify({"success": False, "message": "❌ Vui lòng nhập email và mật khẩu"}), 400
+    email = request.form.get("email")
+    password = request.form.get("password")
 
-        # ✅ Query theo email trong admins collection và check password hash
-        admin = admins.find_one({"email": email})
-        if not admin or not check_password_hash(admin.get("password", ""), password):
-            return jsonify({"success": False, "message": "🚫 Email hoặc mật khẩu không đúng!"}), 401
+    if not email or not password:
+        return jsonify({"success": False, "message": "❌ Vui lòng nhập email và mật khẩu"}), 400
 
-        return jsonify({
-            "success": True,
-            "message": "✅ Đăng nhập thành công",
-            "username": admin["username"],  # Trả username từ admins
-            "email": admin["email"]
-        })
+    admin = admins.find_one({"email": email})
+    if not admin or not check_password_hash(admin.get("password", ""), password):
+        return jsonify({"success": False, "message": "🚫 Email hoặc mật khẩu không đúng!"}), 401
+
+    return jsonify({
+        "success": True,
+        "message": "✅ Đăng nhập thành công",
+        "username": admin["username"],
+        "email": admin["email"]
+    })
 
 
-# ---- Hàm dựng query lọc ----
-def build_query(filter_type, start_date, end_date, search):
-    query = {}
-    today = datetime.now(VN_TZ)
-
-    if filter_type == "custom" and start_date and end_date:
-        query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
-    elif filter_type == "hôm nay":
-        query["CheckinDate"] = today.strftime("%Y-%m-%d")
-    elif filter_type == "tuần":
-        start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
-        end = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
-        query["CheckinDate"] = {"$gte": start, "$lte": end}
-    elif filter_type == "tháng":
-        start = today.replace(day=1).strftime("%Y-%m-%d")
-        end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).strftime("%Y-%m-%d")
-        query["CheckinDate"] = {"$gte": start, "$lte": end}
-    elif filter_type == "năm":
-        query["CheckinDate"] = {"$regex": f"^{today.year}"}
-    elif filter_type == "nghỉ phép":
-        regex = re.compile("Nghỉ phép", re.IGNORECASE)
-        query["$or"] = [
-            {"Tasks": {"$regex": regex}},
-            {"Status": {"$regex": regex}},
-            {"OtherNote": {"$regex": regex}}
-        ]
-    elif filter_type == "tất cả":
-        pass
-
-    if search:
-        regex = re.compile(search, re.IGNORECASE)
-        query["$or"] = [
-            {"EmployeeId": {"$regex": regex}},
-            {"EmployeeName": {"$regex": regex}}
-        ]
-    return query
-
-# ---- Quên mật khẩu (reset trực tiếp, không cần gửi Gmail) ----
+# ---- Quên mật khẩu ----
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     if request.method == "GET":
@@ -171,8 +102,45 @@ def forgot_password():
         hashed_pw = generate_password_hash(new_password)
         admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
 
-        # ✅ Sau khi đổi mật khẩu thành công → chuyển về trang chủ
-        return redirect(url_for("index"))
+        # ✅ Chuyển về trang chủ có thông báo thành công
+        return redirect(url_for("index", success=1))
+
+# ---- Hàm dựng query lọc ----
+def build_query(filter_type, start_date, end_date, search):
+    query = {}
+    today = datetime.now(VN_TZ)
+
+    if filter_type == "custom" and start_date and end_date:
+        query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
+    elif filter_type == "hôm nay":
+        query["CheckinDate"] = today.strftime("%Y-%m-%d")
+    elif filter_type == "tuần":
+        start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
+        end = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
+        query["CheckinDate"] = {"$gte": start, "$lte": end}
+    elif filter_type == "tháng":
+        start = today.replace(day=1).strftime("%Y-%m-%d")
+        end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).strftime("%Y-%m-%d")
+        query["CheckinDate"] = {"$gte": start, "$lte": end}
+    elif filter_type == "năm":
+        query["CheckinDate"] = {"$regex": f"^{today.year}"}
+    elif filter_type == "nghỉ phép":
+        regex = re.compile("Nghỉ phép", re.IGNORECASE)
+        query["$or"] = [
+            {"Tasks": {"$regex": regex}},
+            {"Status": {"$regex": regex}},
+            {"OtherNote": {"$regex": regex}}
+        ]
+    elif filter_type == "tất cả":
+        pass
+
+    if search:
+        regex = re.compile(search, re.IGNORECASE)
+        query["$or"] = [
+            {"EmployeeId": {"$regex": regex}},
+            {"EmployeeName": {"$regex": regex}}
+        ]
+    return query
 
 # ---- API lấy dữ liệu chấm công (validate email từ admins) ----
 @app.route("/api/attendances", methods=["GET"])
