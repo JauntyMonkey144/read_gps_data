@@ -114,11 +114,12 @@ def forgot_password():
         # ✅ Chuyển về trang chủ có thông báo thành công
         return redirect(url_for("index", success=1))
 
-# ---- Hàm dựng query lọc ----
 def build_query(filter_type, start_date, end_date, search):
     query = {}
     today = datetime.now(VN_TZ)
+    regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
 
+    # --- Bộ lọc thời gian ---
     if filter_type == "custom" and start_date and end_date:
         query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
     elif filter_type == "hôm nay":
@@ -133,22 +134,34 @@ def build_query(filter_type, start_date, end_date, search):
         query["CheckinDate"] = {"$gte": start, "$lte": end}
     elif filter_type == "năm":
         query["CheckinDate"] = {"$regex": f"^{today.year}"}
-    elif filter_type == "nghỉ phép":
-        regex = re.compile("Nghỉ phép", re.IGNORECASE)
-        query["$or"] = [
-            {"Tasks": {"$regex": regex}},
-            {"Status": {"$regex": regex}},
-            {"OtherNote": {"$regex": regex}}
-        ]
-    elif filter_type == "tất cả":
-        pass
 
+    # --- Bộ lọc nghỉ phép ---
+    if filter_type == "nghỉ phép":
+        query["$or"] = [
+            {"Tasks": {"$regex": regex_leave}},
+            {"Status": {"$regex": regex_leave}},
+            {"OtherNote": {"$regex": regex_leave}}
+        ]
+    else:
+        # Các filter bình thường: loại bỏ bản ghi có “Nghỉ phép”
+        query["$and"] = [
+            {"$or": [
+                {"Tasks": {"$not": regex_leave}},
+                {"Tasks": {"$exists": False}},
+                {"Tasks": None}
+            ]}
+        ]
+
+    # --- Bộ lọc tìm kiếm ---
     if search:
         regex = re.compile(search, re.IGNORECASE)
-        query["$or"] = [
-            {"EmployeeId": {"$regex": regex}},
-            {"EmployeeName": {"$regex": regex}}
+        query["$and"] = query.get("$and", []) + [
+            {"$or": [
+                {"EmployeeId": {"$regex": regex}},
+                {"EmployeeName": {"$regex": regex}}
+            ]}
         ]
+
     return query
 
 # ---- API lấy dữ liệu chấm công (validate email từ admins) ----
