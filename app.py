@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, send_file, request
+from flask import Flask, render_template, jsonify, send_file, request, redirect, url_for
 from pymongo import MongoClient
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -171,7 +171,9 @@ def forgot_password():
         hashed_pw = generate_password_hash(new_password)
         admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
 
-        return jsonify({"success": True, "message": "✅ Đặt lại mật khẩu thành công!"})
+        # ✅ Sau khi đổi mật khẩu thành công → chuyển về trang chủ
+        return redirect(url_for("index"))
+
 # ---- API lấy dữ liệu chấm công (validate email từ admins) ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
