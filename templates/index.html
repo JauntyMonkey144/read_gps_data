@@ -5,90 +5,91 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dữ liệu chấm công GPS</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #f4f6f9; padding: 20px; }
-    h2 { text-align: center; margin-bottom: 20px; }
+    body { font-family: Arial, sans-serif; background: #f4f6f9; padding: 20px; margin: 0; }
+    h2 { text-align: center; margin-bottom: 20px; color: #222; }
+
     footer { margin-top: 40px; padding: 15px; background: #f5f5f5; text-align: center; color: #666; }
 
+    /* Login box */
     .login-box {
-      max-width: 400px; margin: 80px auto; padding: 20px;
-      background: #fff; border: 1px solid #ddd; border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1); text-align: center;
+      max-width: 400px; margin: 100px auto; padding: 25px;
+      background: #fff; border-radius: 10px; box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+      text-align: center; border: 1px solid #ddd;
     }
     .login-box input {
-      width: 90%; padding: 10px; margin: 10px 0;
-      border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
+      width: 90%; padding: 10px; margin: 8px 0; border-radius: 5px;
+      border: 1px solid #ccc; font-size: 14px;
     }
     .login-box button {
-      padding: 8px 15px; background: #007bff; color: #fff;
-      border: none; border-radius: 4px; cursor: pointer; width: 95%;
+      width: 95%; padding: 10px; background: #007bff; color: white;
+      border: none; border-radius: 5px; font-size: 15px; cursor: pointer;
     }
     .login-box button:hover { background: #0056b3; }
 
-    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    /* Main content */
+    #mainContent { display: none; }
+
+    .top-bar {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+    }
     .welcome { font-weight: bold; color: #333; }
     .logout-btn {
-      padding: 5px 10px; background: #dc3545; color: #fff;
-      border: none; border-radius: 4px; cursor: pointer; font-size: 13px;
+      background: #dc3545; color: white; border: none; border-radius: 5px;
+      padding: 5px 12px; cursor: pointer; font-size: 13px;
     }
 
-    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
-    .controls input, .controls select, .controls button {
-      padding: 6px 12px; font-size: 14px; border: 1px solid #007bff; border-radius: 4px;
-      background: #fff; cursor: pointer; transition: all 0.2s;
+    /* Filters & controls */
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
+    .controls button, .controls select, .controls input {
+      padding: 6px 12px; font-size: 14px; border: 1px solid #007bff;
+      border-radius: 5px; background: white; cursor: pointer;
     }
-    .controls button:hover { background: #007bff; color: #fff; }
-    .controls button.active { background: #007bff; color: #fff; font-weight: bold; }
+    .controls button.active { background: #007bff; color: white; }
+    .controls button:hover { background: #007bff; color: white; }
 
-    .table-container { max-height: 500px; overflow-y: auto; border: 1px solid #ccc; }
+    /* Table */
+    .table-container { border: 1px solid #ccc; border-radius: 5px; overflow-y: auto; max-height: 500px; }
     table { width: 100%; border-collapse: collapse; background: white; font-size: 14px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: middle; }
+    th, td { border: 1px solid #ddd; padding: 8px; vertical-align: middle; }
     th {
-      background: #007bff; color: white; cursor: pointer; user-select: none;
-      position: sticky; top: 0; z-index: 2;
+      background: #007bff; color: white; cursor: pointer;
+      position: sticky; top: 0; z-index: 2; user-select: none;
     }
     tr:nth-child(even) { background: #f9f9f9; }
+    img.face-thumb { width: 60px; height: 45px; border-radius: 5px; border: 1px solid #ccc; object-fit: cover; }
 
-    .sortable:after { content: " ⇅"; font-size: 12px; }
-    .asc:after { content: " ↑"; }
-    .desc:after { content: " ↓"; }
+    .pagination { margin-top: 10px; text-align: center; }
+    .pagination button { margin: 0 3px; padding: 5px 10px; }
 
-    img.face-thumb { width: 60px; height: 45px; object-fit: cover; border-radius: 4px; border:1px solid #ccc; }
+    #errorMsg { color: red; text-align: center; display: none; margin-bottom: 10px; }
 
-    .pagination { margin-top: 15px; text-align: center; }
-    .pagination button { margin: 0 2px; padding: 5px 10px; }
-
-    #mainContent { display: none; }
-    #errorMsg { color: red; text-align: center; margin: 10px 0; display: none; }
-
-    /* ✅ Thông báo đặt lại mật khẩu */
+    /* ✅ Thông báo reset mật khẩu */
     .success-msg {
       background: #d4edda; color: #155724; border: 1px solid #c3e6cb;
-      padding: 10px; border-radius: 5px; margin-bottom: 10px;
-      text-align: center; font-weight: bold;
+      padding: 10px; border-radius: 5px; text-align: center;
+      font-weight: bold; margin-bottom: 15px;
     }
   </style>
 </head>
 <body>
   <h2>📌 Dữ liệu chấm công GPS</h2>
 
-  <!-- ✅ Hiển thị thông báo reset mật khẩu -->
   {% if success == '1' %}
   <div class="success-msg" id="resetSuccessMsg">✅ Đặt lại mật khẩu thành công! Vui lòng đăng nhập lại.</div>
   {% endif %}
 
-  <!-- Form đăng nhập -->
+  <!-- Login -->
   <div id="loginBox" class="login-box">
+    <h3>🔐 Đăng nhập quản trị</h3>
     <input type="email" id="emailInput" placeholder="Nhập email admin">
     <input type="password" id="passwordInput" placeholder="Nhập mật khẩu">
-    <br>
-    <button onclick="login()">Đăng nhập</button><br>
-    <a href="/forgot-password">🔒 Quên mật khẩu?</a>
+    <button onclick="login()">Đăng nhập</button>
+    <p><a href="/forgot-password">Quên mật khẩu?</a></p>
     <p id="loginMessage" style="color:red; font-size:14px;"></p>
   </div>
 
-  <!-- Nội dung chính -->
+  <!-- Main -->
   <div id="mainContent">
-    <div id="errorMsg"></div>
     <div class="top-bar">
       <span class="welcome" id="welcomeMsg"></span>
       <button class="logout-btn" onclick="logout()">Đăng xuất</button>
@@ -96,13 +97,13 @@
 
     <!-- Bộ lọc -->
     <div class="controls">
-      <label><b>Lọc nhanh:</b></label>
-      <button onclick="applyFilter('hôm nay', this)" class="active">Hôm nay</button>
-      <button onclick="applyFilter('tuần', this)">Tuần này</button>
-      <button onclick="applyFilter('tháng', this)">Tháng này</button>
-      <button onclick="applyFilter('năm', this)">Năm nay</button>
-      <button onclick="applyFilter('nghỉ phép', this)">Đơn nghỉ phép</button>
-      <button onclick="applyFilter('tất cả', this)">Tất cả</button>
+      <b>Lọc nhanh:</b>
+      <button onclick="applyFilter('today', this)" class="active">Hôm nay</button>
+      <button onclick="applyFilter('week', this)">Tuần này</button>
+      <button onclick="applyFilter('month', this)">Tháng này</button>
+      <button onclick="applyFilter('year', this)">Năm nay</button>
+      <button onclick="applyFilter('leave', this)">Đơn nghỉ phép</button>
+      <button onclick="applyFilter('all', this)">Tất cả</button>
     </div>
 
     <div class="controls">
@@ -129,21 +130,21 @@
       <button onclick="resetAll()">♻️ Reset</button>
     </div>
 
-    <!-- Bảng dữ liệu -->
+    <!-- Bảng -->
     <div class="table-container">
       <table>
         <thead>
           <tr>
-            <th class="sortable" onclick="sortTable('EmployeeId')">Mã NV</th>
-            <th class="sortable" onclick="sortTable('EmployeeName')">Tên NV</th>
-            <th class="sortable" onclick="sortTable('CheckinDate')">Ngày</th>
-            <th class="sortable" onclick="sortTable('ProjectId')">ID Dự án</th>
-            <th class="sortable" onclick="sortTable('Tasks')">Công việc</th>
-            <th class="sortable" onclick="sortTable('OtherNote')">Khác</th>
-            <th class="sortable" onclick="sortTable('Address')">Địa chỉ</th>
+            <th>Mã NV</th>
+            <th>Tên NV</th>
+            <th>Ngày</th>
+            <th>ID Dự án</th>
+            <th>Công việc</th>
+            <th>Ghi chú</th>
+            <th>Địa chỉ</th>
             <th>Vị trí</th>
-            <th class="sortable" onclick="sortTable('CheckinTime')">Thời gian</th>
-            <th class="sortable" onclick="sortTable('Status')">Trạng thái</th>
+            <th>Thời gian</th>
+            <th>Trạng thái</th>
             <th>Ảnh</th>
           </tr>
         </thead>
@@ -152,26 +153,19 @@
     </div>
 
     <div class="pagination" id="pagination"></div>
-    <footer>&copy; 2025 Sun Automation - Trang đọc dữ liệu chấm công GPS</footer>
+    <footer>&copy; 2025 Sun Automation - Hệ thống đọc dữ liệu chấm công GPS</footer>
   </div>
 
   <script>
-    let currentFilter = "hôm nay", currentStartDate = "", currentEndDate = "", currentSearch = "";
-    let rawData = [], currentSort = { column: null, order: null };
-    let currentPage = 1, rowsPerPage = 10;
-    let currentEmail = "", currentUsername = "";
+    let currentEmail = "", currentUsername = "", rawData = [];
 
-    // ✅ Ẩn thông báo thành công sau 3s
+    // Ẩn thông báo sau 3s
     window.addEventListener("load", () => {
       const msg = document.getElementById("resetSuccessMsg");
       if (msg) setTimeout(() => msg.style.display = "none", 3000);
     });
 
-    function setActiveButton(btn) {
-      document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
-      if (btn) btn.classList.add("active");
-    }
-
+    // ---- Đăng nhập ----
     async function login() {
       const email = document.getElementById("emailInput").value.trim();
       const password = document.getElementById("passwordInput").value.trim();
@@ -196,9 +190,8 @@
           loadData();
         } else {
           document.getElementById("loginMessage").innerText = data.message;
-          document.getElementById("passwordInput").value = "";
         }
-      } catch (err) {
+      } catch {
         document.getElementById("loginMessage").innerText = "Lỗi kết nối server!";
       }
     }
@@ -211,17 +204,62 @@
       document.getElementById("emailInput").value = "";
       document.getElementById("passwordInput").value = "";
       document.getElementById("loginMessage").innerText = "";
-      document.getElementById("errorMsg").style.display = "none";
     }
 
-    // ⚙️ Hàm load dữ liệu và filter... (giữ nguyên như bạn đã có)
-    // 👉 (Mình không cắt ngắn để bạn dán lại đầy đủ phần dưới cùng)
+    // ---- Load dữ liệu từ Flask API ----
+    async function loadData() {
+      try {
+        const res = await fetch(`/api/attendances?email=${encodeURIComponent(currentEmail)}`);
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          rawData = data;
+          renderTable();
+        } else {
+          document.getElementById("errorMsg").innerText = "Không thể tải dữ liệu.";
+          document.getElementById("errorMsg").style.display = "block";
+        }
+      } catch (e) {
+        console.error(e);
+        document.getElementById("errorMsg").innerText = "Lỗi tải dữ liệu từ server!";
+        document.getElementById("errorMsg").style.display = "block";
+      }
+    }
+
+    // ---- Hiển thị dữ liệu ----
+    function renderTable() {
+      const body = document.getElementById("dataBody");
+      body.innerHTML = "";
+      if (!rawData.length) {
+        body.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#999;">Không có dữ liệu</td></tr>`;
+        return;
+      }
+
+      rawData.forEach(item => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${item.EmployeeId || ""}</td>
+          <td>${item.EmployeeName || ""}</td>
+          <td>${item.CheckinDate || ""}</td>
+          <td>${item.ProjectId || ""}</td>
+          <td>${item.Tasks || ""}</td>
+          <td>${item.OtherNote || ""}</td>
+          <td>${item.Address || ""}</td>
+          <td>${item.Latitude && item.Longitude ? 
+              `<a href="https://www.google.com/maps?q=${item.Latitude},${item.Longitude}" target="_blank">Xem</a>` : ""}</td>
+          <td>${item.CheckinTime || ""}</td>
+          <td>${item.Status || ""}</td>
+          <td>${item.ImageUrl ? `<img src="${item.ImageUrl}" class="face-thumb">` : ""}</td>
+        `;
+        body.appendChild(tr);
+      });
+    }
 
     window.onload = () => {
       const savedEmail = localStorage.getItem("Email");
       const savedUsername = localStorage.getItem("Username");
       if (savedEmail) {
-        currentEmail = savedEmail; currentUsername = savedUsername || "";
+        currentEmail = savedEmail;
+        currentUsername = savedUsername;
         document.getElementById("loginBox").style.display = "none";
         document.getElementById("mainContent").style.display = "block";
         document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentUsername}`;
