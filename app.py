@@ -88,6 +88,7 @@ def login():
 
 
 # ---- Hàm dựng query lọc ----
+# ---- Hàm dựng query lọc ----
 def build_query(filter_type, start_date, end_date, search):
     query = {}
     today = datetime.now(VN_TZ)
@@ -106,8 +107,15 @@ def build_query(filter_type, start_date, end_date, search):
         query["CheckinDate"] = {"$gte": start, "$lte": end}
     elif filter_type == "năm":
         query["CheckinDate"] = {"$regex": f"^{today.year}"}
+    elif filter_type == "nghỉ phép":
+        regex = re.compile("nghỉ phép", re.IGNORECASE)
+        query["$or"] = [
+            {"Tasks": {"$regex": regex}},
+            {"Status": {"$regex": regex}},
+            {"OtherNote": {"$regex": regex}}
+        ]
     elif filter_type == "tất cả":
-        pass  # Không filter ngày
+        pass
 
     if search:
         regex = re.compile(search, re.IGNORECASE)
@@ -151,23 +159,23 @@ def get_attendances():
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
-        email = request.args.get("email")  # ✅ Trùng key với front-end
+        email = request.args.get("email")
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
 
-        # ✅ Validate email tồn tại trong admins
+        # ✅ Kiểm tra quyền admin
         admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
         if not admin:
             return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
 
         # ---- Tham số lọc ----
-        filter_type = request.args.get("filter", "hôm nay").lower()  # Default "hôm nay"
+        filter_type = request.args.get("filter", "hôm nay").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
 
         # ---- Tạo query ----
-        query = build_query(filter_type, start_date, end_date, search)  # Dùng hàm chung
+        query = build_query(filter_type, start_date, end_date, search)
 
         # ---- Lấy dữ liệu ----
         data = list(db.alt_checkins.find(query, {
@@ -181,7 +189,8 @@ def export_to_excel():
             "CheckinTime": 1,
             "CheckinDate": 1,
             "Status": 1,
-            "Latitude": 1,  # Thêm cho map link nếu cần
+            "ApprovedBy": 1,
+            "Latitude": 1,
             "Longitude": 1
         }))
 
@@ -239,37 +248,44 @@ def export_to_excel():
                 else:
                     tasks_str = str(tasks or "")
 
-                # ---- Nếu là nghỉ phép có lý do dạng "Nghỉ phép: xxx" ----
                 leave_reason = ""
                 if "nghỉ phép" in tasks_str.lower():
                     if ":" in tasks_str:
                         split_task = tasks_str.split(":", 1)
                         tasks_str = split_task[0].strip()       # → "Nghỉ phép"
-                        leave_reason = split_task[1].strip()    # → "Sức khoẻ"
+                        leave_reason = split_task[1].strip()    # → Lý do
                     else:
                         tasks_str = tasks_str.strip()
-                else:
-                    tasks_str = tasks_str.strip()
 
                 status = rec.get("Status", "")
 
-                # ---- Build nội dung xuất Excel ----
-                if time_str:
-                    parts.append(time_str)
-                if rec.get("ProjectId"):
-                    parts.append(str(rec["ProjectId"]))
-                if tasks_str:
-                    parts.append(tasks_str)
-                if leave_reason:
-                    parts.append(leave_reason)
-                if status:
-                    parts.append(status)
-                if rec.get("OtherNote"):
-                    parts.append(rec["OtherNote"])
-                if rec.get("Address"):
-                    parts.append(rec["Address"])
+                # ---- Nếu là nghỉ phép thì format đặc biệt ----
+                if "nghỉ phép" in tasks_str.lower():
+                    approve_date = ""
+                    if rec.get("ApprovedBy"):
+                        if isinstance(checkin_time, datetime):
+                            approve_date = checkin_time.astimezone(VN_TZ).strftime("%d/%m/%Y")
+                        else:
+                            approve_date = datetime.now(VN_TZ).strftime("%d/%m/%Y")
+                    entry = f"{date}; Nghỉ phép; {leave_reason}; {status}; {approve_date}"
+                else:
+                    # ---- Build nội dung export mặc định ----
+                    if time_str:
+                        parts.append(time_str)
+                    if rec.get("ProjectId"):
+                        parts.append(str(rec["ProjectId"]))
+                    if tasks_str:
+                        parts.append(tasks_str)
+                    if leave_reason:
+                        parts.append(leave_reason)
+                    if status:
+                        parts.append(status)
+                    if rec.get("OtherNote"):
+                        parts.append(rec["OtherNote"])
+                    if rec.get("Address"):
+                        parts.append(rec["Address"])
+                    entry = "; ".join(parts)
 
-                entry = "; ".join(parts)
                 ws.cell(row=row, column=3 + j, value=entry)
 
             # ---- Border + căn chỉnh ----
@@ -303,6 +319,8 @@ def export_to_excel():
             filename = f"Danh sách chấm công_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
             filename = f"Danh sách chấm công từ {start_date} đến {end_date}_{today_str}.xlsx"
+        elif filter_type == "custom" and start_date and end_date:
+            filename = f"Danh sách đơn nghỉ phép_{today_str}.xlsx"
         else:
             filename = f"Danh sách chấm công_{today_str}.xlsx"
 
@@ -320,6 +338,7 @@ def export_to_excel():
     except Exception as e:
         print("❌ Lỗi export:", e)
         return jsonify({"error": str(e)}), 500
+
 
 
 if __name__ == "__main__":
