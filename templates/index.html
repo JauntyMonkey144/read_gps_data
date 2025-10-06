@@ -70,6 +70,7 @@
     <input type="password" id="passwordInput" placeholder="Nhập mật khẩu">
     <br>
     <button onclick="login()">Đăng nhập</button>
+    <a href="/forgot-password">🔒 Quên mật khẩu?</a>  <!-- ✅ Thêm link quên mật khẩu -->
     <p id="loginMessage" style="color:red; font-size:14px;"></p>
   </div>
 
@@ -171,8 +172,8 @@
         if (data.success) {
           currentEmail = email;
           currentUsername = data.username;  // Lấy username từ response
-          sessionStorage.setItem("Email", email);
-          sessionStorage.setItem("Username", currentUsername);
+          localStorage.setItem("Email", email);  // ✅ Đổi sang localStorage cho persistent
+          localStorage.setItem("Username", currentUsername);
           document.getElementById("loginBox").style.display = "none";
           document.getElementById("mainContent").style.display = "block";
           document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentUsername}`;
@@ -188,7 +189,7 @@
     }
 
     function logout() {
-      sessionStorage.clear();
+      localStorage.clear();  // ✅ Clear localStorage để persistent logout
       currentEmail = ""; currentUsername = "";
       document.getElementById("mainContent").style.display = "none";
       document.getElementById("loginBox").style.display = "block";
@@ -317,14 +318,14 @@
     }
 
     window.onload = () => {
-      const savedEmail = sessionStorage.getItem("Email");
-      const savedUsername = sessionStorage.getItem("Username");
+      const savedEmail = localStorage.getItem("Email");  // ✅ Đổi sang localStorage
+      const savedUsername = localStorage.getItem("Username");
       if (savedEmail) {
         currentEmail = savedEmail; currentUsername = savedUsername || "";
         document.getElementById("loginBox").style.display = "none";
         document.getElementById("mainContent").style.display = "block";
         document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentUsername}`;
-        loadData();  // Load default "hôm nay"
+        loadData();  // Load default "hôm nay" tự động
       }
     };
   </script>
