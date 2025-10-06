@@ -1,6 +1,7 @@
 from flask import Flask, render_template, jsonify, send_file, request
 from pymongo import MongoClient
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta, timezone
 import calendar
 import re
@@ -10,7 +11,7 @@ from io import BytesIO
 import os
 
 app = Flask(__name__, template_folder="templates")
-CORS(app)
+CORS(app, methods=['GET', 'POST'])  # ✅ Thêm POST cho CORS
 
 # ---- Timezone VN ----
 VN_TZ = timezone(timedelta(hours=7))
@@ -26,7 +27,7 @@ DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 collection = db["alt_checkins"]
-admins = db["admins"]  # ✅ Collection admins cho validate email
+admins = db["admins"]  # ✅ Collection admins cho login/reset
 
 # ---- Trang chủ ----
 @app.route("/")
@@ -34,28 +35,56 @@ def index():
     return render_template("index.html")
 
 
-# ---- Đăng nhập bằng Email (GET, khớp HTML) ----
-@app.route("/login", methods=["GET"])
+# ---- Đăng nhập bằng Email + Password (POST khớp HTML, GET fallback form) ----
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    email = request.args.get("email")  # ✅ Trùng key với front-end
-    if not email:
-        return jsonify({"success": False, "message": "❌ Vui lòng nhập email"}), 400
+    if request.method == "GET":
+        # Fallback form nếu truy cập trực tiếp (không dùng trong HTML)
+        return f"""
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Đăng nhập Admin</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
+                .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
+                button {{ background: #007bff; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
+                button:hover {{ background: #0056b3; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>🔐 Đăng nhập Admin</h2>
+                <form method="POST">
+                    <input type="email" name="email" placeholder="Email" required>
+                    <input type="password" name="password" placeholder="Mật khẩu" required>
+                    <button type="submit">Đăng nhập</button>
+                </form>
+            </div>
+        </body>
+        </html>
+        """
 
-    # ✅ Query theo email trong admins collection
-    admin = admins.find_one(
-        {"email": email},
-        {"_id": 0, "username": 1, "email": 1}
-    )
+    if request.method == "POST":
+        email = request.form.get("email")  # ✅ Từ form data (HTML POST)
+        password = request.form.get("password")
+        if not email or not password:
+            return jsonify({"success": False, "message": "❌ Vui lòng nhập email và mật khẩu"}), 400
 
-    if not admin:
-        return jsonify({"success": False, "message": "🚫 Email không tồn tại trong hệ thống admins"}), 404
+        # ✅ Query theo email trong admins collection và check password hash
+        admin = admins.find_one({"email": email})
+        if not admin or not check_password_hash(admin.get("password", ""), password):
+            return jsonify({"success": False, "message": "🚫 Email hoặc mật khẩu không đúng!"}), 401
 
-    return jsonify({
-        "success": True,
-        "message": "✅ Đăng nhập thành công",
-        "username": admin["username"],  # Trả username thay EmployeeName (từ admins)
-        "email": admin["email"]
-    })
+        return jsonify({
+            "success": True,
+            "message": "✅ Đăng nhập thành công",
+            "username": admin["username"],  # Trả username từ admins
+            "email": admin["email"]
+        })
 
 
 # ---- Hàm dựng query lọc ----
@@ -97,7 +126,7 @@ def get_attendances():
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
 
-        # ✅ Validate email tồn tại trong admins
+        # ✅ Validate email tồn tại trong admins (không cần password lại)
         admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
         if not admin:
             return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
@@ -291,139 +320,7 @@ def export_to_excel():
     except Exception as e:
         print("❌ Lỗi export:", e)
         return jsonify({"error": str(e)}), 500
-# ---- Trang quên mật khẩu ----
-@app.route("/forgot-password", methods=["GET", "POST"])
-def forgot_password():
-    if request.method == "POST":
-        email = request.form.get("email")
-        if not email:
-            flash("❌ Vui lòng nhập email", "error")
-            return redirect(url_for("forgot_password"))
-
-        # ✅ Query theo email trong admins collection
-        admin = admins.find_one({"email": email})
-        if not admin:
-            flash("🚫 Email không tồn tại!", "error")
-            return redirect(url_for("forgot_password"))
-
-        # Tạo reset token và expiry
-        reset_token = str(uuid.uuid4())
-        expiry = datetime.now(VN_TZ) + timedelta(hours=RESET_EXPIRY_HOURS)
-        admins.update_one(
-            {"_id": admin["_id"]},
-            {"$set": {"reset_token": reset_token, "reset_expiry": expiry}}
-        )
-
-        # Gửi email reset
-        reset_url = f"{request.host_url.rstrip('/')}/reset-password/{reset_token}"
-        body = f"""
-        <!DOCTYPE html>
-        <html><head><meta charset="UTF-8"></head><body>
-            <h2>🔄 Đặt lại mật khẩu Admin</h2>
-            <p>Nhấp vào link để đặt lại: <a href="{reset_url}">Đặt lại mật khẩu</a></p>
-            <p>Token hết hạn sau {RESET_EXPIRY_HOURS} giờ.</p>
-        </body></html>
-        """
-        send_email(email, "Đặt lại mật khẩu Admin", body)
-        flash("📧 Email đặt lại mật khẩu đã gửi!", "success")
-        return redirect(url_for("login"))
-
-    # GET: Render form
-    return f"""
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Quên mật khẩu Admin</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
-            .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-            input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
-            button {{ background: #007bff; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
-            button:hover {{ background: #0056b3; }}
-            a {{ color: #007bff; text-decoration: none; display: block; margin-top: 10px; text-align: center; }}
-            .flash {{ margin: 10px 0; padding: 10px; border-radius: 4px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>🔒 Quên mật khẩu Admin</h2>
-            {render_flash_messages()}
-            <form method="POST">
-                <input type="email" name="email" placeholder="Email" required>
-                <button type="submit">Gửi email đặt lại</button>
-            </form>
-            <a href="/login">Quay về đăng nhập</a>
-        </div>
-    </body>
-    </html>
-    """
 
 
-# ---- Trang đặt lại mật khẩu ----
-@app.route("/reset-password/<token>", methods=["GET", "POST"])
-def reset_password(token):
-    # ✅ Query theo reset_token trong admins collection
-    admin = admins.find_one({
-        "reset_token": token,
-        "reset_expiry": {"$gt": datetime.now(VN_TZ)}
-    })
-    if not admin:
-        flash("Token không hợp lệ hoặc hết hạn!", "error")
-        return redirect(url_for("login"))
-
-    if request.method == "POST":
-        new_password = request.form.get("password")
-        if not new_password:
-            flash("❌ Vui lòng nhập mật khẩu mới", "error")
-            return redirect(url_for("reset_password", token=token))
-
-        hashed_pw = generate_password_hash(new_password)
-        admins.update_one(
-            {"_id": admin["_id"]},
-            {"$set": {"password": hashed_pw, "reset_token": None, "reset_expiry": None}}
-        )
-        flash("✅ Mật khẩu đã được cập nhật!", "success")
-        return redirect(url_for("login"))
-
-    # GET: Render form
-    return f"""
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Đặt lại mật khẩu Admin</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
-            .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-            input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
-            button {{ background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
-            button:hover {{ background: #218838; }}
-            a {{ color: #007bff; text-decoration: none; display: block; margin-top: 10px; text-align: center; }}
-            .flash {{ margin: 10px 0; padding: 10px; border-radius: 4px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>🔄 Đặt lại mật khẩu Admin</h2>
-            {render_flash_messages()}
-            <form method="POST">
-                <input type="password" name="password" placeholder="Mật khẩu mới" required>
-                <button type="submit">Cập nhật</button>
-            </form>
-            <a href="/login">Quay về đăng nhập</a>
-        </div>
-    </body>
-    </html>
-    """
-    # ---- Logout ----
-    @app.route("/logout")
-    def logout():
-        session.clear()
-        flash("👋 Đăng xuất thành công!", "success")
-        return redirect(url_for("login"))
-        
-    if __name__ == "__main__":
-        app.run(host="0.0.0.0", port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
