@@ -100,7 +100,7 @@ def forgot_password():
     expire_time = datetime.now(VN_TZ) + timedelta(hours=1)
     reset_tokens.insert_one({"email": email, "token": token, "expire_at": expire_time})
 
-    reset_link = f"http://localhost:5000/reset-password?token={token}"
+    reset_link = f"https://read-gps-data.vercel.app/reset-password?token={token}"
 
     # Gửi mail
     try:
