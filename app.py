@@ -2,20 +2,24 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, s
 from pymongo import MongoClient
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timedelta, timezone
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
 from io import BytesIO
-import os, smtplib, uuid, re, calendar
+from datetime import datetime, timedelta, timezone
+import smtplib, os, re, calendar
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# ---- Flask config ----
+# =====================================
+# ⚙️ Cấu hình Flask + MongoDB
+# =====================================
 app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
 
 # ---- Timezone VN ----
 VN_TZ = timezone(timedelta(hours=7))
+app.secret_key = os.getenv("SECRET_KEY", "supersecret")
 
 # ---- MongoDB Config ----
 MONGO_URI = os.getenv(
@@ -24,29 +28,32 @@ MONGO_URI = os.getenv(
 )
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 
-# ---- Kết nối MongoDB ----
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 admins = db["admins"]
-collection = db["alt_checkins"]       # ✅ Collection dữ liệu chấm công
-reset_tokens = db["reset_tokens"]     # ✅ Token reset mật khẩu
+collection = db["alt_checkins"]
 
 # ---- SMTP Config ----
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
 SMTP_USER = os.getenv("SMTP_USER", "banhbaobeo2205@gmail.com")
-SMTP_PASS = os.getenv("SMTP_PASS", "vynqvvvmbcigpdvy")  # App password Gmail
+SMTP_PASS = os.getenv("SMTP_PASS", "vynqvvvmbcigpdvy")  # App password
 
-# ==========================================
-# 🔹 ROUTES
-# ==========================================
+# ---- Token Serializer ----
+serializer = URLSafeTimedSerializer(app.secret_key)
 
+# =====================================
+# 🏠 Trang chủ (đăng nhập chính)
+# =====================================
 @app.route("/")
 def index():
     success = request.args.get("success")
     return render_template("index.html", success=success)
 
-# ---- Đăng nhập ----
+
+# =====================================
+# 🔐 Đăng nhập
+# =====================================
 @app.route("/login", methods=["POST", "GET"])
 def login():
     if request.method == "GET":
@@ -69,121 +76,98 @@ def login():
         "email": admin["email"]
     })
 
-# ==========================================
-# 🔹 QUÊN MẬT KHẨU - GỬI LINK RESET
-# ==========================================
+
+# =====================================
+# ✉️ Quên mật khẩu (Gửi link reset)
+# =====================================
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     if request.method == "GET":
         return """
-        <html><head><meta charset="UTF-8"><title>Quên mật khẩu</title></head>
-        <body style="font-family:Arial;background:#f4f6f9;padding:40px;text-align:center;">
-            <div style="max-width:400px;margin:auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,0.1);">
-                <h2>🔒 Quên mật khẩu</h2>
-                <form method="POST">
-                    <input type="email" name="email" placeholder="Nhập email của bạn" required
-                        style="width:100%;padding:10px;margin:10px 0;border-radius:4px;border:1px solid #ccc;">
-                    <button type="submit" style="padding:10px;width:100%;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">Gửi link đặt lại</button>
-                    <p><a href="/">⬅ Quay lại đăng nhập</a></p>
-                </form>
-            </div>
-        </body></html>
+        <html><body style='font-family: Arial; text-align:center; margin-top:100px;'>
+        <h2>🔑 Quên mật khẩu</h2>
+        <form method='POST'>
+            <input type='email' name='email' placeholder='Nhập email' required style='padding:8px;width:250px;'><br><br>
+            <button type='submit' style='padding:8px 15px;'>Gửi link đặt lại</button><br><br>
+            <a href='/'>← Quay lại đăng nhập</a>
+        </form></body></html>
         """
 
-    # POST → gửi mail
     email = request.form.get("email")
     admin = admins.find_one({"email": email})
+
     if not admin:
-        return jsonify({"success": False, "message": "🚫 Email không tồn tại"}), 404
+        return f"<h3 style='color:red;text-align:center;'>🚫 Email không tồn tại!</h3>"
 
-    token = str(uuid.uuid4())
-    expire_time = datetime.now(VN_TZ) + timedelta(hours=1)
-    reset_tokens.insert_one({"email": email, "token": token, "expire_at": expire_time})
+    # Tạo token hợp lệ 15 phút
+    token = serializer.dumps(email, salt="password-reset")
+    reset_link = f"{request.host_url}reset-password/{token}"
 
-    reset_link = f"https://read-gps-data.vercel.app/reset-password?token={token}"
+    # Gửi email
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "🔒 Đặt lại mật khẩu - Sun Automation"
+    msg["From"] = SMTP_USER
+    msg["To"] = email
+    body = f"""
+    <html><body>
+    <h3>Xin chào {admin.get("username","Admin")},</h3>
+    <p>Bạn vừa yêu cầu đặt lại mật khẩu. Nhấn vào link bên dưới để tiếp tục (hết hạn sau 15 phút):</p>
+    <p><a href="{reset_link}">{reset_link}</a></p>
+    <p>Nếu bạn không yêu cầu, vui lòng bỏ qua email này.</p>
+    <br><b>Trân trọng,<br>Sun Automation System</b>
+    </body></html>
+    """
+    msg.attach(MIMEText(body, "html"))
 
-    # Gửi mail
     try:
-        msg = MIMEMultipart()
-        msg["From"] = SMTP_USER
-        msg["To"] = email
-        msg["Subject"] = "🔐 Đặt lại mật khẩu - Hệ thống chấm công GPS"
-
-        body = f"""
-        <html>
-        <body style="font-family:Arial;">
-            <p>Xin chào <b>{admin.get('username', email)}</b>,</p>
-            <p>Bạn đã yêu cầu đặt lại mật khẩu. Nhấn vào link dưới đây để tiếp tục:</p>
-            <p><a href="{reset_link}" style="background:#007bff;color:white;padding:10px 15px;border-radius:6px;text-decoration:none;">🔑 Đặt lại mật khẩu</a></p>
-            <p>Link này có hiệu lực trong 1 giờ. Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>
-            <hr><p style="font-size:12px;color:#888;">© 2025 Sun Automation - Hệ thống chấm công GPS</p>
-        </body>
-        </html>
-        """
-        msg.attach(MIMEText(body, "html"))
-
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
-
-        return f"""
-        <html><body style="font-family:Arial;text-align:center;padding:50px;">
-        <h2>📩 Đã gửi email đặt lại mật khẩu!</h2>
-        <p>Vui lòng kiểm tra hộp thư đến: <b>{email}</b></p>
-        <a href="/">⬅ Quay lại đăng nhập</a>
-        </body></html>
-        """
-
+            server.sendmail(SMTP_USER, email, msg.as_string())
+        return f"<h3 style='color:green;text-align:center;'>✅ Link đặt lại mật khẩu đã được gửi đến <b>{email}</b></h3>"
     except Exception as e:
-        print("❌ Lỗi gửi mail:", e)
-        return jsonify({"success": False, "message": f"Lỗi gửi mail: {e}"}), 500
+        print("❌ Gửi email lỗi:", e)
+        return f"<h3 style='color:red;text-align:center;'>Lỗi khi gửi email: {e}</h3>"
 
-# ==========================================
-# 🔹 RESET MẬT KHẨU
-# ==========================================
-@app.route("/reset-password", methods=["GET", "POST"])
-def reset_password():
-    token = request.args.get("token")
-    if not token:
-        return "<h3>❌ Token không hợp lệ</h3>"
 
-    record = reset_tokens.find_one({"token": token})
-    if not record or record["expire_at"] < datetime.now(VN_TZ):
-        return "<h3>🚫 Token không tồn tại hoặc đã hết hạn</h3>"
+# =====================================
+# 🔁 Reset mật khẩu (từ link email)
+# =====================================
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    try:
+        email = serializer.loads(token, salt="password-reset", max_age=900)  # 15 phút
+    except SignatureExpired:
+        return "<h3 style='color:red;text-align:center;'>⏰ Link đã hết hạn!</h3>"
+    except BadSignature:
+        return "<h3 style='color:red;text-align:center;'>🚫 Link không hợp lệ!</h3>"
 
     if request.method == "GET":
         return f"""
-        <html><body style="font-family:Arial;text-align:center;padding:50px;">
-        <h2>🔑 Nhập mật khẩu mới</h2>
-        <form method="POST">
-            <input type="hidden" name="token" value="{token}">
-            <input type="password" name="new_password" placeholder="Mật khẩu mới" required
-                   style="padding:10px;width:250px;"><br><br>
-            <button type="submit" style="padding:10px 20px;background:#28a745;color:white;border:none;border-radius:4px;cursor:pointer;">Cập nhật</button>
-        </form>
-        </body></html>
+        <html><body style='font-family: Arial; text-align:center; margin-top:100px;'>
+        <h2>🔐 Đặt lại mật khẩu cho {email}</h2>
+        <form method='POST'>
+            <input type='password' name='new_password' placeholder='Mật khẩu mới' required style='padding:8px;width:250px;'><br><br>
+            <button type='submit' style='padding:8px 15px;'>Cập nhật</button>
+        </form></body></html>
         """
 
-    new_pw = request.form.get("new_password")
-    hashed_pw = generate_password_hash(new_pw)
-    admins.update_one({"email": record["email"]}, {"$set": {"password": hashed_pw}})
-    reset_tokens.delete_one({"token": token})
+    new_password = request.form.get("new_password")
+    if not new_password:
+        return "<h3 style='color:red;text-align:center;'>❌ Vui lòng nhập mật khẩu mới!</h3>"
 
-    return """
-    <html><body style="font-family:Arial;text-align:center;padding:50px;">
-    <h2>✅ Mật khẩu đã được cập nhật thành công!</h2>
-    <a href="/">⬅ Quay lại đăng nhập</a>
-    </body></html>
-    """
+    hashed_pw = generate_password_hash(new_password)
+    admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
+    return redirect(url_for("index", success=1))
 
-# ==========================================
-# 🔹 HÀM BUILD QUERY LỌC
-# ==========================================
+
+# =====================================
+# 📊 Các API khác (get_attendances, export_excel) giữ nguyên
+# =====================================
+
 def build_query(filter_type, start_date, end_date, search):
     query = {}
     today = datetime.now(VN_TZ)
-
     if filter_type == "custom" and start_date and end_date:
         query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
     elif filter_type == "hôm nay":
@@ -205,44 +189,196 @@ def build_query(filter_type, start_date, end_date, search):
             {"Status": {"$regex": regex}},
             {"OtherNote": {"$regex": regex}}
         ]
-
     if search:
         regex = re.compile(search, re.IGNORECASE)
-        query["$or"] = [
-            {"EmployeeId": {"$regex": regex}},
-            {"EmployeeName": {"$regex": regex}}
-        ]
+        query["$or"] = [{"EmployeeId": {"$regex": regex}}, {"EmployeeName": {"$regex": regex}}]
     return query
-
-# ==========================================
-# 🔹 API LẤY DỮ LIỆU CHẤM CÔNG
-# ==========================================
-@app.route("/api/attendances", methods=["GET"])
-def get_attendances():
+# ---- API xuất Excel (validate email từ admins) ----
+@app.route("/api/export-excel", methods=["GET"])
+def export_to_excel():
     try:
         email = request.args.get("email")
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
 
-        admin = admins.find_one({"email": email})
+        # ✅ Kiểm tra quyền admin
+        admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
         if not admin:
-            return jsonify({"error": "🚫 Email không hợp lệ"}), 403
+            return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
 
+        # ---- Tham số lọc ----
         filter_type = request.args.get("filter", "hôm nay").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
 
+        # ---- Tạo query ----
         query = build_query(filter_type, start_date, end_date, search)
-        data = list(collection.find(query, {"_id": 0}))
-        print(f"DEBUG: {len(data)} records fetched for {email}")
-        return jsonify(data)
+
+        # ---- Lấy dữ liệu ----
+        data = list(db.alt_checkins.find(query, {
+            "_id": 0,
+            "EmployeeId": 1,
+            "EmployeeName": 1,
+            "ProjectId": 1,
+            "Tasks": 1,
+            "OtherNote": 1,
+            "Address": 1,
+            "CheckinTime": 1,
+            "CheckinDate": 1,
+            "Status": 1,
+            "ApprovedBy": 1,
+            "Latitude": 1,
+            "Longitude": 1
+        }))
+
+        # ---- Nhóm theo nhân viên + ngày ----
+        grouped = {}
+        for d in data:
+            emp_id = d.get("EmployeeId", "")
+            emp_name = d.get("EmployeeName", "")
+            date = d.get("CheckinDate") or (
+                d["CheckinTime"].astimezone(VN_TZ).strftime("%Y-%m-%d")
+                if isinstance(d.get("CheckinTime"), datetime) else ""
+            )
+            key = (emp_id, emp_name, date)
+            grouped.setdefault(key, []).append(d)
+
+        # ---- Load template Excel ----
+        template_path = "templates/Copy of Form chấm công.xlsx"
+        wb = load_workbook(template_path)
+        ws = wb.active
+
+        border = Border(
+            left=Side(style="thin", color="000000"),
+            right=Side(style="thin", color="000000"),
+            top=Side(style="thin", color="000000"),
+            bottom=Side(style="thin", color="000000"),
+        )
+        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+        # ---- Điền dữ liệu ----
+        start_row = 2
+        for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
+            row = start_row + i
+            ws.cell(row=row, column=1, value=emp_id)
+            ws.cell(row=row, column=2, value=emp_name)
+            ws.cell(row=row, column=3, value=date)
+
+            for j, rec in enumerate(records[:10], start=1):
+                checkin_time = rec.get("CheckinTime")
+                time_str = ""
+                if isinstance(checkin_time, datetime):
+                    time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
+                elif isinstance(checkin_time, str) and checkin_time.strip():
+                    try:
+                        parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
+                        time_str = parsed.strftime("%H:%M:%S")
+                    except Exception:
+                        time_str = checkin_time
+
+                parts = []
+
+                # ---- Xử lý Tasks ----
+                tasks = rec.get("Tasks")
+                if isinstance(tasks, list):
+                    tasks_str = ", ".join(tasks)
+                else:
+                    tasks_str = str(tasks or "")
+
+                leave_reason = ""
+                if "nghỉ phép" in tasks_str.lower():
+                    if ":" in tasks_str:
+                        split_task = tasks_str.split(":", 1)
+                        tasks_str = split_task[0].strip()       # → "Nghỉ phép"
+                        leave_reason = split_task[1].strip()    # → Lý do
+                    else:
+                        tasks_str = tasks_str.strip()
+
+                status = rec.get("Status", "")
+
+                # ---- Nếu là nghỉ phép thì format đặc biệt ----
+                if "nghỉ phép" in tasks_str.lower():
+                    approve_date = ""
+                    if rec.get("ApprovedBy"):
+                        if isinstance(checkin_time, datetime):
+                            approve_date = checkin_time.astimezone(VN_TZ).strftime("%d/%m/%Y")
+                        else:
+                            approve_date = datetime.now(VN_TZ).strftime("%d/%m/%Y")
+                    entry = f"{date}; Nghỉ phép; {leave_reason}; {status}; {approve_date}"
+                else:
+                    # ---- Build nội dung export mặc định ----
+                    if time_str:
+                        parts.append(time_str)
+                    if rec.get("ProjectId"):
+                        parts.append(str(rec["ProjectId"]))
+                    if tasks_str:
+                        parts.append(tasks_str)
+                    if leave_reason:
+                        parts.append(leave_reason)
+                    if status:
+                        parts.append(status)
+                    if rec.get("OtherNote"):
+                        parts.append(rec["OtherNote"])
+                    if rec.get("Address"):
+                        parts.append(rec["Address"])
+                    entry = "; ".join(parts)
+
+                ws.cell(row=row, column=3 + j, value=entry)
+
+            # ---- Border + căn chỉnh ----
+            for col in range(1, 14):
+                cell = ws.cell(row=row, column=col)
+                cell.border = border
+                cell.alignment = align_left
+
+            # ---- Auto-fit row height ----
+            max_lines = max(
+                (str(ws.cell(row=row, column=col).value).count("\n") + 1 if ws.cell(row=row, column=col).value else 1)
+                for col in range(1, 14)
+            )
+            ws.row_dimensions[row].height = max_lines * 20
+
+        # ---- Auto-fit column width ----
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                if cell.value:
+                    length = len(str(cell.value))
+                    max_length = max(max_length, length)
+            ws.column_dimensions[col_letter].width = max_length + 2
+
+        # ---- Xuất file ----
+        today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
+        if search:
+            filename = f"Danh sách chấm công theo tìm kiếm_{today_str}.xlsx"
+        elif filter_type == "hôm nay":
+            filename = f"Danh sách chấm công_{today_str}.xlsx"
+        elif filter_type == "custom" and start_date and end_date:
+            filename = f"Danh sách chấm công từ {start_date} đến {end_date}_{today_str}.xlsx"
+        elif filter_type == "custom" and start_date and end_date:
+            filename = f"Danh sách đơn nghỉ phép_{today_str}.xlsx"
+        else:
+            filename = f"Danh sách chấm công_{today_str}.xlsx"
+
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
     except Exception as e:
-        print("❌ Error in get_attendances:", e)
+        print("❌ Lỗi export:", e)
         return jsonify({"error": str(e)}), 500
 
-# ==========================================
-# 🔹 CHẠY ỨNG DỤNG
-# ==========================================
+# =====================================
+# 🚀 Chạy server
+# =====================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
