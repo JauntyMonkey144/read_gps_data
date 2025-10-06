@@ -6,4 +6,4 @@ pandas
 openpyxl
 Werkzeug
 itsdangerous
-dotenv
+python-dotenv
