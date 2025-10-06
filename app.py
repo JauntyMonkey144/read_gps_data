@@ -108,7 +108,7 @@ def build_query(filter_type, start_date, end_date, search):
     elif filter_type == "năm":
         query["CheckinDate"] = {"$regex": f"^{today.year}"}
     elif filter_type == "nghỉ phép":
-        regex = re.compile("nghỉ phép", re.IGNORECASE)
+        regex = re.compile("Nghỉ phép", re.IGNORECASE)
         query["$or"] = [
             {"Tasks": {"$regex": regex}},
             {"Status": {"$regex": regex}},
