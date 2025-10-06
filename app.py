@@ -21,7 +21,10 @@ DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 # ---- Kết nối MongoDB ----
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
+
+# Các collection sử dụng
 admins = db["admins"]
+collection = db["alt_checkins"]  
 
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
