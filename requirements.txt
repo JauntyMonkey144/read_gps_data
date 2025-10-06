@@ -4,3 +4,4 @@ pymongo
 gunicorn
 pandas
 openpyxl
+Werkzeug
