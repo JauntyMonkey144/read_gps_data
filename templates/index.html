@@ -196,7 +196,7 @@
       const pageData = data.slice(startIdx, startIdx+rowsPerPage);
 
       pageData.forEach(r=>{
-        const img = r.PhotoURL ? `<img src="${r.PhotoURL}" class="checkin-photo">` : "";
+        const img = r.FaceImage ? `<img src="${r.FaceImage}" class="checkin-photo">` : "";
         tbody.innerHTML += `
           <tr>
             <td>${r.EmployeeId||""}</td>
