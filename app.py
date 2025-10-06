@@ -99,15 +99,15 @@ def get_attendances():
         if not emp:
             return jsonify({"error": "🚫 Email không tồn tại"}), 403
 
-        emp_id = emp["EmployeeId"]
+        # ✅ Bỏ filter theo EmployeeId: Giờ fetch TẤT CẢ dữ liệu matching filter
 
-        filter_type = request.args.get("filter", "all").lower()
+        filter_type = request.args.get("filter", "hôm nay").lower()  # ✅ Default là "hôm nay" thay vì "all"
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
 
         query = build_query(filter_type, start_date, end_date, search)
-        query["EmployeeId"] = emp_id  # chỉ lấy dữ liệu của chính nhân viên
+        # ❌ XÓA DÒNG NÀY: query["EmployeeId"] = emp["EmployeeId"]  # Không filter theo user nữa
 
         data = list(collection.find(query, {"_id": 0}))
         return jsonify(data)
@@ -136,7 +136,7 @@ def export_to_excel():
         emp_name = emp["EmployeeName"]
 
         # ---- Tham số lọc ----
-        filter_type = request.args.get("filter", "all").lower()
+        filter_type = request.args.get("filter", "all").lower()  # Giữ default "all" cho export (có thể đổi nếu cần)
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
