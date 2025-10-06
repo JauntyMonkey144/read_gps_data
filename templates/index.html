@@ -55,7 +55,7 @@
     <input type="email" id="emailInput" placeholder="Nhập email admin" />
     <input type="password" id="passwordInput" placeholder="Nhập mật khẩu" />
     <button onclick="login()">Đăng nhập</button>
-    <a href="/forgot-password">🔒 Quên mật khẩu?</a>
+    <a href="{{ url_for('forgot_password') }}">🔒 Quên mật khẩu?</a>
     <p id="loginMessage" style="color:red; font-size:14px;"></p>
   </div>
 
@@ -128,6 +128,10 @@
   </div>
 
   <script>
+    const loginUrl = "{{ url_for('login') }}";
+    const apiUrl = "{{ url_for('get_attendances') }}";
+    const exportUrl = "{{ url_for('export_excel') }}";
+
     let currentFilter = "hôm nay", currentStartDate = "", currentEndDate = "", currentSearch = "";
     let rawData = [], currentPage = 1, rowsPerPage = 10, currentEmail = "", currentUsername = "";
 
@@ -154,7 +158,7 @@
       formData.append("email", email);
       formData.append("password", password);
       try {
-        const res = await fetch("/login", { method: "POST", body: formData });
+        const res = await fetch(loginUrl, { method: "POST", body: formData });
         const data = await safeJson(res);
         if (data.success) {
           localStorage.setItem("Email", email);
@@ -180,15 +184,11 @@
 
     async function loadData() {
       if (!currentEmail) return;
-      let url = `/api/attendances?filter=${currentFilter}&email=${encodeURIComponent(currentEmail)}`;
+      let url = `${apiUrl}?filter=${currentFilter}&email=${encodeURIComponent(currentEmail)}`;
       if (currentStartDate && currentEndDate) url += `&startDate=${currentStartDate}&endDate=${currentEndDate}`;
       if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
       try {
         const res = await fetch(url);
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text.slice(0, 100));
-        }
         const data = await safeJson(res);
         if (data.error) throw new Error(data.error);
         rawData = data;
@@ -213,10 +213,10 @@
             <td>${row.Tasks || ""}</td>
             <td>${row.OtherNote || ""}</td>
             <td>${row.Address || ""}</td>
-            <td>${row.Latitude && row.Longitude ? `<a href="https://maps.google.com?q=${row.Latitude},${row.Longitude}" target="_blank">Xem</a>` : ""}</td>
+            <td>${row.Latitude && row.Longitude ? '<a href="https://maps.google.com?q=' + row.Latitude + ',' + row.Longitude + '" target="_blank">Xem</a>' : ""}</td>
             <td>${row.CheckinTime || ""}</td>
             <td>${row.Status || ""}</td>
-            <td>${row.FaceImage ? `<img src="${row.FaceImage}" class="face-thumb">` : ""}</td>
+            <td>${row.FaceImage ? '<img src="' + row.FaceImage + '" class="face-thumb">' : ""}</td>
           </tr>`;
       });
     }
