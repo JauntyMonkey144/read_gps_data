@@ -88,7 +88,6 @@ def login():
 
 
 # ---- Hàm dựng query lọc ----
-# ---- Hàm dựng query lọc ----
 def build_query(filter_type, start_date, end_date, search):
     query = {}
     today = datetime.now(VN_TZ)
@@ -125,7 +124,54 @@ def build_query(filter_type, start_date, end_date, search):
         ]
     return query
 
+# ---- Quên mật khẩu (reset trực tiếp, không cần gửi Gmail) ----
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "GET":
+        # Form HTML đơn giản cho reset mật khẩu
+        return f"""
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Quên mật khẩu</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
+                .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
+                button {{ background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
+                button:hover {{ background: #218838; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>🔒 Đặt lại mật khẩu</h2>
+                <form method="POST">
+                    <input type="email" name="email" placeholder="Email" required>
+                    <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
+                    <button type="submit">Cập nhật mật khẩu</button>
+                </form>
+            </div>
+        </body>
+        </html>
+        """
 
+    if request.method == "POST":
+        email = request.form.get("email")
+        new_password = request.form.get("new_password")
+
+        if not email or not new_password:
+            return jsonify({"success": False, "message": "❌ Vui lòng nhập email và mật khẩu mới"}), 400
+
+        admin = admins.find_one({"email": email})
+        if not admin:
+            return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+
+        hashed_pw = generate_password_hash(new_password)
+        admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
+
+        return jsonify({"success": True, "message": "✅ Đặt lại mật khẩu thành công!"})
 # ---- API lấy dữ liệu chấm công (validate email từ admins) ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
