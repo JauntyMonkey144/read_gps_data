@@ -58,6 +58,7 @@
     .pagination button { margin: 0 2px; padding: 5px 10px; }
 
     #mainContent { display: none; }
+    #errorMsg { color: red; text-align: center; margin: 10px 0; display: none; }
   </style>
 </head>
 <body>
@@ -65,7 +66,7 @@
 
   <!-- Form đăng nhập -->
   <div id="loginBox" class="login-box">
-    <input type="email" id="emailInput" placeholder="Nhập email nhân viên">
+    <input type="email" id="emailInput" placeholder="Nhập email admin (từ collection admins)">
     <br>
     <button onclick="login()">Đăng nhập</button>
     <p id="loginMessage" style="color:red; font-size:14px;"></p>
@@ -73,6 +74,7 @@
 
   <!-- Nội dung chính -->
   <div id="mainContent">
+    <div id="errorMsg"></div>  <!-- Hiển thị error từ API -->
     <div class="top-bar">
       <span class="welcome" id="welcomeMsg"></span>
       <button class="logout-btn" onclick="logout()">Đăng xuất</button>
@@ -142,7 +144,7 @@
     let currentFilter = "hôm nay", currentStartDate = "", currentEndDate = "", currentSearch = "";
     let rawData = [], currentSort = { column: null, order: null };
     let currentPage = 1, rowsPerPage = 10;
-    let currentEmail = "", currentEmpName = "";
+    let currentEmail = "", currentUsername = "";  // Đổi thành username từ admins
 
     function setActiveButton(btn) {
       document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
@@ -155,37 +157,59 @@
         document.getElementById("loginMessage").innerText = "Vui lòng nhập email!";
         return;
       }
-      const res = await fetch(`/login?email=${encodeURIComponent(email)}`);
-      const data = await res.json();
-      if (data.success) {
-        currentEmail = email;
-        currentEmpName = data.EmployeeName;
-        sessionStorage.setItem("Email", email);
-        sessionStorage.setItem("EmployeeName", currentEmpName);
-        document.getElementById("loginBox").style.display = "none";
-        document.getElementById("mainContent").style.display = "block";
-        document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentEmpName}`;
-        loadData();
-      } else {
-        document.getElementById("loginMessage").innerText = data.message;
+      try {
+        const res = await fetch(`/login?email=${encodeURIComponent(email)}`);
+        const data = await res.json();
+        if (data.success) {
+          currentEmail = email;
+          currentUsername = data.username;  // Lấy username từ admins
+          sessionStorage.setItem("Email", email);
+          sessionStorage.setItem("Username", currentUsername);
+          document.getElementById("loginBox").style.display = "none";
+          document.getElementById("mainContent").style.display = "block";
+          document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentUsername}`;
+          loadData();  // Load default "hôm nay"
+        } else {
+          document.getElementById("loginMessage").innerText = data.message;
+        }
+      } catch (err) {
+        document.getElementById("loginMessage").innerText = "Lỗi kết nối server!";
       }
     }
 
     function logout() {
       sessionStorage.clear();
-      currentEmail = ""; currentEmpName = "";
+      currentEmail = ""; currentUsername = "";
       document.getElementById("mainContent").style.display = "none";
       document.getElementById("loginBox").style.display = "block";
+      document.getElementById("loginMessage").innerText = "";
+      document.getElementById("errorMsg").style.display = "none";
     }
 
     async function loadData() {
-      let url = `/api/attendances?filter=${currentFilter}&email=${currentEmail}`;
+      if (!currentEmail) return;  // Không load nếu chưa login
+      let url = `/api/attendances?filter=${currentFilter}&email=${encodeURIComponent(currentEmail)}`;
       if (currentStartDate && currentEndDate) url += `&startDate=${currentStartDate}&endDate=${currentEndDate}`;
       if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
-      const res = await fetch(url);
-      rawData = await res.json();
-      currentPage = 1;
-      renderTable();
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          const errData = await res.json();
+          showError(errData.error || "Lỗi tải dữ liệu");
+          return;
+        }
+        rawData = await res.json();
+        currentPage = 1;
+        renderTable();
+      } catch (err) {
+        showError("Lỗi kết nối server: " + err.message);
+      }
+    }
+
+    function showError(msg) {
+      const errorEl = document.getElementById("errorMsg");
+      errorEl.innerText = msg;
+      errorEl.style.display = "block";
     }
 
     function renderTable() {
@@ -265,7 +289,8 @@
     function changeRowsPerPage() { rowsPerPage = parseInt(document.getElementById("rowsPerPage").value); currentPage = 1; renderTable(); }
 
     function exportExcel() {
-      let url = `/api/export-excel?filter=${currentFilter}&email=${currentEmail}`;
+      if (!currentEmail) { showError("Vui lòng đăng nhập trước!"); return; }
+      let url = `/api/export-excel?filter=${currentFilter}&email=${encodeURIComponent(currentEmail)}`;
       if (currentStartDate && currentEndDate) url += `&startDate=${currentStartDate}&endDate=${currentEndDate}`;
       if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
       window.location.href = url;
@@ -281,13 +306,13 @@
 
     window.onload = () => {
       const savedEmail = sessionStorage.getItem("Email");
-      const savedName = sessionStorage.getItem("EmployeeName");
+      const savedUsername = sessionStorage.getItem("Username");
       if (savedEmail) {
-        currentEmail = savedEmail; currentEmpName = savedName || "";
+        currentEmail = savedEmail; currentUsername = savedUsername || "";
         document.getElementById("loginBox").style.display = "none";
         document.getElementById("mainContent").style.display = "block";
-        document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentEmpName}`;
-        loadData();
+        document.getElementById("welcomeMsg").innerText = `👋 Xin chào, ${currentUsername}`;
+        loadData();  // Load default "hôm nay"
       }
     };
   </script>
