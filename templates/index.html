@@ -1,396 +1,295 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hệ thống chấm công GPS</title>
   <style>
-    :root{
-      --bg:#f4f6f9;
-      --card:#ffffff;
-      --primary:#0d6efd;
-      --muted:#6c757d;
-      --success:#28a745;
-      --danger:#dc3545;
-      --radius:10px;
-      --shadow: 0 6px 18px rgba(20,20,30,0.06);
-      font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+    :root {
+      --bg: #f4f6f9;
+      --card: #fff;
+      --primary: #007bff;
+      --success: #28a745;
+      --danger: #dc3545;
+      --muted: #6c757d;
+      --shadow: 0 3px 12px rgba(0,0,0,0.08);
     }
-    html,body{height:100%;margin:0;background:var(--bg);color:#222}
-    .container{max-width:1100px;margin:28px auto;padding:20px;}
-    header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}
-    h1{font-size:20px;margin:0;display:flex;gap:10px;align-items:center}
-    .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
-    .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-    input[type="text"], input[type="email"], input[type="password"], input[type="date"], select{
-      padding:8px 10px;border:1px solid #e0e3e7;border-radius:6px;font-size:14px;
+    body { font-family: "Segoe UI", Arial, sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+    h1 { text-align: center; color: var(--primary); }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
+    button {
+      background: var(--primary);
+      color: white; border: none;
+      padding: 6px 12px; border-radius: 6px;
+      cursor: pointer; font-size: 14px;
+      transition: 0.2s;
     }
-    button{padding:8px 12px;border-radius:6px;border:0;background:var(--primary);color:#fff;cursor:pointer;font-size:14px}
-    button.ghost{background:transparent;color:var(--primary);border:1px solid rgba(13,110,253,0.12)}
-    button.warn{background:var(--danger)}
-    .small{padding:6px 8px;font-size:13px}
-    .table-container{margin-top:12px;max-height:520px;overflow:auto;border-radius:8px;border:1px solid #e6e9ee;background:#fff}
-    table{width:100%;border-collapse:collapse}
-    th, td{padding:10px 12px;border-bottom:1px solid #f0f2f5;text-align:left;font-size:14px}
-    th{position:sticky;top:0;background:#0d6efd;color:#fff;font-weight:600}
-    tr:nth-child(even){background:#fbfcff}
-    .right{margin-left:auto;display:flex;gap:8px;align-items:center}
-    .status{display:inline-block;padding:6px 8px;border-radius:8px;font-size:12px;color:#fff}
-    .status.ok{background:var(--success)}
-    .status.warn{background:#ffc107;color:#333}
-    .status.bad{background:var(--danger)}
-    .login-box{display:flex;gap:8px;align-items:center}
-    .hint{color:var(--muted);font-size:13px}
-    .msg{padding:10px;border-radius:8px;margin-top:10px}
-    .msg.error{background:#ffe9e9;color:var(--danger);border:1px solid #ffd0d0}
-    .msg.success{background:#e8f8ee;color:var(--success);border:1px solid #c6eed1}
-    @media (max-width:720px){
-      header{flex-direction:column;align-items:flex-start;gap:10px}
-      .controls{width:100%;gap:6px}
-      .right{width:100%;justify-content:space-between}
-      th, td{padding:8px}
+    button:hover { opacity: 0.9; }
+    button.active { background: var(--success); }
+    input[type=text], input[type=email], input[type=password], input[type=date] {
+      padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
     }
+    table { width: 100%; border-collapse: collapse; background: white; box-shadow: var(--shadow); }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: var(--primary); color: white; cursor: pointer; user-select: none; }
+    th.asc::after { content: " ↑"; font-size: 12px; }
+    th.desc::after { content: " ↓"; font-size: 12px; }
+    tr:nth-child(even) { background: #f8f9fa; }
+    .pagination { text-align: center; margin-top: 15px; }
+    .pagination button {
+      background: white; border: 1px solid #ccc; color: var(--primary);
+      margin: 2px; border-radius: 4px; padding: 5px 10px;
+    }
+    .pagination button.active { background: var(--primary); color: white; }
+    img.checkin-photo { height: 60px; width: auto; border-radius: 6px; object-fit: cover; }
+    .login-box { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .msg { margin: 10px 0; padding: 8px 10px; border-radius: 6px; }
+    .msg.error { background: #ffe6e6; color: var(--danger); }
+    .msg.success { background: #e8fbe8; color: var(--success); }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>📌 Dữ liệu chấm công GPS</h1>
+  <h1>📍 Dữ liệu chấm công GPS</h1>
 
-      <div class="right">
-        <div id="userArea" class="card login-box" style="padding:8px 10px;">
-          <!-- populated by JS -->
-          <form id="loginForm" style="display:flex;gap:8px;align-items:center;">
-            <input type="email" id="loginEmail" placeholder="Email admin" required />
-            <input type="password" id="loginPass" placeholder="Mật khẩu" required />
-            <button type="submit" class="small">Đăng nhập</button>
-          </form>
-          <div id="userInfo" style="display:none;gap:8px;align-items:center;">
-            <span id="usernameDisplay" style="font-weight:600"></span>
-            <button id="logoutBtn" class="ghost small">Đăng xuất</button>
-          </div>
-        </div>
-
-        <div class="card" style="padding:8px 10px;">
-          <a href="/forgot-password" class="hint" style="text-decoration:none;color:var(--muted)">Quên mật khẩu?</a>
-        </div>
-      </div>
-    </header>
-
-    <section class="card" style="margin-bottom:12px">
-      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        <div class="controls">
-          <label class="hint" style="margin-right:6px">Bộ lọc nhanh:</label>
-          <button onclick="applyFilter('hôm nay')" class="small">Hôm nay</button>
-          <button onclick="applyFilter('tuần')" class="small">Tuần này</button>
-          <button onclick="applyFilter('tháng')" class="small">Tháng này</button>
-          <button onclick="applyFilter('năm')" class="small">Năm nay</button>
-          <button onclick="applyFilter('tất cả')" class="small">Tất cả</button>
-          <button onclick="applyFilter('nghỉ phép')" class="small">Nghỉ phép</button>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:8px">
-          <label class="hint">Từ</label>
-          <input type="date" id="startDate" />
-          <label class="hint">Đến</label>
-          <input type="date" id="endDate" />
-          <button onclick="applyDateRange()" class="small">Áp dụng</button>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
-          <input type="text" id="searchBox" placeholder="Tìm tên hoặc mã NV..." />
-          <button onclick="applySearch()" class="small">Tìm</button>
-          <button onclick="exportExcel()" class="small">📥 Xuất Excel</button>
-        </div>
-      </div>
-
-      <div id="messageArea" style="margin-top:10px"></div>
-    </section>
-
-    <section class="card">
-      <div class="table-container">
-        <table aria-label="Dữ liệu chấm công">
-          <thead>
-            <tr>
-              <th>Mã NV</th>
-              <th>Tên nhân viên</th>
-              <th>Địa chỉ</th>
-              <th>Ngày</th>
-              <th>Giờ Check-in</th>
-              <th>Trạng thái</th>
-              <th>Ghi chú</th>
-            </tr>
-          </thead>
-          <tbody id="dataBody">
-            <!-- rows inserted by JS -->
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <footer style="margin-top:12px;text-align:center;color:var(--muted);font-size:13px">
-      <small>Phiên bản frontend tương thích backend của bạn — lưu email admin để truy vấn dữ liệu.</small>
-    </footer>
+  <!-- Khu vực đăng nhập -->
+  <div class="controls login-box">
+    <input type="email" id="loginEmail" placeholder="Nhập email admin..." />
+    <input type="password" id="loginPass" placeholder="Mật khẩu..." />
+    <button id="loginBtn">Đăng nhập</button>
+    <button id="logoutBtn" style="display:none;background:var(--danger);">Đăng xuất</button>
+    <a href="/forgot-password" style="color:var(--muted);font-size:13px;text-decoration:none;">Quên mật khẩu?</a>
   </div>
 
+  <div id="messageArea"></div>
+
+  <!-- Bộ lọc -->
+  <div class="controls">
+    <label><b>Bộ lọc:</b></label>
+    <button onclick="applyFilter('hôm nay')" id="btn-homnay">Hôm nay</button>
+    <button onclick="applyFilter('tuần')" id="btn-tuan">Tuần này</button>
+    <button onclick="applyFilter('tháng')" id="btn-thang">Tháng này</button>
+    <button onclick="applyFilter('năm')" id="btn-nam">Năm nay</button>
+    <button onclick="applyFilter('tất cả')" id="btn-tatca">Tất cả</button>
+    <button onclick="applyFilter('nghỉ phép')" id="btn-nghiphep">Nghỉ phép</button>
+  </div>
+
+  <!-- Lọc theo ngày -->
+  <div class="controls">
+    <label><b>Từ ngày:</b></label><input type="date" id="startDate" />
+    <label><b>Đến ngày:</b></label><input type="date" id="endDate" />
+    <button onclick="applyDateRange()">Áp dụng</button>
+  </div>
+
+  <!-- Tìm kiếm -->
+  <div class="controls">
+    <input type="text" id="searchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
+    <button onclick="applySearch()">Tìm kiếm</button>
+    <button onclick="exportExcel()">📤 Xuất Excel</button>
+  </div>
+
+  <!-- Bảng dữ liệu -->
+  <div class="table-container">
+    <table id="dataTable">
+      <thead>
+        <tr>
+          <th onclick="sortTable('EmployeeId')">Mã NV</th>
+          <th onclick="sortTable('EmployeeName')">Tên nhân viên</th>
+          <th onclick="sortTable('CheckinDate')">Ngày</th>
+          <th onclick="sortTable('CheckinTime')">Giờ Check-in</th>
+          <th>Ảnh</th>
+          <th>Địa chỉ</th>
+          <th onclick="sortTable('Status')">Trạng thái</th>
+          <th>Ghi chú</th>
+        </tr>
+      </thead>
+      <tbody id="dataBody"></tbody>
+    </table>
+  </div>
+
+  <div class="pagination" id="pagination"></div>
+
   <script>
-    // trạng thái/biến toàn cục
-    let CURRENT_FILTER = "hôm nay"; // default backend expects "hôm nay"
-    let START_DATE = "";
-    let END_DATE = "";
-    let SEARCH = "";
-    let RAW_DATA = [];
-    const DATA_URL = "/api/attendances";
-    const EXPORT_URL = "/api/export-excel";
+    let currentFilter = "hôm nay";
+    let currentSearch = "";
+    let currentSort = { column: null, order: null };
+    let startDate = "", endDate = "";
+    let rawData = [];
+    let currentPage = 1;
+    const rowsPerPage = 10;
 
-    // --- helper hiển thị message ---
-    function showMessage(text, type="error", timeout=5000){
-      const area = document.getElementById("messageArea");
-      area.innerHTML = `<div class="msg ${type==='error'?'error':'success'}">${text}</div>`;
-      if(timeout>0) setTimeout(()=>{ if(area.firstChild) area.innerHTML=""; }, timeout);
+    function showMessage(msg, type="success") {
+      const el = document.getElementById("messageArea");
+      el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
+      setTimeout(()=>el.innerHTML="", 4000);
     }
 
-    // --- login / logout xử lý ---
-    const loginForm = document.getElementById("loginForm");
-    const loginEmail = document.getElementById("loginEmail");
-    const loginPass = document.getElementById("loginPass");
-    const userInfo = document.getElementById("userInfo");
-    const usernameDisplay = document.getElementById("usernameDisplay");
-    const logoutBtn = document.getElementById("logoutBtn");
-    const userArea = document.getElementById("userArea");
-
-    function setLogged(email, username){
-      localStorage.setItem("attendance_email", email);
-      localStorage.setItem("attendance_username", username || "");
-      loginForm.style.display = "none";
-      userInfo.style.display = "flex";
-      usernameDisplay.textContent = username ? `${username} (${email})` : email;
-      showMessage("Đã đăng nhập: " + email, "success", 2500);
-      loadData(); // tự động tải dữ liệu
+    // --- LOGIN LOGIC ---
+    async function login() {
+      const email = document.getElementById("loginEmail").value.trim();
+      const pass = document.getElementById("loginPass").value;
+      if (!email || !pass) return showMessage("⚠️ Nhập email và mật khẩu", "error");
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("password", pass);
+      const res = await fetch("/login", { method: "POST", body: formData });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem("adminEmail", email);
+        localStorage.setItem("adminUser", data.username || data.email);
+        document.getElementById("loginEmail").style.display = "none";
+        document.getElementById("loginPass").style.display = "none";
+        document.getElementById("loginBtn").style.display = "none";
+        document.getElementById("logoutBtn").style.display = "inline-block";
+        showMessage("✅ Đăng nhập thành công", "success");
+        applyFilter("hôm nay"); // auto load hôm nay
+      } else showMessage(data.message || "🚫 Sai thông tin", "error");
     }
 
-    function clearLogin(){
-      localStorage.removeItem("attendance_email");
-      localStorage.removeItem("attendance_username");
-      loginForm.style.display = "flex";
-      userInfo.style.display = "none";
-      usernameDisplay.textContent = "";
-      showMessage("Đã đăng xuất", "success", 1500);
+    function logout() {
+      localStorage.clear();
+      document.getElementById("loginEmail").style.display = "";
+      document.getElementById("loginPass").style.display = "";
+      document.getElementById("loginBtn").style.display = "";
+      document.getElementById("logoutBtn").style.display = "none";
+      showMessage("👋 Đã đăng xuất", "success");
+      document.getElementById("dataBody").innerHTML = "";
     }
 
-    // khởi tạo trạng thái đăng nhập nếu có
-    (function initLogin(){
-      const saved = localStorage.getItem("attendance_email");
-      const savedName = localStorage.getItem("attendance_username");
-      if(saved){
-        loginForm.style.display = "none";
-        userInfo.style.display = "flex";
-        usernameDisplay.textContent = savedName ? `${savedName} (${saved})` : saved;
-      } else {
-        loginForm.style.display = "flex";
-        userInfo.style.display = "none";
-      }
-    })();
+    document.getElementById("loginBtn").onclick = login;
+    document.getElementById("logoutBtn").onclick = logout;
 
-    loginForm.addEventListener("submit", async (ev)=>{
-      ev.preventDefault();
-      const email = loginEmail.value.trim();
-      const password = loginPass.value;
-      if(!email || !password) return showMessage("Nhập email và mật khẩu", "error");
-      try{
-        const form = new FormData();
-        form.append("email", email);
-        form.append("password", password);
-        const res = await fetch("/login", { method: "POST", body: form });
-        const j = await res.json();
-        if(res.ok && j.success){
-          setLogged(email, j.username || j.email || "");
-          loginEmail.value = "";
-          loginPass.value = "";
-        } else {
-          showMessage(j.message || j.error || "Đăng nhập thất bại", "error");
-        }
-      }catch(err){
-        showMessage("Lỗi mạng khi đăng nhập", "error");
-        console.error(err);
-      }
-    });
+    // --- FETCH DATA ---
+    async function loadData() {
+      const email = localStorage.getItem("adminEmail");
+      if (!email) return showMessage("🚫 Chưa đăng nhập!", "error");
 
-    logoutBtn.addEventListener("click", (ev)=>{
-      clearLogin();
-    });
+      let url = `/api/attendances?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
+      if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
+      if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
 
-    // --- fetch dữ liệu ---
-    async function loadData(){
-      const email = localStorage.getItem("attendance_email");
-      if(!email){
-        showMessage("Vui lòng đăng nhập bằng email admin để xem dữ liệu", "error", 4000);
-        return;
-      }
-
-      let url = `${DATA_URL}?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(CURRENT_FILTER)}`;
-      if(CURRENT_FILTER === "custom" && START_DATE && END_DATE){
-        url += `&startDate=${encodeURIComponent(START_DATE)}&endDate=${encodeURIComponent(END_DATE)}`;
-      }
-      if(SEARCH) url += `&search=${encodeURIComponent(SEARCH)}`;
-
-      try{
-        const res = await fetch(url);
-        const j = await res.json();
-        if(!res.ok){
-          showMessage(j.error || "Lỗi khi lấy dữ liệu", "error");
-          RAW_DATA = [];
-          renderTable();
-          return;
-        }
-        RAW_DATA = Array.isArray(j) ? j : (j.data || []);
-        renderTable();
-        showMessage(`Tải ${RAW_DATA.length} bản ghi`, "success", 1500);
-      }catch(err){
-        console.error(err);
-        showMessage("Lỗi kết nối server", "error");
-      }
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) return showMessage(data.error || "❌ Lỗi tải dữ liệu", "error");
+      rawData = data;
+      currentPage = 1;
+      renderTable();
     }
 
-    // --- render table ---
-    function renderTable(){
+    // --- TABLE RENDER ---
+    function renderTable() {
       const tbody = document.getElementById("dataBody");
       tbody.innerHTML = "";
-      if(!RAW_DATA || RAW_DATA.length===0){
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">Không có dữ liệu</td></tr>`;
-        return;
+      let data = [...rawData];
+
+      // sort
+      if (currentSort.column && currentSort.order) {
+        data.sort((a,b)=>{
+          let A = a[currentSort.column]||"", B = b[currentSort.column]||"";
+          if (A<B) return currentSort.order==="asc" ? -1 : 1;
+          if (A>B) return currentSort.order==="asc" ? 1 : -1;
+          return 0;
+        });
       }
 
-      for(const r of RAW_DATA){
-        const id = r.EmployeeId || "";
-        const name = r.EmployeeName || "";
-        const addr = r.Address || "";
-        const date = r.CheckinDate || (r.CheckinTime ? formatDateFromAny(r.CheckinTime) : "");
-        const time = r.CheckinTime ? formatTimeFromAny(r.CheckinTime) : "";
-        const statusText = r.Status || "";
-        let statusClass = "ok";
-        if(/nghỉ|nghi/i.test(statusText) || /nghỉ phép/i.test((r.Tasks||"")+"")) statusClass = "warn";
-        if(/từ chối|rejected|deny/i.test(statusText)) statusClass = "bad";
-        const other = (r.OtherNote || r.Tasks || "").toString();
+      // pagination
+      const startIdx = (currentPage-1)*rowsPerPage;
+      const pageData = data.slice(startIdx, startIdx+rowsPerPage);
 
-        tbody.insertAdjacentHTML("beforeend", `
+      pageData.forEach(r=>{
+        const img = r.PhotoURL ? `<img src="${r.PhotoURL}" class="checkin-photo">` : "";
+        tbody.innerHTML += `
           <tr>
-            <td>${escapeHtml(id)}</td>
-            <td>${escapeHtml(name)}</td>
-            <td>${escapeHtml(addr)}</td>
-            <td>${escapeHtml(date)}</td>
-            <td>${escapeHtml(time)}</td>
-            <td><span class="status ${statusClass}">${escapeHtml(statusText)}</span></td>
-            <td>${escapeHtml(other)}</td>
+            <td>${r.EmployeeId||""}</td>
+            <td>${r.EmployeeName||""}</td>
+            <td>${r.CheckinDate||""}</td>
+            <td>${r.CheckinTime||""}</td>
+            <td>${img}</td>
+            <td>${r.Address||""}</td>
+            <td>${r.Status||""}</td>
+            <td>${r.OtherNote||r.Tasks||""}</td>
           </tr>
-        `);
+        `;
+      });
+
+      renderPagination(data.length);
+      highlightFilterButton();
+    }
+
+    function renderPagination(total) {
+      const pages = Math.ceil(total / rowsPerPage);
+      const pagDiv = document.getElementById("pagination");
+      pagDiv.innerHTML = "";
+      for (let i=1;i<=pages;i++) {
+        pagDiv.innerHTML += `<button class="${i===currentPage?'active':''}" onclick="gotoPage(${i})">${i}</button>`;
       }
     }
 
-    // --- helpers format time/date (robust) ---
-    function formatTimeFromAny(v){
-      // if ISO string or datetime object -> show HH:MM:SS
-      try{
-        if(typeof v === "string"){
-          // try parse ISO or "DD/MM/YYYY HH:MM:SS"
-          const iso = new Date(v);
-          if(!isNaN(iso)) return iso.toTimeString().split(" ")[0];
-          // try dd/mm/yyyy hh:mm:ss
-          const m = v.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-          if(m) return (m[1].padStart(2,"0")+":"+m[2]+(m[3] ? ":"+m[3] : ":00"));
-          return v;
-        } else if(v instanceof Date){
-          return v.toTimeString().split(" ")[0];
-        } else {
-          return String(v);
-        }
-      }catch(e){
-        return String(v);
-      }
-    }
-    function formatDateFromAny(v){
-      try{
-        if(typeof v === "string"){
-          const iso = new Date(v);
-          if(!isNaN(iso)){
-            return iso.getFullYear()+"-"+String(iso.getMonth()+1).padStart(2,"0")+"-"+String(iso.getDate()).padStart(2,"0");
-          }
-          // try dd/mm/yyyy
-          const m = v.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-          if(m) return `${m[3].length===2?('20'+m[3]):m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
-          return v;
-        } else if(v instanceof Date){
-          return v.getFullYear()+"-"+String(v.getMonth()+1).padStart(2,"0")+"-"+String(v.getDate()).padStart(2,"0");
-        } else {
-          return "";
-        }
-      }catch(e){
-        return "";
-      }
+    function gotoPage(page) {
+      currentPage = page;
+      renderTable();
     }
 
-    // --- apply filter / search / date range ---
-    function applyFilter(f){
-      CURRENT_FILTER = f;
-      // clear custom dates if not custom
-      if(f !== "custom"){
-        START_DATE = "";
-        END_DATE = "";
-        document.getElementById("startDate").value = "";
-        document.getElementById("endDate").value = "";
+    function sortTable(col) {
+      if (currentSort.column===col) {
+        currentSort.order = currentSort.order==="asc" ? "desc" : (currentSort.order==="desc"?null:"asc");
+      } else {
+        currentSort.column = col;
+        currentSort.order = "asc";
       }
+      document.querySelectorAll("th").forEach(th=>th.classList.remove("asc","desc"));
+      if (currentSort.order)
+        document.querySelector(`th[onclick="sortTable('${col}')"]`).classList.add(currentSort.order);
+      renderTable();
+    }
+
+    // --- FILTER LOGIC ---
+    function applyFilter(f) {
+      currentFilter = f;
+      startDate = endDate = "";
       loadData();
     }
 
-    function applyDateRange(){
-      const s = document.getElementById("startDate").value;
-      const e = document.getElementById("endDate").value;
-      if(!s || !e) return showMessage("Chọn cả từ và đến ngày", "error");
-      START_DATE = s;
-      END_DATE = e;
-      CURRENT_FILTER = "custom";
+    function applyDateRange() {
+      startDate = document.getElementById("startDate").value;
+      endDate = document.getElementById("endDate").value;
+      currentFilter = "custom";
       loadData();
     }
 
-    function applySearch(){
-      SEARCH = document.getElementById("searchBox").value.trim();
+    function applySearch() {
+      currentSearch = document.getElementById("searchBox").value.trim();
       loadData();
     }
 
-    // --- export excel ---
-    function exportExcel(){
-      const email = localStorage.getItem("attendance_email");
-      if(!email) return showMessage("Vui lòng đăng nhập để xuất Excel", "error");
-      let url = `${EXPORT_URL}?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(CURRENT_FILTER)}`;
-      if(CURRENT_FILTER === "custom" && START_DATE && END_DATE){
-        url += `&startDate=${encodeURIComponent(START_DATE)}&endDate=${encodeURIComponent(END_DATE)}`;
-      }
-      if(SEARCH) url += `&search=${encodeURIComponent(SEARCH)}`;
-      // mở link để server trả file
+    function exportExcel() {
+      const email = localStorage.getItem("adminEmail");
+      if (!email) return showMessage("⚠️ Chưa đăng nhập", "error");
+      let url = `/api/export-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
+      if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
+      if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
       window.location.href = url;
     }
 
-    // --- utility escape ---
-    function escapeHtml(text){
-      if(text === null || text === undefined) return "";
-      return String(text)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+    function highlightFilterButton() {
+      document.querySelectorAll(".controls button").forEach(btn=>btn.classList.remove("active"));
+      const map = {
+        "hôm nay":"btn-homnay","tuần":"btn-tuan","tháng":"btn-thang",
+        "năm":"btn-nam","tất cả":"btn-tatca","nghỉ phép":"btn-nghiphep"
+      };
+      if (map[currentFilter]) document.getElementById(map[currentFilter]).classList.add("active");
     }
 
-    // auto-refresh mỗi 60s (nếu đã đăng nhập)
-    setInterval(()=>{
-      if(localStorage.getItem("attendance_email")) loadData();
-    }, 60000);
-
-    // Nếu đã login trước đó thì loadData ngay
-    if(localStorage.getItem("attendance_email")) loadData();
-
-    // Expose some functions for console debug
-    window._debug = { loadData, applyFilter, applyDateRange, applySearch, exportExcel, clearLogin };
+    // --- AUTO LOGIN CHECK ---
+    window.onload = () => {
+      const email = localStorage.getItem("adminEmail");
+      if (email) {
+        document.getElementById("loginEmail").style.display = "none";
+        document.getElementById("loginPass").style.display = "none";
+        document.getElementById("loginBtn").style.display = "none";
+        document.getElementById("logoutBtn").style.display = "inline-block";
+        applyFilter("hôm nay");
+      }
+    };
   </script>
 </body>
 </html>
