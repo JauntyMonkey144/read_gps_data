@@ -1,4 +1,8 @@
-from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file
+# app.py
+from flask import (
+    Flask, render_template_string, jsonify, request, redirect,
+    url_for, send_file, session, flash
+)
 from pymongo import MongoClient
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -12,143 +16,247 @@ from io import BytesIO
 from dotenv import load_dotenv
 import smtplib, os, re, calendar
 
-# =====================================
-# ⚙️ Cấu hình Flask + MongoDB
-# =====================================
 load_dotenv()
 
-app = Flask(__name__, template_folder="templates")
+# ---------- Cấu hình cơ bản ----------
+app = Flask(__name__)
 CORS(app, methods=["GET", "POST"])
+app.secret_key = os.getenv("SECRET_KEY", "supersecret_dev_key")
 
-# ---- Timezone VN ----
+# Timezone VN
 VN_TZ = timezone(timedelta(hours=7))
-app.secret_key = os.getenv("SECRET_KEY", "supersecret")
 
-# ---- MongoDB Config ----
-MONGO_URI = os.getenv(
-    "MONGO_URI",
-    "mongodb+srv://banhbaobeo2205:lm2hiCLXp6B0D7hq@cluster0.festnla.mongodb.net/?retryWrites=true&w=majority"
-)
+# MongoDB
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
-
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 admins = db["admins"]
 collection = db["alt_checkins"]
 
-# ---- SMTP Config ----
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-SMTP_USER = os.getenv("SMTP_USER", "banhbaobeo2205@gmail.com")
-SMTP_PASS = os.getenv("SMTP_PASS", "vynqvvvmbcigpdvy")
+# SMTP
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
 
-# ---- Token Serializer ----
+# Serializer
 serializer = URLSafeTimedSerializer(app.secret_key)
 
+# ---------- Helper: login required ----------
+from functools import wraps
 
-# =====================================
-# 🏠 Trang chính hiển thị bảng chấm công
-# =====================================
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("user_email"):
+            return redirect(url_for("login_page", next=request.path))
+        return f(*args, **kwargs)
+    return decorated
+
+# ---------- Simple templates (for quick local test) ----------
+INDEX_HTML = """
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Sun Automation - Dashboard</title></head>
+  <body>
+    <h2>Dashboard - Sun Automation</h2>
+    {% if session.username %}
+      <p>Chào, {{ session.username }} (<a href="{{ url_for('logout') }}">Logout</a>)</p>
+    {% endif %}
+    <p><a href="{{ url_for('export_to_excel') }}">Export Excel (demo)</a></p>
+    <div id="content"></div>
+  </body>
+</html>
+"""
+
+LOGIN_HTML = """
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Đăng nhập</title></head>
+  <body>
+    <h2>Đăng nhập</h2>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul>{% for m in messages %}<li style="color:red">{{m}}</li>{% endfor %}</ul>
+      {% endif %}
+    {% endwith %}
+    <form method="post" action="{{ url_for('login') }}">
+      <label>Email: <input name="email" type="email" required></label><br>
+      <label>Password: <input name="password" type="password" required></label><br>
+      <button type="submit">Đăng nhập</button>
+    </form>
+    <p><a href="{{ url_for('forgot_password') }}">Quên mật khẩu?</a></p>
+  </body>
+</html>
+"""
+
+FORGOT_PW_HTML = """
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Quên mật khẩu</title></head>
+  <body>
+    <h2>Quên mật khẩu</h2>
+    <form method="post">
+      <label>Email: <input name="email" type="email" required></label><br>
+      <button type="submit">Gửi link đặt lại</button>
+    </form>
+  </body>
+</html>
+"""
+
+RESET_PW_HTML = """
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Reset mật khẩu</title></head>
+  <body>
+    <h2>Đặt lại mật khẩu cho {{ email }}</h2>
+    <form method="post">
+      <label>Mật khẩu mới: <input name="new_password" type="password" required></label><br>
+      <button type="submit">Xác nhận</button>
+    </form>
+  </body>
+</html>
+"""
+
+MESSAGE_HTML = """
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Message</title></head>
+  <body>
+    <h3 style="color:{{ color }}">{{ msg }}</h3>
+    <p><a href="{{ url_for('index') }}">Về trang chính</a></p>
+  </body>
+</html>
+"""
+
+# ---------- Routes ----------
 @app.route("/")
+@login_required
 def index():
-    success = request.args.get("success")
-    return render_template("index.html", success=success)
+    # Hiển thị dashboard (tạm simple)
+    return render_template("index.html")
 
-
-# =====================================
-# 🔐 API đăng nhập
-# =====================================
-@app.route("/login", methods=["POST"])
+# Render login page (GET) and handle login POST
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    data = request.get_json(force=True)
-    email = data.get("email")
-    password = data.get("password")
+    if request.method == "GET":
+        return render_template_string(LOGIN_HTML)
+
+    # POST (form submit)
+    email = request.form.get("email")
+    password = request.form.get("password")
 
     if not email or not password:
-        return jsonify({"success": False, "message": "❌ Vui lòng nhập email và mật khẩu"}), 400
+        flash("Vui lòng cung cấp email và mật khẩu")
+        return redirect(url_for("login"))
 
     admin = admins.find_one({"email": email})
-    if not admin or not check_password_hash(admin.get("password", ""), password):
-        return jsonify({"success": False, "message": "🚫 Email hoặc mật khẩu không đúng!"}), 401
+    if not admin:
+        flash("Email không tồn tại")
+        return redirect(url_for("login"))
 
-    return jsonify({
-        "success": True,
-        "message": "✅ Đăng nhập thành công",
-        "username": admin["username"],
-        "email": admin["email"]
-    })
+    hashed_pw = admin.get("password", "")
+    # ensure using werkzeug.check_password_hash correctly
+    if not hashed_pw or not check_password_hash(hashed_pw, password):
+        flash("Email hoặc mật khẩu không đúng")
+        return redirect(url_for("login"))
 
+    # set session
+    session["user_email"] = admin["email"]
+    session["username"] = admin.get("username", "Admin")
+    return redirect(url_for("index"))
 
-# =====================================
-# ✉️ Quên mật khẩu
-# =====================================
+# Separate API-style login (JSON) like bạn có trước
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    try:
+        data = request.get_json(force=True)
+        email = data.get("email")
+        password = data.get("password")
+        if not email or not password:
+            return jsonify({"success": False, "message": "Thiếu email hoặc mật khẩu"}), 400
+        admin = admins.find_one({"email": email})
+        if not admin or not check_password_hash(admin.get("password",""), password):
+            return jsonify({"success": False, "message": "Email hoặc mật khẩu không đúng"}), 401
+        # For API, return success but do NOT set session (unless you want sessions for API)
+        return jsonify({"success": True, "username": admin.get("username"), "email": admin.get("email")})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("index"))
+
+# Forgot password (GET shows form, POST sends email)
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     if request.method == "GET":
-        return render_template("forgot_password.html")
+        return render_template_string(FORGOT_PW_HTML)
 
     email = request.form.get("email")
-    admin = admins.find_one({"email": email})
+    if not email:
+        return render_template_string(MESSAGE_HTML, msg="Vui lòng nhập email", color="red")
 
+    admin = admins.find_one({"email": email})
     if not admin:
-        return render_template("message.html", msg="🚫 Email không tồn tại!", color="red")
+        return render_template_string(MESSAGE_HTML, msg="Email không tồn tại", color="red")
 
     token = serializer.dumps(email, salt="password-reset")
     reset_link = f"{request.host_url}reset-password/{token}"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "🔒 Đặt lại mật khẩu - Sun Automation"
-    msg["From"] = SMTP_USER
+    msg["From"] = SMTP_USER or "no-reply@example.com"
     msg["To"] = email
-
     body = f"""
     <html><body>
-    <h3>Xin chào {admin.get("username","Admin")},</h3>
+    <h3>Xin chào {admin.get('username','Admin')},</h3>
     <p>Bạn vừa yêu cầu đặt lại mật khẩu. Link hợp lệ trong 15 phút:</p>
     <a href="{reset_link}">{reset_link}</a>
-    <br><br><b>Sun Automation System</b>
+    <p>Nếu bạn không yêu cầu, có thể bỏ qua email này.</p>
+    <br><b>Sun Automation System</b>
     </body></html>
     """
     msg.attach(MIMEText(body, "html"))
+
+    # Try send mail (if SMTP config provided)
+    if not SMTP_USER or not SMTP_PASS:
+        # For local testing, just show the link instead of sending email
+        return render_template_string(MESSAGE_HTML, msg=f"Link reset (dev): {reset_link}", color="orange")
 
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_USER, email, msg.as_string())
-        return render_template("message.html", msg=f"✅ Link đã gửi đến {email}", color="green")
+            server.sendmail(msg["From"], [email], msg.as_string())
+        return render_template_string(MESSAGE_HTML, msg=f"Link đã gửi đến {email}", color="green")
     except Exception as e:
-        print("❌ Lỗi gửi email:", e)
-        return render_template("message.html", msg=f"Lỗi khi gửi email: {e}", color="red")
+        return render_template_string(MESSAGE_HTML, msg=f"Lỗi gửi email: {e}", color="red")
 
-
-# =====================================
-# 🔁 Reset mật khẩu
-# =====================================
+# Reset password
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
     try:
-        email = serializer.loads(token, salt="password-reset", max_age=900)
+        email = serializer.loads(token, salt="password-reset", max_age=900)  # 15 phút
     except SignatureExpired:
-        return render_template("message.html", msg="⏰ Link đã hết hạn!", color="red")
+        return render_template_string(MESSAGE_HTML, msg="Link đã hết hạn", color="red")
     except BadSignature:
-        return render_template("message.html", msg="🚫 Link không hợp lệ!", color="red")
+        return render_template_string(MESSAGE_HTML, msg="Link không hợp lệ", color="red")
 
     if request.method == "GET":
-        return render_template("reset_password.html", email=email)
+        return render_template_string(RESET_PW_HTML, email=email)
 
     new_password = request.form.get("new_password")
     if not new_password:
-        return render_template("message.html", msg="❌ Vui lòng nhập mật khẩu mới!", color="red")
+        return render_template_string(MESSAGE_HTML, msg="Vui lòng nhập mật khẩu mới", color="red")
 
     hashed_pw = generate_password_hash(new_password)
     admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
-    return redirect(url_for("index", success=1))
+    return render_template_string(MESSAGE_HTML, msg="Đổi mật khẩu thành công. Vui lòng đăng nhập lại", color="green")
 
-
-# =====================================
-# 🧩 API lấy dữ liệu chấm công JSON
-# =====================================
+# ---------- Build query function (giữ nguyên logic) ----------
 def build_query(filter_type, start_date, end_date, search):
     query = {}
     today = datetime.now(VN_TZ)
@@ -180,8 +288,9 @@ def build_query(filter_type, start_date, end_date, search):
         query["$or"] = [{"EmployeeId": {"$regex": regex}}, {"EmployeeName": {"$regex": regex}}]
     return query
 
-
+# API lấy attendances (bảo vệ bằng login_required)
 @app.route("/api/attendances", methods=["GET"])
+@login_required
 def get_attendances():
     try:
         filter_type = request.args.get("filter", "hôm nay").lower()
@@ -193,20 +302,18 @@ def get_attendances():
         data = list(collection.find(query, {"_id": 0}))
         return jsonify({"success": True, "count": len(data), "data": data})
     except Exception as e:
-        print("❌ Lỗi get_attendances:", e)
         return jsonify({"success": False, "error": str(e)}), 500
 
-
-# =====================================
-# 📊 API xuất Excel
-# =====================================
+# Export excel (bảo vệ)
 @app.route("/api/export-excel", methods=["GET"])
+@login_required
 def export_to_excel():
     try:
-        email = request.args.get("email")
+        # Tùy theo UI bạn có thể dùng session["user_email"]
+        email = session.get("user_email")
         admin = admins.find_one({"email": email})
         if not admin:
-            return jsonify({"error": "🚫 Email không có quyền truy cập"}), 403
+            return jsonify({"error": "Không có quyền"}), 403
 
         filter_type = request.args.get("filter", "hôm nay").lower()
         start_date = request.args.get("startDate")
@@ -215,9 +322,19 @@ def export_to_excel():
         query = build_query(filter_type, start_date, end_date, search)
 
         data = list(collection.find(query, {"_id": 0}))
-        template_path = "templates/Copy of Form chấm công.xlsx"
-        wb = load_workbook(template_path)
-        ws = wb.active
+        # template path: nếu bạn dùng file trên disk, đảm bảo tồn tại
+        template_path = os.path.join("templates", "Copy of Form chấm công.xlsx")
+        if not os.path.exists(template_path):
+            # fallback: tạo workbook cơ bản nếu không có template
+            from openpyxl import Workbook
+            wb = Workbook()
+            ws = wb.active
+            headers = ["EmployeeId", "EmployeeName", "ProjectId", "Tasks", "Address", "Status", "CheckinDate"]
+            for idx, h in enumerate(headers, start=1):
+                ws.cell(row=1, column=idx, value=h)
+        else:
+            wb = load_workbook(template_path)
+            ws = wb.active
 
         border = Border(left=Side(style="thin"), right=Side(style="thin"),
                         top=Side(style="thin"), bottom=Side(style="thin"))
@@ -241,18 +358,45 @@ def export_to_excel():
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-
         filename = f"ChamCong_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
         return send_file(output, as_attachment=True,
                          download_name=filename,
                          mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
-        print("❌ Lỗi export:", e)
         return jsonify({"error": str(e)}), 500
 
+# ---------- Admin helper route: tạo admin test (LOCAL ONLY) ----------
+@app.route("/create-admin", methods=["POST"])
+def create_admin():
+    """
+    Route helper để tạo admin test (LOCAL dev).
+    Sử dụng:
+      curl -X POST -d "email=you@local&username=You&password=123456" http://localhost:5000/create-admin
+    NOTE: Xóa route này khi deploy production.
+    """
+    try:
+        # Chỉ cho phép local hoặc khi biến env DEV=true
+        dev_mode = os.getenv("DEV", "true").lower() in ("1", "true", "yes")
+        if not dev_mode:
+            return jsonify({"error": "Not allowed"}), 403
 
-# =====================================
-# 🚀 Run server
-# =====================================
+        email = request.form.get("email")
+        username = request.form.get("username", "Admin")
+        password = request.form.get("password", "123456")
+        if not email or not password:
+            return jsonify({"error": "email và password required"}), 400
+
+        if admins.find_one({"email": email}):
+            return jsonify({"error": "Email đã tồn tại"}), 400
+
+        hashed = generate_password_hash(password)
+        admins.insert_one({"email": email, "username": username, "password": hashed})
+        return jsonify({"success": True, "email": email, "username": username})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ---------- Run ----------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # debug mode controlled by env var
+    debug = os.getenv("FLASK_DEBUG", "true").lower() in ("1", "true", "yes")
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)), debug=debug)
