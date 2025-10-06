@@ -46,6 +46,8 @@
     .msg { margin: 10px 0; padding: 8px 10px; border-radius: 6px; }
     .msg.error { background: #ffe6e6; color: var(--danger); }
     .msg.success { background: #e8fbe8; color: var(--success); }
+    a.map-link { color: var(--primary); text-decoration: none; font-weight: 500; }
+    a.map-link:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -98,6 +100,7 @@
           <th onclick="sortTable('CheckinTime')">Giờ Check-in</th>
           <th>Ảnh</th>
           <th>Địa chỉ</th>
+          <th>Vị trí</th>
           <th onclick="sortTable('Status')">Trạng thái</th>
           <th>Ghi chú</th>
         </tr>
@@ -141,7 +144,7 @@
         document.getElementById("loginBtn").style.display = "none";
         document.getElementById("logoutBtn").style.display = "inline-block";
         showMessage("✅ Đăng nhập thành công", "success");
-        applyFilter("hôm nay"); // auto load hôm nay
+        applyFilter("hôm nay");
       } else showMessage(data.message || "🚫 Sai thông tin", "error");
     }
 
@@ -181,7 +184,6 @@
       tbody.innerHTML = "";
       let data = [...rawData];
 
-      // sort
       if (currentSort.column && currentSort.order) {
         data.sort((a,b)=>{
           let A = a[currentSort.column]||"", B = b[currentSort.column]||"";
@@ -191,12 +193,14 @@
         });
       }
 
-      // pagination
       const startIdx = (currentPage-1)*rowsPerPage;
       const pageData = data.slice(startIdx, startIdx+rowsPerPage);
 
       pageData.forEach(r=>{
-        const img = r.FaceImage ? `<img src="${r.FaceImage}" class="checkin-photo">` : "";
+        const img = r.FaceImage || r.PhotoURL ? `<img src="${r.FaceImage || r.PhotoURL}" class="checkin-photo">` : "";
+        const mapLink = (r.Latitude && r.Longitude)
+          ? `<a href="https://www.google.com/maps?q=${r.Latitude},${r.Longitude}" target="_blank" class="map-link">Xem</a>`
+          : "";
         tbody.innerHTML += `
           <tr>
             <td>${r.EmployeeId||""}</td>
@@ -205,6 +209,7 @@
             <td>${r.CheckinTime||""}</td>
             <td>${img}</td>
             <td>${r.Address||""}</td>
+            <td>${mapLink}</td>
             <td>${r.Status||""}</td>
             <td>${r.OtherNote||r.Tasks||""}</td>
           </tr>
@@ -242,7 +247,6 @@
       renderTable();
     }
 
-    // --- FILTER LOGIC ---
     function applyFilter(f) {
       currentFilter = f;
       startDate = endDate = "";
@@ -279,7 +283,6 @@
       if (map[currentFilter]) document.getElementById(map[currentFilter]).classList.add("active");
     }
 
-    // --- AUTO LOGIN CHECK ---
     window.onload = () => {
       const email = localStorage.getItem("adminEmail");
       if (email) {
