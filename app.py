@@ -9,7 +9,8 @@ import calendar
 from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
-from flask_mail import Mail, Message
+import smtplib
+from email.mime.text import MIMEText
 from itsdangerous import URLSafeTimedSerializer as Serializer, SignatureExpired
 
 app = Flask(__name__, template_folder="templates")
@@ -30,15 +31,12 @@ db = client[DB_NAME]
 admins = db["admins"]
 collection = db["alt_checkins"]
 
-# ---- Flask-Mail Config ----
-app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
-app.config['MAIL_PORT'] = os.getenv('MAIL_PORT', 587)
-app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', True)
-app.config['MAIL_USE_SSL'] = os.getenv('MAIL_USE_SSL', False)  # Không dùng SSL với port 587
-app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'sun.automation.sys@gmail.com')
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'ihgzxunefndizeub')  # Sử dụng mật khẩu ứng dụng Gmail
-app.config['MAIL_DEFAULT_SENDER'] = ('Admin', app.config['MAIL_USERNAME'])
-mail = Mail(app)
+# ---- SMTP Config ----
+SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+SMTP_PORT = os.getenv('SMTP_PORT', 587)
+SMTP_USERNAME = os.getenv('SMTP_USERNAME', 'banhbaobeo2205@gmail.com')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', 'vynqvvvmbcigpdvy')  # Sử dụng mật khẩu ứng dụng Gmail
+SMTP_FROM = os.getenv('SMTP_FROM', 'Admin <sun.automation.sys@gmail.com>')
 
 # ---- ItsDangerous Serializer ----
 s = Serializer(app.config['SECRET_KEY'])
@@ -59,24 +57,34 @@ def verify_reset_token(token):
 def send_reset_email(admin):
     token = get_reset_token(admin['email'])
     reset_url = url_for('reset_password', token=token, _external=True)
-    msg = Message(
-        'Yêu cầu Đặt lại Mật khẩu',
-        recipients=[admin['email']],
-        html=f"""
-        <p>Xin chào {admin['username']},</p>
-        <p>Bạn (hoặc ai đó) đã yêu cầu đặt lại mật khẩu cho tài khoản admin.</p>
-        <p>Vui lòng nhấp vào đường link sau để <strong>ĐẶT LẠI MẬT KHẨU</strong>: <a href="{reset_url}">{reset_url}</a></p>
-        <p style="color: red;"><strong>Link này sẽ hết hạn sau 30 phút.</strong></p>
-        <p>Nếu bạn không yêu cầu điều này, hãy bỏ qua email này.</p>
-        <p>Trân trọng,</p>
-        <p>Hệ thống Admin</p>
-        """
-    )
+    msg = MIMEText(f"""
+    <p>Xin chào {admin['username']},</p>
+    <p>Bạn (hoặc ai đó) đã yêu cầu đặt lại mật khẩu cho tài khoản admin.</p>
+    <p>Vui lòng nhấp vào đường link sau để <strong>ĐẶT LẠI MẬT KHẨU</strong>: <a href="{reset_url}">{reset_url}</a></p>
+    <p style="color: red;"><strong>Link này sẽ hết hạn sau 30 phút.</strong></p>
+    <p>Nếu bạn không yêu cầu điều này, hãy bỏ qua email này.</p>
+    <p>Trân trọng,</p>
+    <p>Hệ thống Admin</p>
+    """, 'html')
+    msg['Subject'] = 'Yêu cầu Đặt lại Mật khẩu'
+    msg['From'] = SMTP_FROM
+    msg['To'] = admin['email']
+
     try:
-        mail.send(msg)
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()  # Bật TLS
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+        print(f"✅ Email gửi thành công đến {admin['email']} tại {datetime.now(VN_TZ).strftime('%H:%M:%S %d/%m/%Y')}")
         return True
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"❌ Lỗi xác thực SMTP: {str(e)} tại {datetime.now(VN_TZ).strftime('%H:%M:%S %d/%m/%Y')}")
+        return False
+    except smtplib.SMTPException as e:
+        print(f"❌ Lỗi SMTP: {str(e)} tại {datetime.now(VN_TZ).strftime('%H:%M:%S %d/%m/%Y')}")
+        return False
     except Exception as e:
-        print(f"❌ Lỗi gửi email: {str(e)}")
+        print(f"❌ Lỗi gửi email: {str(e)} tại {datetime.now(VN_TZ).strftime('%H:%M:%S %d/%m/%Y')}")
         return False
 
 # ---- ROUTES ỨNG DỤNG ----
