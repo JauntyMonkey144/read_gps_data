@@ -9,32 +9,26 @@ import calendar
 from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
-
 app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
-
 # ---- Timezone VN ----
 VN_TZ = timezone(timedelta(hours=7))
-
 # ---- MongoDB Config ----
 MONGO_URI = os.getenv(
     "MONGO_URI",
     "mongodb+srv://banhbaobeo2205:lm2hiCLXp6B0D7hq@cluster0.festnla.mongodb.net/?retryWrites=true&w=majority"
 )
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
-
 # ---- Kết nối MongoDB ----
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
-
 # Các collection sử dụng
 admins = db["admins"]
-collection = db["alt_checkins"]  
-
+collection = db["alt_checkins"]
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
 def index():
-    success = request.args.get("success")  # nếu =1 -> hiển thị thông báo
+    success = request.args.get("success") # nếu =1 -> hiển thị thông báo
     return render_template("index.html", success=success)
 # ---- Đăng nhập API ----
 @app.route("/login", methods=["POST", "GET"])
@@ -49,7 +43,6 @@ def login():
     admin = admins.find_one({"email": email})
     if not admin or not check_password_hash(admin.get("password", ""), password):
         return jsonify({"success": False, "message": "🚫 Email hoặc mật khẩu không đúng!"}), 401
-
     return jsonify({
         "success": True,
         "message": "✅ Đăng nhập thành công",
@@ -105,7 +98,7 @@ def build_attendance_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
     conditions = []
-    
+   
     # --- Bộ lọc thời gian ---
     date_filter = {}
     if filter_type == "custom" and start_date and end_date:
@@ -122,10 +115,10 @@ def build_attendance_query(filter_type, start_date, end_date, search):
         date_filter = {"CheckinDate": {"$gte": start, "$lte": end}}
     elif filter_type == "năm":
         date_filter = {"CheckinDate": {"$regex": f"^{today.year}"}}
-    
+   
     if date_filter:
         conditions.append(date_filter)
-    
+   
     # --- Bộ lọc nghỉ phép ---
     if filter_type == "nghỉ phép":
         leave_or = {
@@ -146,7 +139,7 @@ def build_attendance_query(filter_type, start_date, end_date, search):
             ]
         }
         conditions.append(not_leave_or)
-    
+   
     # --- Bộ lọc tìm kiếm ---
     if search:
         regex = re.compile(search, re.IGNORECASE)
@@ -157,18 +150,17 @@ def build_attendance_query(filter_type, start_date, end_date, search):
             ]
         }
         conditions.append(search_or)
-    
+   
     # Kết hợp tất cả với $and
     if len(conditions) == 1:
         return conditions[0]
     else:
         return {"$and": conditions}
-
 def build_leave_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
     conditions = []
-    
+   
     # Luôn lọc cho nghỉ phép
     leave_or = {
         "$or": [
@@ -178,34 +170,59 @@ def build_leave_query(filter_type, start_date, end_date, search):
         ]
     }
     conditions.append(leave_or)
-    
+   
     # --- Bộ lọc thời gian (dựa trên ngày tạo đơn - CheckinTime string "%d/%m/%Y %H:%M:%S") ---
     date_filter = {}
     if filter_type == "custom" and start_date and end_date:
         # Chuyển %Y-%m-%d sang %d/%m/%Y để match đầu string CheckinTime
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").strftime("%d/%m/%Y")
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").strftime("%d/%m/%Y")
-        date_filter = {"CheckinTime": {"$regex": f"^{start_dt}|^{end_dt}"}}
+        date_filter = {
+            "CheckinTime": {
+                "$gte": f"{start_dt} 00:00:00",
+                "$lte": f"{end_dt} 23:59:59"
+            }
+        }
     elif filter_type == "hôm nay":
         today_str = today.strftime("%d/%m/%Y")
-        date_filter = {"CheckinTime": {"$regex": f"^{today_str}"}}
+        date_filter = {
+            "CheckinTime": {
+                "$gte": f"{today_str} 00:00:00",
+                "$lte": f"{today_str} 23:59:59"
+            }
+        }
     elif filter_type == "tuần":
         week_start = (today - timedelta(days=today.weekday())).strftime("%d/%m/%Y")
         week_end = (today + timedelta(days=6 - today.weekday())).strftime("%d/%m/%Y")
-        date_filter = {"CheckinTime": {"$regex": f"^{week_start}|^{week_end}"}}
+        date_filter = {
+            "CheckinTime": {
+                "$gte": f"{week_start} 00:00:00",
+                "$lte": f"{week_end} 23:59:59"
+            }
+        }
     elif filter_type == "tháng":
         month = f"{today.month:02d}"
         year = str(today.year)
-        # Regex match bất kỳ ngày nào trong tháng: dd/mm/yyyy với mm = month
-        date_filter = {"CheckinTime": {"$regex": f"^([0-3][0-9])/{month}/{year}"}}
+        start_day = "01"
+        end_day = str(calendar.monthrange(today.year, today.month)[1])
+        date_filter = {
+            "CheckinTime": {
+                "$gte": f"{start_day}/{month}/{year} 00:00:00",
+                "$lte": f"{end_day}/{month}/{year} 23:59:59"
+            }
+        }
     elif filter_type == "năm":
         year = str(today.year)
-        # Regex match năm trong phần date
-        date_filter = {"CheckinTime": {"$regex": f"/{year}/"}}
-    
+        date_filter = {
+            "CheckinTime": {
+                "$gte": f"01/01/{year} 00:00:00",
+                "$lte": f"31/12/{year} 23:59:59"
+            }
+        }
+   
     if date_filter:
         conditions.append(date_filter)
-    
+   
     # --- Bộ lọc tìm kiếm ---
     if search:
         regex = re.compile(search, re.IGNORECASE)
@@ -216,7 +233,6 @@ def build_leave_query(filter_type, start_date, end_date, search):
             ]
         }
         conditions.append(search_or)
-
     # Kết hợp tất cả với $and
     if len(conditions) == 1:
         return conditions[0]
@@ -226,21 +242,21 @@ def build_leave_query(filter_type, start_date, end_date, search):
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
-        email = request.args.get("email")  # ✅ Trùng key với front-end
+        email = request.args.get("email") # ✅ Trùng key với front-end
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
         # ✅ Validate email tồn tại trong admins (không cần password lại)
         admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
         if not admin:
             return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
-        filter_type = request.args.get("filter", "hôm nay").lower()  # Default "hôm nay"
+        filter_type = request.args.get("filter", "hôm nay").lower() # Default "hôm nay"
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
         query = build_attendance_query(filter_type, start_date, end_date, search)
         # Fetch TẤT CẢ dữ liệu matching filter (không filter theo user)
         data = list(collection.find(query, {"_id": 0}))
-        
+       
         # ✨ Cập nhật: Kết hợp dữ liệu từ ProjectId, Tasks, OtherNote vào trường GhiChu mới
         for item in data:
             ghi_chu_parts = []
@@ -259,13 +275,12 @@ def get_attendances():
                 ghi_chu_parts.append(f"Note: {item['OtherNote']}")
             # Gán trường GhiChu mới (có thể dùng ở frontend thay vì OtherNote||Tasks)
             item['GhiChu'] = '; '.join(ghi_chu_parts) if ghi_chu_parts else ''
-        
-        print(f"DEBUG: Fetched {len(data)} records for email {email} with filter {filter_type}")  # Log debug
+       
+        print(f"DEBUG: Fetched {len(data)} records for email {email} with filter {filter_type}") # Log debug
         return jsonify(data)
     except Exception as e:
         print(f"❌ Error in get_attendances: {e}")
         return jsonify({"error": str(e)}), 500
-
 # ---- API lấy dữ liệu nghỉ phép (validate email từ admins) ----
 @app.route("/api/leaves", methods=["GET"])
 def get_leaves():
@@ -287,9 +302,9 @@ def get_leaves():
             "_id": 0,
             "EmployeeId": 1,
             "EmployeeName": 1,
-            "CheckinDate": 1,  # Ngày nghỉ
-            "CheckinTime": 1,  # Ngày tạo đơn
-            "Tasks": 1,        # Ghi chú
+            "CheckinDate": 1, # Ngày nghỉ
+            "CheckinTime": 1, # Ngày tạo đơn
+            "Tasks": 1, # Ghi chú
             "Status": 1
         }))
         print(f"DEBUG: Fetched {len(data)} leave records for email {email} with filter {filter_type}")
@@ -382,8 +397,8 @@ def export_to_excel():
                 if "nghỉ phép" in tasks_str.lower():
                     if ":" in tasks_str:
                         split_task = tasks_str.split(":", 1)
-                        tasks_str = split_task[0].strip()       # → "Nghỉ phép"
-                        leave_reason = split_task[1].strip()    # → Lý do
+                        tasks_str = split_task[0].strip() # → "Nghỉ phép"
+                        leave_reason = split_task[1].strip() # → Lý do
                     else:
                         tasks_str = tasks_str.strip()
                 status = rec.get("Status", "")
@@ -449,7 +464,6 @@ def export_to_excel():
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-
         return send_file(
             output,
             as_attachment=True,
@@ -459,7 +473,6 @@ def export_to_excel():
     except Exception as e:
         print("❌ Lỗi export:", e)
         return jsonify({"error": str(e)}), 500
-
 # ---- API xuất Excel cho nghỉ phép ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
@@ -478,19 +491,30 @@ def export_leaves_to_excel():
         search = request.args.get("search", "").strip()
         # ---- Tạo query ----
         query = build_leave_query(filter_type, start_date, end_date, search)
-        # Fetch dữ liệu nghỉ phép với fields phù hợp
+        # ---- Lấy dữ liệu ----
         data = list(collection.find(query, {
             "_id": 0,
             "EmployeeId": 1,
             "EmployeeName": 1,
-            "CheckinDate": 1,  # Ngày nghỉ
-            "CheckinTime": 1,  # Ngày tạo đơn
-            "Tasks": 1,        # Ghi chú
+            "CheckinDate": 1,
+            "CheckinTime": 1,
+            "Tasks": 1,
             "Status": 1,
-            "ApprovedBy": 1,   # Thêm để export
-            "ApproveNote": 1   # Thêm để export
+            "ApprovedBy": 1,
+            "ApproveNote": 1
         }))
-        # ---- Load template Excel (sử dụng cùng template, nhưng điền theo cột nghỉ phép) ----
+        # ---- Nhóm theo nhân viên + ngày ----
+        grouped = {}
+        for d in data:
+            emp_id = d.get("EmployeeId", "")
+            emp_name = d.get("EmployeeName", "")
+            date = d.get("CheckinDate") or (
+                d["CheckinTime"].astimezone(VN_TZ).strftime("%Y-%m-%d")
+                if isinstance(d.get("CheckinTime"), datetime) else ""
+            )
+            key = (emp_id, emp_name, date)
+            grouped.setdefault(key, []).append(d)
+        # ---- Load template Excel ----
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
@@ -501,48 +525,60 @@ def export_leaves_to_excel():
             bottom=Side(style="thin", color="000000"),
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        # ---- Điền dữ liệu nghỉ phép ----
+        # ---- Điền dữ liệu ----
         start_row = 2
-        for i, rec in enumerate(data, start=0):
+        for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
-            # Cột 1: Mã NV
-            ws.cell(row=row, column=1, value=rec.get("EmployeeId", ""))
-            # Cột 2: Tên nhân viên
-            ws.cell(row=row, column=2, value=rec.get("EmployeeName", ""))
-            # Cột 3: Ngày nghỉ
-            ws.cell(row=row, column=3, value=rec.get("CheckinDate", ""))
-            # Cột 4: Ngày tạo đơn (format CheckinTime)
-            checkin_time = rec.get("CheckinTime")
-            time_str = ""
-            if isinstance(checkin_time, datetime):
-                time_str = checkin_time.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
-            elif isinstance(checkin_time, str):
-                time_str = checkin_time
-            ws.cell(row=row, column=4, value=time_str)
-            # Cột 5: Ghi chú (Tasks)
-            tasks = rec.get("Tasks")
-            tasks_str = ""
-            if isinstance(tasks, list):
-                tasks_str = ", ".join(tasks)
-            else:
-                tasks_str = str(tasks or "")
-            ws.cell(row=row, column=5, value=tasks_str)
-            # Cột 6: Trạng thái
-            ws.cell(row=row, column=6, value=rec.get("Status", ""))
-            # ---- Border + căn chỉnh cho 6 cột chính ----
-            for col in range(1, 7):
+            ws.cell(row=row, column=1, value=emp_id)
+            ws.cell(row=row, column=2, value=emp_name)
+            ws.cell(row=row, column=3, value=date)
+            for j, rec in enumerate(records[:10], start=1):
+                # ---- Xử lý thời gian tạo đơn ----
+                checkin_time = rec.get("CheckinTime")
+                time_str = ""
+                if isinstance(checkin_time, datetime):
+                    time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
+                elif isinstance(checkin_time, str) and checkin_time.strip():
+                    try:
+                        parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
+                        time_str = parsed.strftime("%H:%M:%S")
+                    except Exception:
+                        time_str = checkin_time
+                # ---- Xử lý Tasks và lý do ----
+                tasks = rec.get("Tasks")
+                tasks_str = ""
+                leave_reason = ""
+                if isinstance(tasks, list):
+                    tasks_str = ", ".join(tasks)
+                else:
+                    tasks_str = str(tasks or "")
+                if "nghỉ phép" in tasks_str.lower():
+                    if ":" in tasks_str:
+                        split_task = tasks_str.split(":", 1)
+                        tasks_str = split_task[0].strip()  # "Nghỉ phép"
+                        leave_reason = split_task[1].strip()  # Lý do
+                    else:
+                        tasks_str = tasks_str.strip()
+                # ---- Xử lý trạng thái ----
+                status = rec.get("Status", "")
+                if rec.get("ApprovedBy"):
+                    status = f"Đã duyệt bởi {rec['ApprovedBy']}"
+                # ---- Tạo chuỗi xuất theo format yêu cầu ----
+                entry = f"{time_str};{tasks_str};{leave_reason};{status}"
+                ws.cell(row=row, column=3 + j, value=entry)
+            # ---- Border + căn chỉnh ----
+            for col in range(1, 14):
                 cell = ws.cell(row=row, column=col)
                 cell.border = border
                 cell.alignment = align_left
             # ---- Auto-fit row height ----
             max_lines = max(
                 (str(ws.cell(row=row, column=col).value).count("\n") + 1 if ws.cell(row=row, column=col).value else 1)
-                for col in range(1, 7)
+                for col in range(1, 14)
             )
             ws.row_dimensions[row].height = max_lines * 20
         # ---- Auto-fit column width ----
-        cols = list(ws.columns)[:6]  # Convert generator to list and slice first 6 columns
-        for col in cols:
+        for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
             for cell in col:
@@ -563,7 +599,6 @@ def export_leaves_to_excel():
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-
         return send_file(
             output,
             as_attachment=True,
