@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hệ thống chấm công GPS</title>
+  <title>Dữ liệu Chấm công & Nghỉ phép</title>
   <style>
     :root {
       --bg: #f4f6f9;
@@ -26,7 +26,7 @@
     }
     button:hover { opacity: 0.9; }
     button.active { background: var(--success); }
-    input[type=text], input[type=email], input[type=password], input[type=date] {
+    select, input[type=text], input[type=email], input[type=password], input[type=date] {
       padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
     }
     table { width: 100%; border-collapse: collapse; background: white; box-shadow: var(--shadow); }
@@ -48,7 +48,6 @@
     .msg.success { background: #e8fbe8; color: var(--success); }
     a.map-link { color: var(--primary); text-decoration: none; font-weight: 500; }
     a.map-link:hover { text-decoration: underline; }
-
     /* Ẩn các phần sau đăng nhập ban đầu */
     #greeting, #dataTabs, #filters, #dateFilter, #searchFilter, #tableContainer, #pagination { display: none; }
     #greeting { text-align: center; margin: 10px 0; font-size: 18px; color: var(--primary); font-weight: bold; }
@@ -59,8 +58,7 @@
   </style>
 </head>
 <body>
-  <h1>📍 Hệ thống chấm công GPS</h1>
-
+  <h1>📍Dữ liệu Chấm công & Nghỉ phép</h1>
   <!-- Khu vực đăng nhập -->
   <div class="controls login-box">
     <input type="email" id="loginEmail" placeholder="Nhập email admin..." />
@@ -69,18 +67,14 @@
     <button id="logoutBtn" style="display:none;background:var(--danger);">Đăng xuất</button>
     <a href="/forgot-password" style="color:var(--muted);font-size:13px;text-decoration:none;">Reset mật khẩu</a>
   </div>
-
   <div id="messageArea"></div>
-
   <!-- Lời chào -->
   <div id="greeting"></div>
-
   <!-- Tabs dữ liệu -->
   <div id="dataTabs">
     <button id="tabAttendance" class="active" onclick="switchTab('attendance')">Điểm danh</button>
     <button id="tabLeave" onclick="switchTab('leave')">Nghỉ phép</button>
   </div>
-
   <!-- Bộ lọc cho điểm danh -->
   <div id="filters" class="controls">
     <label><b>Bộ lọc:</b></label>
@@ -90,23 +84,27 @@
     <button onclick="applyFilter('năm')" id="btn-nam">Năm nay</button>
     <button onclick="applyFilter('tất cả')" id="btn-tatca">Tất cả</button>
   </div>
-
   <!-- Lọc theo ngày cho điểm danh -->
   <div id="dateFilter" class="controls">
     <label><b>Từ ngày:</b></label><input type="date" id="startDate" />
     <label><b>Đến ngày:</b></label><input type="date" id="endDate" />
     <button onclick="applyDateRange()">Áp dụng</button>
   </div>
-
-  <!-- Tìm kiếm cho điểm danh -->
+  <!-- Tìm kiếm và số dòng cho điểm danh -->
   <div id="searchFilter" class="controls">
     <input type="text" id="searchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
+    <select id="rowsPerPage" onchange="updateRowsPerPage()">
+      <option value="5">5 dòng</option>
+      <option value="10" selected>10 dòng</option>
+      <option value="20">20 dòng</option>
+      <option value="25">25 dòng</option>
+    </select>
     <button onclick="applySearch()">Tìm kiếm</button>
-    <button onclick="exportExcel()">📤 Xuất Excel</button>
+    <button onclick="exportExcel()">📤 Xuất Điểm Danh</button>
+    <button onclick="exportCombinedExcel()">📤 Xuất Cả Hai</button>
     <button onclick="refreshData()">🔄 Làm mới</button>
     <button onclick="resetFilter()">↻ Reset</button>
   </div>
-
   <!-- Bảng dữ liệu điểm danh -->
   <div id="tableContainer" class="table-container">
     <table id="dataTable">
@@ -116,7 +114,7 @@
           <th onclick="sortTable('EmployeeName')">Tên nhân viên</th>
           <th onclick="sortTable('CheckinDate')">Ngày</th>
           <th onclick="sortTable('CheckinTime')">Giờ Check-in</th>
-          <th onclick="sortTable('ProjectId')">Mã dự án</th>   
+          <th onclick="sortTable('ProjectId')">Mã dự án</th>
           <th onclick="sortTable('Tasks')">Công việc</th>
           <th onclick="sortTable('OtherNote')">Công việc khác</th>
           <th>Ảnh</th>
@@ -128,9 +126,7 @@
       <tbody id="dataBody"></tbody>
     </table>
   </div>
-
   <div id="pagination" class="pagination"></div>
-
   <!-- Phần nghỉ phép -->
   <div id="leaveSection">
     <div class="controls">
@@ -141,21 +137,25 @@
       <button onclick="applyLeaveFilter('năm')" id="leave-btn-nam">Năm nay</button>
       <button onclick="applyLeaveFilter('tất cả')" id="leave-btn-tatca">Tất cả</button>
     </div>
-
     <div class="controls">
       <label><b>Từ ngày:</b></label><input type="date" id="leaveStartDate" />
       <label><b>Đến ngày:</b></label><input type="date" id="leaveEndDate" />
       <button onclick="applyLeaveDateRange()">Áp dụng</button>
     </div>
-
     <div class="controls">
       <input type="text" id="leaveSearchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
+      <select id="leaveRowsPerPage" onchange="updateLeaveRowsPerPage()">
+        <option value="5">5 dòng</option>
+        <option value="10" selected>10 dòng</option>
+        <option value="20">20 dòng</option>
+        <option value="25">25 dòng</option>
+      </select>
       <button onclick="applyLeaveSearch()">Tìm kiếm</button>
-      <button onclick="exportLeaveExcel()">📤 Xuất Excel</button>
+      <button onclick="exportLeaveExcel()">📤 Xuất Nghỉ Phép</button>
+      <button onclick="exportCombinedExcel()">📤 Xuất Cả Hai</button>
       <button onclick="refreshLeaveData()">🔄 Làm mới</button>
       <button onclick="resetLeaveFilter()">↻ Reset</button>
     </div>
-
     <div id="leaveTableContainer" class="table-container">
       <table id="leaveTable">
         <thead>
@@ -171,10 +171,8 @@
         <tbody id="leaveDataBody"></tbody>
       </table>
     </div>
-
     <div id="leavePagination" class="pagination"></div>
   </div>
-
   <script>
     let currentTab = "attendance";
     let currentFilter = "hôm nay";
@@ -183,8 +181,7 @@
     let startDate = "", endDate = "";
     let rawData = [];
     let currentPage = 1;
-    const rowsPerPage = 10;
-
+    let rowsPerPage = 10;
     // Biến cho phần nghỉ phép
     let currentLeaveFilter = "hôm nay";
     let currentLeaveSearch = "";
@@ -192,19 +189,17 @@
     let leaveStartDate = "", leaveEndDate = "";
     let rawLeaveData = [];
     let currentLeavePage = 1;
-
+    let leaveRowsPerPage = 10;
     function showMessage(msg, type="success") {
       const el = document.getElementById("messageArea");
       el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
       setTimeout(()=>el.innerHTML="", 4000);
     }
-
     function showDashboard() {
       document.getElementById("greeting").style.display = "block";
       document.getElementById("dataTabs").style.display = "flex";
       switchTab(currentTab); // Hiển thị tab hiện tại
     }
-
     function hideDashboard() {
       document.getElementById("greeting").style.display = "none";
       document.getElementById("dataTabs").style.display = "none";
@@ -217,12 +212,10 @@
       document.getElementById("dataBody").innerHTML = "";
       document.getElementById("leaveDataBody").innerHTML = "";
     }
-
     function switchTab(tab) {
       currentTab = tab;
       document.getElementById("tabAttendance").classList.toggle("active", tab === "attendance");
       document.getElementById("tabLeave").classList.toggle("active", tab === "leave");
-
       if (tab === "attendance") {
         document.getElementById("leaveSection").style.display = "none";
         document.getElementById("filters").style.display = "flex";
@@ -241,7 +234,6 @@
         loadLeaveData(); // Tải dữ liệu nghỉ phép
       }
     }
-
     // --- LOGIN LOGIC ---
     async function login() {
       const email = document.getElementById("loginEmail").value.trim();
@@ -265,7 +257,6 @@
         applyFilter("hôm nay");
       } else showMessage(data.message || "🚫 Sai thông tin", "error");
     }
-
     function logout() {
       localStorage.clear();
       document.getElementById("loginEmail").style.display = "";
@@ -275,19 +266,15 @@
       hideDashboard();
       showMessage("👋 Đã đăng xuất", "success");
     }
-
     document.getElementById("loginBtn").onclick = login;
     document.getElementById("logoutBtn").onclick = logout;
-
     // --- FETCH DATA FOR ATTENDANCE ---
     async function loadData() {
       const email = localStorage.getItem("adminEmail");
       if (!email) return showMessage("🚫 Chưa đăng nhập!", "error");
-
       let url = `/api/attendances?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
       if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
       if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
-
       const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) return showMessage(data.error || "❌ Lỗi tải dữ liệu", "error");
@@ -295,13 +282,11 @@
       currentPage = 1;
       renderTable();
     }
-
     // --- TABLE RENDER FOR ATTENDANCE ---
     function renderTable() {
       const tbody = document.getElementById("dataBody");
       tbody.innerHTML = "";
       let data = [...rawData];
-
       if (currentSort.column && currentSort.order) {
         data.sort((a,b)=>{
           let A = a[currentSort.column]||"", B = b[currentSort.column]||"";
@@ -310,10 +295,8 @@
           return 0;
         });
       }
-
       const startIdx = (currentPage-1)*rowsPerPage;
       const pageData = data.slice(startIdx, startIdx+rowsPerPage);
-
       pageData.forEach(r=>{
         const img = r.FaceImage || r.PhotoURL ? `<img src="${r.FaceImage || r.PhotoURL}" class="checkin-photo">` : "";
         const mapLink = (r.Latitude && r.Longitude)
@@ -335,20 +318,16 @@
           </tr>
         `;
       });
-
       renderPagination(data.length);
       highlightFilterButton();
     }
-
     // --- LEAVE DATA FUNCTIONS ---
     async function loadLeaveData() {
       const email = localStorage.getItem("adminEmail");
       if (!email) return showMessage("🚫 Chưa đăng nhập!", "error");
-
       let url = `/api/leaves?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}`;
       if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
       if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
-
       const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) return showMessage(data.error || "❌ Lỗi tải dữ liệu nghỉ phép", "error");
@@ -356,12 +335,10 @@
       currentLeavePage = 1;
       renderLeaveTable();
     }
-
     function renderLeaveTable() {
       const tbody = document.getElementById("leaveDataBody");
       tbody.innerHTML = "";
       let data = [...rawLeaveData];
-
       if (currentLeaveSort.column && currentLeaveSort.order) {
         data.sort((a,b)=>{
           let A = a[currentLeaveSort.column]||"", B = b[currentLeaveSort.column]||"";
@@ -370,10 +347,8 @@
           return 0;
         });
       }
-
-      const startIdx = (currentLeavePage-1)*rowsPerPage;
-      const pageData = data.slice(startIdx, startIdx+rowsPerPage);
-
+      const startIdx = (currentLeavePage-1)*leaveRowsPerPage;
+      const pageData = data.slice(startIdx, startIdx+leaveRowsPerPage);
       pageData.forEach(r=>{
         tbody.innerHTML += `
           <tr>
@@ -386,90 +361,9 @@
           </tr>
         `;
       });
-
       renderLeavePagination(data.length);
       highlightLeaveFilterButton();
     }
-
-    function renderLeavePagination(total) {
-      const pages = Math.ceil(total / rowsPerPage);
-      const pagDiv = document.getElementById("leavePagination");
-      pagDiv.innerHTML = "";
-      for (let i=1;i<=pages;i++) {
-        pagDiv.innerHTML += `<button class="${i===currentLeavePage?'active':''}" onclick="gotoLeavePage(${i})">${i}</button>`;
-      }
-    }
-
-    function gotoLeavePage(page) {
-      currentLeavePage = page;
-      renderLeaveTable();
-    }
-
-    function sortLeaveTable(col) {
-      if (currentLeaveSort.column===col) {
-        currentLeaveSort.order = currentLeaveSort.order==="asc" ? "desc" : (currentLeaveSort.order==="desc"?null:"asc");
-      } else {
-        currentLeaveSort.column = col;
-        currentLeaveSort.order = "asc";
-      }
-      document.querySelectorAll("#leaveTable th").forEach(th=>th.classList.remove("asc","desc"));
-      if (currentLeaveSort.order)
-        document.querySelector(`#leaveTable th[onclick="sortLeaveTable('${col}')"]`).classList.add(currentLeaveSort.order);
-      renderLeaveTable();
-    }
-
-    function applyLeaveFilter(f) {
-      currentLeaveFilter = f;
-      leaveStartDate = leaveEndDate = "";
-      loadLeaveData();
-    }
-
-    function applyLeaveDateRange() {
-      leaveStartDate = document.getElementById("leaveStartDate").value;
-      leaveEndDate = document.getElementById("leaveEndDate").value;
-      currentLeaveFilter = "custom";
-      loadLeaveData();
-    }
-
-    function applyLeaveSearch() {
-      currentLeaveSearch = document.getElementById("leaveSearchBox").value.trim();
-      loadLeaveData();
-    }
-
-    function exportLeaveExcel() {
-      const email = localStorage.getItem("adminEmail");
-      if (!email) return showMessage("⚠️ Chưa đăng nhập", "error");
-      let url = `/api/export-leaves-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}`;
-      if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
-      if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
-      window.location.href = url;
-    }
-
-    function refreshLeaveData() {
-      loadLeaveData();
-    }
-
-    function resetLeaveFilter() {
-      currentLeaveSearch = "";
-      leaveStartDate = leaveEndDate = "";
-      currentLeaveFilter = "hôm nay";
-      document.getElementById("leaveSearchBox").value = "";
-      document.getElementById("leaveStartDate").value = "";
-      document.getElementById("leaveEndDate").value = "";
-      highlightLeaveFilterButton();
-      loadLeaveData();
-    }
-
-    function highlightLeaveFilterButton() {
-      document.querySelectorAll("#leaveSection button").forEach(btn=>btn.classList.remove("active"));
-      const map = {
-        "hôm nay":"leave-btn-homnay","tuần":"leave-btn-tuan","tháng":"leave-btn-thang",
-        "năm":"leave-btn-nam","tất cả":"leave-btn-tatca"
-      };
-      if (map[currentLeaveFilter]) document.getElementById(map[currentLeaveFilter]).classList.add("active");
-    }
-
-    // --- ATTENDANCE FUNCTIONS (unchanged) ---
     function renderPagination(total) {
       const pages = Math.ceil(total / rowsPerPage);
       const pagDiv = document.getElementById("pagination");
@@ -478,12 +372,22 @@
         pagDiv.innerHTML += `<button class="${i===currentPage?'active':''}" onclick="gotoPage(${i})">${i}</button>`;
       }
     }
-
+    function renderLeavePagination(total) {
+      const pages = Math.ceil(total / leaveRowsPerPage);
+      const pagDiv = document.getElementById("leavePagination");
+      pagDiv.innerHTML = "";
+      for (let i=1;i<=pages;i++) {
+        pagDiv.innerHTML += `<button class="${i===currentLeavePage?'active':''}" onclick="gotoLeavePage(${i})">${i}</button>`;
+      }
+    }
     function gotoPage(page) {
       currentPage = page;
       renderTable();
     }
-
+    function gotoLeavePage(page) {
+      currentLeavePage = page;
+      renderLeaveTable();
+    }
     function sortTable(col) {
       if (currentSort.column===col) {
         currentSort.order = currentSort.order==="asc" ? "desc" : (currentSort.order==="desc"?null:"asc");
@@ -496,25 +400,48 @@
         document.querySelector(`#dataTable th[onclick="sortTable('${col}')"]`).classList.add(currentSort.order);
       renderTable();
     }
-
+    function sortLeaveTable(col) {
+      if (currentLeaveSort.column===col) {
+        currentLeaveSort.order = currentLeaveSort.order==="asc" ? "desc" : (currentLeaveSort.order==="desc"?null:"asc");
+      } else {
+        currentLeaveSort.column = col;
+        currentLeaveSort.order = "asc";
+      }
+      document.querySelectorAll("#leaveTable th").forEach(th=>th.classList.remove("asc","desc"));
+      if (currentLeaveSort.order)
+        document.querySelector(`#leaveTable th[onclick="sortLeaveTable('${col}')"]`).classList.add(currentLeaveSort.order);
+      renderLeaveTable();
+    }
     function applyFilter(f) {
       currentFilter = f;
       startDate = endDate = "";
       loadData();
     }
-
+    function applyLeaveFilter(f) {
+      currentLeaveFilter = f;
+      leaveStartDate = leaveEndDate = "";
+      loadLeaveData();
+    }
     function applyDateRange() {
       startDate = document.getElementById("startDate").value;
       endDate = document.getElementById("endDate").value;
       currentFilter = "custom";
       loadData();
     }
-
+    function applyLeaveDateRange() {
+      leaveStartDate = document.getElementById("leaveStartDate").value;
+      leaveEndDate = document.getElementById("leaveEndDate").value;
+      currentLeaveFilter = "custom";
+      loadLeaveData();
+    }
     function applySearch() {
       currentSearch = document.getElementById("searchBox").value.trim();
       loadData();
     }
-
+    function applyLeaveSearch() {
+      currentLeaveSearch = document.getElementById("leaveSearchBox").value.trim();
+      loadLeaveData();
+    }
     function exportExcel() {
       const email = localStorage.getItem("adminEmail");
       if (!email) return showMessage("⚠️ Chưa đăng nhập", "error");
@@ -523,11 +450,45 @@
       if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
       window.location.href = url;
     }
-
+    function exportLeaveExcel() {
+      const email = localStorage.getItem("adminEmail");
+      if (!email) return showMessage("⚠️ Chưa đăng nhập", "error");
+      let url = `/api/export-leaves-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}`;
+      if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
+      if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
+      window.location.href = url;
+    }
+    function exportCombinedExcel() {
+      const email = localStorage.getItem("adminEmail");
+      if (!email) return showMessage("⚠️ Chưa đăng nhập", "error");
+      let url = `/api/export-combined-excel?email=${encodeURIComponent(email)}&tab=${encodeURIComponent(currentTab)}`;
+      if (currentTab === "attendance") {
+        url += `&filter=${encodeURIComponent(currentFilter)}`;
+        if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
+        if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
+      } else {
+        url += `&filter=${encodeURIComponent(currentLeaveFilter)}`;
+        if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
+        if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
+      }
+      window.location.href = url;
+    }
+    function updateRowsPerPage() {
+      rowsPerPage = parseInt(document.getElementById("rowsPerPage").value);
+      currentPage = 1;
+      renderTable();
+    }
+    function updateLeaveRowsPerPage() {
+      leaveRowsPerPage = parseInt(document.getElementById("leaveRowsPerPage").value);
+      currentLeavePage = 1;
+      renderLeaveTable();
+    }
     function refreshData() {
       loadData();
     }
-
+    function refreshLeaveData() {
+      loadLeaveData();
+    }
     function resetFilter() {
       currentSearch = "";
       startDate = endDate = "";
@@ -538,16 +499,32 @@
       highlightFilterButton();
       loadData();
     }
-
+    function resetLeaveFilter() {
+      currentLeaveSearch = "";
+      leaveStartDate = leaveEndDate = "";
+      currentLeaveFilter = "hôm nay";
+      document.getElementById("leaveSearchBox").value = "";
+      document.getElementById("leaveStartDate").value = "";
+      document.getElementById("leaveEndDate").value = "";
+      highlightLeaveFilterButton();
+      loadLeaveData();
+    }
     function highlightFilterButton() {
       document.querySelectorAll("#filters button").forEach(btn=>btn.classList.remove("active"));
       const map = {
         "hôm nay":"btn-homnay","tuần":"btn-tuan","tháng":"btn-thang",
-        "năm":"btn-nam","tất cả":"btn-tatca","nghỉ phép":"btn-nghiphep"
+        "năm":"btn-nam","tất cả":"btn-tatca"
       };
       if (map[currentFilter]) document.getElementById(map[currentFilter]).classList.add("active");
     }
-
+    function highlightLeaveFilterButton() {
+      document.querySelectorAll("#leaveSection button").forEach(btn=>btn.classList.remove("active"));
+      const map = {
+        "hôm nay":"leave-btn-homnay","tuần":"leave-btn-tuan","tháng":"leave-btn-thang",
+        "năm":"leave-btn-nam","tất cả":"leave-btn-tatca"
+      };
+      if (map[currentLeaveFilter]) document.getElementById(map[currentLeaveFilter]).classList.add("active");
+    }
     window.onload = () => {
       const email = localStorage.getItem("adminEmail");
       if (email) {
