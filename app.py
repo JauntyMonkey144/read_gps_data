@@ -11,6 +11,8 @@ from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
 import secrets
 import smtplib
+import threading
+import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -31,7 +33,7 @@ DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME", "sun.automation.sys@gmail.com")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "igzaunbokbaiimen")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "ihgzxunefndizeub")
 APP_URL = os.getenv("APP_URL", "https://read-gps-data.vercel.app")
 
 # ---- Kết nối MongoDB ----
@@ -41,12 +43,77 @@ db = client[DB_NAME]
 # Các collection sử dụng
 admins = db["admins"]
 collection = db["alt_checkins"]
-reset_tokens = db["reset_tokens"]  # New collection for password reset tokens
+reset_tokens = db["reset_tokens"]
+
+# ---- Quản lý kết nối SMTP ----
+smtp_server = None
+
+def get_smtp_server(timeout=10):
+    global smtp_server
+    if smtp_server is None:
+        try:
+            smtp_server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=timeout)
+            smtp_server.starttls()
+            smtp_server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            print("DEBUG: SMTP connection established")
+        except Exception as e:
+            print(f"❌ Error establishing SMTP connection: {e}")
+            smtp_server = None
+            raise
+    return smtp_server
+
+def close_smtp_server():
+    global smtp_server
+    if smtp_server is not None:
+        try:
+            smtp_server.quit()
+            print("DEBUG: SMTP connection closed")
+        except Exception as e:
+            print(f"❌ Error closing SMTP connection: {e}")
+        smtp_server = None
+
+# ---- Gửi email bất đồng bộ ----
+def send_reset_email_async(email, token, retries=3, timeout=10):
+    def send_email():
+        msg = MIMEMultipart()
+        msg["From"] = SMTP_USERNAME
+        msg["To"] = email
+        msg["Subject"] = "Đặt lại mật khẩu"
+        reset_link = f"{APP_URL}/reset-password?token={token}"
+        body = f"""
+        Xin chào,
+        Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết dưới đây để đặt lại mật khẩu:
+        {reset_link}
+        Liên kết này sẽ hết hạn sau 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
+        Trân trọng,
+        Đội ngũ hỗ trợ
+        """
+        msg.attach(MIMEText(body, "plain"))
+        for attempt in range(retries):
+            try:
+                start_time = time.time()
+                server = get_smtp_server(timeout=timeout)
+                server.send_message(msg)
+                end_time = time.time()
+                print(f"DEBUG: Reset email sent to {email} in {end_time - start_time:.2f} seconds")
+                return True
+            except Exception as e:
+                print(f"❌ Attempt {attempt + 1} failed: {e}")
+                global smtp_server
+                smtp_server = None  # Reset kết nối nếu lỗi
+                if attempt < retries - 1:
+                    time.sleep(2)  # Chờ trước khi thử lại
+                continue
+        print(f"❌ Failed to send reset email to {email} after {retries} attempts")
+        return False
+
+    thread = threading.Thread(target=send_email)
+    thread.start()
 
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
 def index():
-    success = request.args.get("success")  # nếu =1 -> hiển thị thông báo
+    success = request.args.get("success")
     return render_template("index.html", success=success)
 
 # ---- Đăng nhập API ----
@@ -69,37 +136,6 @@ def login():
     })
 
 # ---- Gửi email quên mật khẩu ----
-def send_reset_email(email, token):
-    msg = MIMEMultipart()
-    msg["From"] = SMTP_USERNAME
-    msg["To"] = email
-    msg["Subject"] = "Đặt lại mật khẩu"
-
-    reset_link = f"{APP_URL}/reset-password?token={token}"
-    body = f"""
-    Xin chào,
-
-    Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết dưới đây để đặt lại mật khẩu:
-    {reset_link}
-
-    Liên kết này sẽ hết hạn sau 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
-
-    Trân trọng,
-    Đội ngũ hỗ trợ
-    """
-    msg.attach(MIMEText(body, "plain"))
-
-    try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg)
-        print(f"DEBUG: Reset email sent to {email}")
-        return True
-    except Exception as e:
-        print(f"❌ Error sending reset email: {e}")
-        return False
-
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     if request.method == "GET":
@@ -142,43 +178,42 @@ def forgot_password():
         
         # Generate reset token
         token = secrets.token_urlsafe(32)
-        expiry = datetime.now(VN_TZ) + timedelta(hours=1)  # Token expires in 1 hour
+        expiry = datetime.now(VN_TZ) + timedelta(hours=1)
         
         # Store token in reset_tokens collection
-        reset_tokens.delete_one({"email": email})  # Remove any existing tokens
+        reset_tokens.delete_one({"email": email})
         reset_tokens.insert_one({
             "email": email,
             "token": token,
             "expiry": expiry
         })
         
-        # Send reset email
-        if send_reset_email(email, token):
-            return """
-            <!DOCTYPE html>
-            <html lang="vi">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Quên mật khẩu</title>
-                <style>
-                    body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
-                    .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
-                    .success { color: #28a745; font-size: 18px; margin-bottom: 20px; }
-                    button { background: #28a745; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-                    button:hover { background: #218838; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="success">✅ Liên kết đặt lại mật khẩu đã được gửi đến email của bạn!</div>
-                    <button onclick="window.location.href='/'">Quay về trang chủ</button>
-                </div>
-            </body>
-            </html>
-            """
-        else:
-            return jsonify({"success": False, "message": "❌ Lỗi khi gửi email. Vui lòng thử lại sau."}), 500
+        # Gửi email bất đồng bộ
+        send_reset_email_async(email, token)
+        
+        return """
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Quên mật khẩu</title>
+            <style>
+                body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
+                .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+                .success { color: #28a745; font-size: 18px; margin-bottom: 20px; }
+                button { background: #28a745; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+                button:hover { background: #218838; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="success">✅ Liên kết đặt lại mật khẩu đang được gửi đến email của bạn!</div>
+                <button onclick="window.location.href='/'">Quay về trang chủ</button>
+            </div>
+        </body>
+        </html>
+        """
 
 # ---- Đặt lại mật khẩu ----
 @app.route("/reset-password", methods=["GET", "POST"])
@@ -259,7 +294,7 @@ def reset_password():
         
         return redirect(url_for("index", success=1))
 
-# ---- Build attendance query (unchanged) ----
+# ---- Build attendance query (không thay đổi) ----
 def build_attendance_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -303,7 +338,7 @@ def build_attendance_query(filter_type, start_date, end_date, search):
     else:
         return {"$and": conditions}
 
-# ---- Build leave query (unchanged) ----
+# ---- Build leave query (không thay đổi) ----
 def build_leave_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -378,7 +413,7 @@ def build_leave_query(filter_type, start_date, end_date, search):
     else:
         return {"$and": conditions}
 
-# ---- API lấy dữ liệu chấm công (unchanged) ----
+# ---- API lấy dữ liệu chấm công (không thay đổi) ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
@@ -410,7 +445,7 @@ def get_attendances():
         print(f"❌ Error in get_attendances: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ---- API lấy dữ liệu nghỉ phép (unchanged) ----
+# ---- API lấy dữ liệu nghỉ phép (không thay đổi) ----
 @app.route("/api/leaves", methods=["GET"])
 def get_leaves():
     try:
@@ -433,11 +468,10 @@ def get_leaves():
             "CheckinTime": 1,
             "Tasks": 1,
             "Status": 1,
-            "ApprovalDate": 1,  # Thêm trường ApprovalDate
-            "ApprovedBy": 1,    # Thêm trường ApprovedBy
-            "ApproveNote": 1    # Thêm trường ApproveNote
+            "ApprovalDate": 1,
+            "ApprovedBy": 1,
+            "ApproveNote": 1
         }))
-        # Định dạng ApprovalDate cho mỗi bản ghi
         for item in data:
             approval_date = item.get("ApprovalDate")
             if approval_date:
@@ -448,10 +482,9 @@ def get_leaves():
                         parsed = datetime.strptime(approval_date, "%d/%m/%Y %H:%M:%S")
                         item["ApprovalDate"] = parsed.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
                     except Exception:
-                        item["ApprovalDate"] = approval_date  # Giữ nguyên nếu không parse được
+                        item["ApprovalDate"] = approval_date
             else:
-                item["ApprovalDate"] = None  # Đặt None nếu không có ApprovalDate
-            # Thêm các trường khác nếu cần
+                item["ApprovalDate"] = None
             item["ApprovedBy"] = item.get("ApprovedBy", "")
             item["ApproveNote"] = item.get("ApproveNote", "")
         print(f"DEBUG: Fetched {len(data)} leave records for email {email} with filter {filter_type}")
@@ -459,8 +492,8 @@ def get_leaves():
     except Exception as e:
         print(f"❌ Error in get_leaves: {e}")
         return jsonify({"error": str(e)}), 500
-        
-# ---- API xuất Excel cho nghỉ phép (unchanged from previous response) ----
+
+# ---- API xuất Excel cho nghỉ phép (không thay đổi) ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
     try:
@@ -581,7 +614,7 @@ def export_leaves_to_excel():
         print("❌ Lỗi export leaves:", e)
         return jsonify({"error": str(e)}), 500
 
-# ---- API xuất Excel kết hợp chấm công và nghỉ phép (unchanged from previous response) ----
+# ---- API xuất Excel kết hợp chấm công và nghỉ phép (không thay đổi) ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
@@ -754,6 +787,11 @@ def export_combined_to_excel():
     except Exception as e:
         print("❌ Lỗi export combined:", e)
         return jsonify({"error": str(e)}), 500
+
+# ---- Đóng kết nối SMTP khi ứng dụng tắt ----
+@app.teardown_appcontext
+def cleanup(exception=None):
+    close_smtp_server()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
