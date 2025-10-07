@@ -231,6 +231,26 @@ def get_attendances():
         query = build_attendance_query(filter_type, start_date, end_date, search)
         # Fetch TẤT CẢ dữ liệu matching filter (không filter theo user)
         data = list(collection.find(query, {"_id": 0}))
+        
+        # ✨ Cập nhật: Kết hợp dữ liệu từ ProjectId, Tasks, OtherNote vào trường GhiChu mới
+        for item in data:
+            ghi_chu_parts = []
+            # Thêm ProjectId nếu có
+            if item.get('ProjectId'):
+                ghi_chu_parts.append(f"Project: {item['ProjectId']}")
+            # Thêm Tasks nếu có (xử lý list hoặc string)
+            if item.get('Tasks'):
+                if isinstance(item['Tasks'], list):
+                    tasks_str = ', '.join(item['Tasks'])
+                else:
+                    tasks_str = str(item['Tasks'])
+                ghi_chu_parts.append(f"Tasks: {tasks_str}")
+            # Thêm OtherNote nếu có
+            if item.get('OtherNote'):
+                ghi_chu_parts.append(f"Note: {item['OtherNote']}")
+            # Gán trường GhiChu mới (có thể dùng ở frontend thay vì OtherNote||Tasks)
+            item['GhiChu'] = '; '.join(ghi_chu_parts) if ghi_chu_parts else ''
+        
         print(f"DEBUG: Fetched {len(data)} records for email {email} with filter {filter_type}")  # Log debug
         return jsonify(data)
     except Exception as e:
