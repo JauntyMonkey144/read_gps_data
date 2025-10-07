@@ -30,9 +30,9 @@ DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 # ---- SMTP Config for Email ----
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME", "your-email@gmail.com")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "your-app-password")
-APP_URL = os.getenv("APP_URL", "http://localhost:5000")
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "banhbaobeo2205")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "vynqvvvmbcigpdvy")
+APP_URL = os.getenv("APP_URL", "https://read-gps-data.vercel.app")
 
 # ---- Kết nối MongoDB ----
 client = MongoClient(MONGO_URI)
