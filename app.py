@@ -554,9 +554,8 @@ def export_combined_to_excel():
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
-        tab = request.args.get("tab", "attendance").lower()  # 'attendance' hoặc 'leave'
 
-        # Xác định bộ lọc dựa trên tab
+        # Xác định bộ lọc
         attendance_query = build_attendance_query(filter_type, start_date, end_date, search)
         leave_query = build_leave_query(filter_type, start_date, end_date, search)
 
@@ -609,9 +608,15 @@ def export_combined_to_excel():
         # Load template Excel
         template_path = "templates/Form kết hợp.xlsx"
         wb = load_workbook(template_path)
-        ws_attendance = wb.active
-        ws_attendance.title = "Điểm danh"
-        ws_leaves = wb.create_sheet("Nghỉ phép")
+        ws_attendance = wb["Điểm danh"] if "Điểm danh" in wb.sheetnames else wb.create_sheet("Điểm danh")
+        ws_leaves = wb["Nghỉ phép"] if "Nghỉ phép" in wb.sheetnames else wb.create_sheet("Nghỉ phép")
+
+        # Ghi tiêu đề cho sheet Điểm danh
+        headers = ["Mã NV", "Tên NV", "Ngày", "Check 1", "Check 2", "Check 3", "Check 4", "Check 5", 
+                  "Check 6", "Check 7", "Check 8", "Check 9", "Check 10"]
+        for col, header in enumerate(headers, start=1):
+            ws_attendance.cell(row=1, column=col, value=header)
+            ws_leaves.cell(row=1, column=col, value=header)
 
         border = Border(
             left=Side(style="thin", color="000000"),
@@ -760,6 +765,6 @@ def export_combined_to_excel():
     except Exception as e:
         print("❌ Lỗi export combined:", e)
         return jsonify({"error": str(e)}), 500
-
+        
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
