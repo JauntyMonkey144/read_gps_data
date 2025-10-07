@@ -336,7 +336,7 @@ def export_leaves_to_excel():
             key = (emp_id, emp_name, date)
             grouped.setdefault(key, []).append(d)
        
-        template_path = "templates/Copy of Form chấm công.xlsx"
+        template_path = "templates/Copy of Form nghỉ phép.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
        
