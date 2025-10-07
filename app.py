@@ -306,14 +306,14 @@ def export_leaves_to_excel():
         admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
         if not admin:
             return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
-        
+       
         filter_type = request.args.get("filter", "tất cả").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
-        
+       
         query = build_leave_query(filter_type, start_date, end_date, search)
-        
+       
         # Chỉ lấy các trường cần thiết
         data = list(collection.find(query, {
             "_id": 0,
@@ -327,20 +327,19 @@ def export_leaves_to_excel():
             "ApprovedBy": 1,
             "ApproveNote": 1
         }))
-        
+       
         grouped = {}
         for d in data:
             emp_id = d.get("EmployeeId", "")
             emp_name = d.get("EmployeeName", "")
             date = d.get("CheckinDate", "")
-            # Vẫn nhóm theo Ngày nghỉ, nhưng logic xuất sẽ khác
             key = (emp_id, emp_name, date)
             grouped.setdefault(key, []).append(d)
-        
-        template_path = "templates/Copy of Form chấm công.xlsx" # Giả sử template này được dùng
+       
+        template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
-        
+       
         border = Border(
             left=Side(style="thin", color="000000"),
             right=Side(style="thin", color="000000"),
@@ -348,58 +347,56 @@ def export_leaves_to_excel():
             bottom=Side(style="thin", color="000000"),
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        
+       
         start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
             ws.cell(row=row, column=1, value=emp_id)
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date)
-
             for j, rec in enumerate(records[:10], start=1):
+                # 1. Chuyển đổi CheckinTime (Ngày tạo đơn)
                 checkin_time = rec.get("CheckinTime")
-                
-                # --- LOGIC MỚI BẮT ĐẦU ---
-                
-                # 1. Chuyển đổi CheckinTime (thời gian tạo đơn) sang format đầy đủ
                 full_datetime_str = ""
                 if isinstance(checkin_time, datetime):
-                    # Nếu là đối tượng datetime (ví dụ: từ MongoDB), chuyển về múi giờ VN và format
                     full_datetime_str = checkin_time.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
                 elif isinstance(checkin_time, str) and checkin_time.strip():
                     try:
-                        # Thử phân tích chuỗi CheckinTime cũ
                         parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
                         full_datetime_str = parsed.strftime("%d/%m/%Y %H:%M:%S")
                     except Exception:
-                        # Giữ nguyên nếu không parse được
                         full_datetime_str = checkin_time
-
-                # 2. Phân tích Tasks và Lý do nghỉ (nếu có)
+                
+                # 2. Phân tích Tasks và Lý do nghỉ
                 tasks = rec.get("Tasks")
                 tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")
-                
                 leave_task = tasks_str.strip()
                 leave_reason = ""
-                
-                # Phân tách Tasks và Lý do: TáchTasks: Lý do
                 if ":" in leave_task:
                     split_task = leave_task.split(":", 1)
                     leave_task = split_task[0].strip()
                     leave_reason = split_task[1].strip()
+                else:
+                    leave_reason = rec.get("ApproveNote", "") or ""
                 
-                # 3. Lấy Status (kèm ApprovedBy nếu có)
-                status = rec.get("Status", "")
-                if rec.get("ApprovedBy"):
-                    status = f"Đã duyệt bởi {rec['ApprovedBy']}"
+                # 3. Xử lý ApprovalDate và ApprovedBy
+                approved_by = rec.get("ApprovedBy", "")
+                approval_date = rec.get("ApprovalDate")
+                approval_date_str = ""
+                if isinstance(approval_date, datetime):
+                    approval_date_str = approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
+                elif isinstance(approval_date, str) and approval_date.strip():
+                    try:
+                        parsed = datetime.strptime(approval_date, "%d/%m/%Y %H:%M:%S")
+                        approval_date_str = parsed.strftime("%d/%m/%Y %H:%M:%S")
+                    except Exception:
+                        approval_date_str = approval_date
                 
-                # 4. Tạo chuỗi entry theo format yêu cầu: {CheckInTime}; {Task}: {Lý do}; {Status}
-                entry = f"{full_datetime_str}; {leave_task}: {leave_reason}; {status}"
-
-                # --- LOGIC MỚI KẾT THÚC ---
-
+                # 4. Tạo chuỗi entry theo format: {Ngày tạo đơn}; {Nghỉ phép}; {Lý do}; Đã duyệt bởi {ApprovedBy} lúc {ApprovalDate}
+                approval_status = f"Đã duyệt bởi {approved_by} lúc {approval_date_str}" if approved_by and approval_date_str else "Chưa duyệt"
+                entry = f"{full_datetime_str}; {leave_task}; {leave_reason}; {approval_status}"
                 ws.cell(row=row, column=3 + j, value=entry)
-                
+               
             # Áp dụng style và tính chiều cao dòng
             for col in range(1, 14):
                 cell = ws.cell(row=row, column=col)
@@ -410,18 +407,17 @@ def export_leaves_to_excel():
                 for col in range(1, 14)
             )
             ws.row_dimensions[row].height = max_lines * 20
-        
+       
         # Tự động điều chỉnh độ rộng cột
         for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
             for cell in col:
                 if cell.value:
-                    # Giới hạn độ dài tối đa để tránh cột quá rộng
-                    length = len(str(cell.value).split("\n")[0]) # Chỉ tính chiều dài của dòng đầu tiên
+                    length = len(str(cell.value).split("\n")[0])
                     max_length = max(max_length, length)
-            ws.column_dimensions[col_letter].width = min(max_length + 2, 70) # Giới hạn max width 70
-        
+            ws.column_dimensions[col_letter].width = min(max_length + 2, 70)
+       
         # Xuất file
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
         filename = f"Danh sách nghỉ phép_{today_str}.xlsx"
@@ -429,11 +425,11 @@ def export_leaves_to_excel():
             filename = f"Danh sách nghỉ phép theo tìm kiếm_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
             filename = f"Danh sách nghỉ phép từ {start_date} đến {end_date}_{today_str}.xlsx"
-            
+           
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-        
+       
         return send_file(
             output,
             as_attachment=True,
@@ -454,16 +450,14 @@ def export_combined_to_excel():
         admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
         if not admin:
             return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
-        
+       
         filter_type = request.args.get("filter", "hôm nay").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
-
         # Xác định bộ lọc
         attendance_query = build_attendance_query(filter_type, start_date, end_date, search)
         leave_query = build_leave_query(filter_type, start_date, end_date, search)
-
         # Lấy dữ liệu
         attendance_data = list(collection.find(attendance_query, {
             "_id": 0,
@@ -474,40 +468,34 @@ def export_combined_to_excel():
         leave_data = list(collection.find(leave_query, {
             "_id": 0,
             "EmployeeId": 1, "EmployeeName": 1, "CheckinDate": 1, "CheckinTime": 1,
-            "Tasks": 1, "Status": 1, "ApprovedBy": 1, "ApproveNote": 1
+            "Tasks": 1, "Status": 1, "ApprovedBy": 1, "ApproveNote": 1, "ApprovalDate": 1
         }))
-
         # Nhóm dữ liệu
         attendance_grouped = {}
         for d in attendance_data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate", ""))
             attendance_grouped.setdefault(key, []).append(d)
-
         leave_grouped = {}
         for d in leave_data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate", ""))
             leave_grouped.setdefault(key, []).append(d)
-
         # Load template Excel
         template_path = "templates/Form kết hợp.xlsx"
         wb = load_workbook(template_path)
         ws_attendance = wb["Điểm danh"] if "Điểm danh" in wb.sheetnames else wb.create_sheet("Điểm danh")
         ws_leaves = wb["Nghỉ phép"] if "Nghỉ phép" in wb.sheetnames else wb.create_sheet("Nghỉ phép")
-
-        # Ghi tiêu đề (giữ nguyên)
-        headers = ["Mã NV", "Tên NV", "Ngày", "Check 1", "Check 2", "Check 3", "Check 4", "Check 5", 
+        # Ghi tiêu đề
+        headers = ["Mã NV", "Tên NV", "Ngày", "Check 1", "Check 2", "Check 3", "Check 4", "Check 5",
                    "Check 6", "Check 7", "Check 8", "Check 9", "Check 10"]
         for col, header in enumerate(headers, start=1):
             ws_attendance.cell(row=1, column=col, value=header)
             ws_leaves.cell(row=1, column=col, value=header)
-
         border = Border(
             left=Side(style="thin", color="000000"), right=Side(style="thin", color="000000"),
             top=Side(style="thin", color="000000"), bottom=Side(style="thin", color="000000"),
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-
-        # Điền dữ liệu chấm công (Giữ nguyên logic cũ)
+        # Điền dữ liệu chấm công (giữ nguyên logic cũ)
         start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(attendance_grouped.items(), start=0):
             row = start_row + i
@@ -525,17 +513,14 @@ def export_combined_to_excel():
                         time_str = parsed.strftime("%H:%M:%S")
                     except Exception:
                         time_str = checkin_time
-                
+               
                 parts = []
                 tasks = rec.get("Tasks")
                 tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")
-                
-                # Logic cũ (giữ nguyên cho sheet chấm công)
+               
                 if "nghỉ phép" in tasks_str.lower():
-                    # Nếu là nghỉ phép, chỉ ghi thông tin tóm tắt cho sheet chấm công
                     entry = "NGHỈ PHÉP (xem chi tiết ở sheet Nghỉ phép)"
                 else:
-                    # Nếu là chấm công bình thường
                     if time_str: parts.append(time_str)
                     if rec.get("ProjectId"): parts.append(str(rec["ProjectId"]))
                     if tasks_str: parts.append(tasks_str)
@@ -543,10 +528,9 @@ def export_combined_to_excel():
                     if rec.get("OtherNote"): parts.append(rec["OtherNote"])
                     if rec.get("Address"): parts.append(rec["Address"])
                     entry = "; ".join(parts)
-                    
+                   
                 ws_attendance.cell(row=row, column=3 + j, value=entry)
-                
-            # Áp dụng style và tính chiều cao dòng
+               
             for col in range(1, 14):
                 cell = ws_attendance.cell(row=row, column=col)
                 cell.border = border
@@ -556,8 +540,7 @@ def export_combined_to_excel():
                 for col in range(1, 14)
             )
             ws_attendance.row_dimensions[row].height = max_lines * 20
-        
-        # Tự động điều chỉnh độ rộng cột
+       
         for col in ws_attendance.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -566,19 +549,17 @@ def export_combined_to_excel():
                     length = len(str(cell.value).split("\n")[0])
                     max_length = max(max_length, length)
             ws_attendance.column_dimensions[col_letter].width = min(max_length + 2, 70)
-
-        # Điền dữ liệu nghỉ phép (ÁP DỤNG LOGIC MỚI)
+        # Điền dữ liệu nghỉ phép (logic mới)
         start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(leave_grouped.items(), start=0):
             row = start_row + i
             ws_leaves.cell(row=row, column=1, value=emp_id)
             ws_leaves.cell(row=row, column=2, value=emp_name)
             ws_leaves.cell(row=row, column=3, value=date)
-            
+           
             for j, rec in enumerate(records[:10], start=1):
+                # 1. Chuyển đổi CheckinTime (Ngày tạo đơn)
                 checkin_time = rec.get("CheckinTime")
-                
-                # 1. Chuyển đổi CheckinTime (thời gian tạo đơn) sang format đầy đủ
                 full_datetime_str = ""
                 if isinstance(checkin_time, datetime):
                     full_datetime_str = checkin_time.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
@@ -588,30 +569,37 @@ def export_combined_to_excel():
                         full_datetime_str = parsed.strftime("%d/%m/%Y %H:%M:%S")
                     except Exception:
                         full_datetime_str = checkin_time
-
-                # 2. Phân tích Tasks và Lý do nghỉ (nếu có)
+                
+                # 2. Phân tích Tasks và Lý do nghỉ
                 tasks = rec.get("Tasks")
                 tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")
-                
                 leave_task = tasks_str.strip()
                 leave_reason = ""
-                
                 if ":" in leave_task:
                     split_task = leave_task.split(":", 1)
                     leave_task = split_task[0].strip()
                     leave_reason = split_task[1].strip()
+                else:
+                    leave_reason = rec.get("ApproveNote", "") or ""
                 
-                # 3. Lấy Status (kèm ApprovedBy nếu có)
-                status = rec.get("Status", "")
-                if rec.get("ApprovedBy"):
-                    status = f"Đã duyệt bởi {rec['ApprovedBy']}"
+                # 3. Xử lý ApprovalDate và ApprovedBy
+                approved_by = rec.get("ApprovedBy", "")
+                approval_date = rec.get("ApprovalDate")
+                approval_date_str = ""
+                if isinstance(approval_date, datetime):
+                    approval_date_str = approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
+                elif isinstance(approval_date, str) and approval_date.strip():
+                    try:
+                        parsed = datetime.strptime(approval_date, "%d/%m/%Y %H:%M:%S")
+                        approval_date_str = parsed.strftime("%d/%m/%Y %H:%M:%S")
+                    except Exception:
+                        approval_date_str = approval_date
                 
-                # 4. Tạo chuỗi entry theo format yêu cầu: {CheckInTime}; {Task}: {Lý do}; {Status}
-                entry = f"{full_datetime_str}; {leave_task}: {leave_reason}; {status}"
-
+                # 4. Tạo chuỗi entry theo format: {Ngày tạo đơn}; {Nghỉ phép}; {Lý do}; Đã duyệt bởi {ApprovedBy} lúc {ApprovalDate}
+                approval_status = f"Đã duyệt bởi {approved_by} lúc {approval_date_str}" if approved_by and approval_date_str else "Chưa duyệt"
+                entry = f"{full_datetime_str}; {leave_task}; {leave_reason}; {approval_status}"
                 ws_leaves.cell(row=row, column=3 + j, value=entry)
-                
-            # Áp dụng style và tính chiều cao dòng
+               
             for col in range(1, 14):
                 cell = ws_leaves.cell(row=row, column=col)
                 cell.border = border
@@ -621,8 +609,7 @@ def export_combined_to_excel():
                 for col in range(1, 14)
             )
             ws_leaves.row_dimensions[row].height = max_lines * 20
-            
-        # Tự động điều chỉnh độ rộng cột
+           
         for col in ws_leaves.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -631,7 +618,7 @@ def export_combined_to_excel():
                     length = len(str(cell.value).split("\n")[0])
                     max_length = max(max_length, length)
             ws_leaves.column_dimensions[col_letter].width = min(max_length + 2, 70)
-            
+           
         # Xuất file
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
         filename = f"Danh sách chấm công và nghỉ phép_{today_str}.xlsx"
@@ -639,11 +626,11 @@ def export_combined_to_excel():
             filename = f"Danh sách chấm công và nghỉ phép theo tìm kiếm_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
             filename = f"Danh sách chấm công và nghỉ phép từ {start_date} đến {end_date}_{today_str}.xlsx"
-            
+           
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-        
+       
         return send_file(
             output,
             as_attachment=True,
