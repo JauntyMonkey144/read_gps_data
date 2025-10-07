@@ -61,8 +61,34 @@ def login():
 def forgot_password():
     if request.method == "GET":
         # Form HTML đơn giản cho reset mật khẩu
-        return render_template("reset-password")
-
+        return f"""
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Quên mật khẩu</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
+                .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
+                button {{ background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
+                button:hover {{ background: #218838; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>🔒 Đặt lại mật khẩu</h2>
+                <form method="POST">
+                    <input type="email" name="email" placeholder="Email" required>
+                    <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
+                    <button type="submit">Cập nhật mật khẩu</button>
+                    <a href="/">Quay về trang chủ</a>
+                </form>
+            </div>
+        </body>
+        </html>
+        """
     if request.method == "POST":
         email = request.form.get("email")
         new_password = request.form.get("new_password")
@@ -76,50 +102,67 @@ def forgot_password():
         # ✅ Chuyển về trang chủ có thông báo thành công
         return redirect(url_for("index", success=1))
 def build_attendance_query(filter_type, start_date, end_date, search):
-    query = {}
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
+    conditions = []
+    
     # --- Bộ lọc thời gian ---
+    date_filter = {}
     if filter_type == "custom" and start_date and end_date:
-        query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
+        date_filter = {"CheckinDate": {"$gte": start_date, "$lte": end_date}}
     elif filter_type == "hôm nay":
-        query["CheckinDate"] = today.strftime("%Y-%m-%d")
+        date_filter = {"CheckinDate": today.strftime("%Y-%m-%d")}
     elif filter_type == "tuần":
         start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
         end = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
-        query["CheckinDate"] = {"$gte": start, "$lte": end}
+        date_filter = {"CheckinDate": {"$gte": start, "$lte": end}}
     elif filter_type == "tháng":
         start = today.replace(day=1).strftime("%Y-%m-%d")
         end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).strftime("%Y-%m-%d")
-        query["CheckinDate"] = {"$gte": start, "$lte": end}
+        date_filter = {"CheckinDate": {"$gte": start, "$lte": end}}
     elif filter_type == "năm":
-        query["CheckinDate"] = {"$regex": f"^{today.year}"}
+        date_filter = {"CheckinDate": {"$regex": f"^{today.year}"}}
+    
+    if date_filter:
+        conditions.append(date_filter)
+    
     # --- Bộ lọc nghỉ phép ---
     if filter_type == "nghỉ phép":
-        query["$or"] = [
-            {"Tasks": {"$regex": regex_leave}},
-            {"Status": {"$regex": regex_leave}},
-            {"OtherNote": {"$regex": regex_leave}}
-        ]
+        leave_or = {
+            "$or": [
+                {"Tasks": {"$regex": regex_leave}},
+                {"Status": {"$regex": regex_leave}},
+                {"OtherNote": {"$regex": regex_leave}}
+            ]
+        }
+        conditions.append(leave_or)
     else:
         # Các filter bình thường: loại bỏ bản ghi có “Nghỉ phép”
-        query["$and"] = [
-            {"$or": [
+        not_leave_or = {
+            "$or": [
                 {"Tasks": {"$not": regex_leave}},
                 {"Tasks": {"$exists": False}},
                 {"Tasks": None}
-            ]}
-        ]
+            ]
+        }
+        conditions.append(not_leave_or)
+    
     # --- Bộ lọc tìm kiếm ---
     if search:
         regex = re.compile(search, re.IGNORECASE)
-        query["$and"] = query.get("$and", []) + [
-            {"$or": [
+        search_or = {
+            "$or": [
                 {"EmployeeId": {"$regex": regex}},
                 {"EmployeeName": {"$regex": regex}}
-            ]}
-        ]
-    return query
+            ]
+        }
+        conditions.append(search_or)
+    
+    # Kết hợp tất cả với $and
+    if len(conditions) == 1:
+        return conditions[0]
+    else:
+        return {"$and": conditions}
 
 def build_leave_query(filter_type, start_date, end_date, search):
     query = {}
@@ -467,7 +510,8 @@ def export_leaves_to_excel():
             )
             ws.row_dimensions[row].height = max_lines * 20
         # ---- Auto-fit column width ----
-        for col in ws.columns[:6]:  # Chỉ fit 6 cột đầu
+        cols = list(ws.columns)[:6]  # Convert generator to list and slice first 6 columns
+        for col in cols:
             max_length = 0
             col_letter = col[0].column_letter
             for cell in col:
