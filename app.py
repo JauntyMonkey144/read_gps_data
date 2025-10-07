@@ -607,7 +607,7 @@ def export_combined_to_excel():
             leave_grouped.setdefault(key, []).append(d)
 
         # Load template Excel
-        template_path = "templates/Copy of Form chấm công.xlsx"
+        template_path = "templates/Form kết hợp.xlsx"
         wb = load_workbook(template_path)
         ws_attendance = wb.active
         ws_attendance.title = "Điểm danh"
