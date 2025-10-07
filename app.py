@@ -101,84 +101,103 @@ def index():
         message = "✅ Đặt lại mật khẩu thành công! Vui lòng đăng nhập."
     return render_template("index.html", success=success, message=message)
 
+# ---- Trang quên mật khẩu ----
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
-    if request.method == "GET":
-        status = request.args.get('status', 'info')
-        message = request.args.get('message')
-        return render_template("forgot_password.html", status=status, message=message)
     if request.method == "POST":
         email = request.form.get("email")
-        if not email:
-            return redirect(url_for("forgot_password", message="❌ Vui lòng nhập email", status="error"))
-        admin = admins.find_one({"email": email})
-        message_redirect = redirect(url_for(
-            "forgot_password",
-            message="✅ Nếu email tồn tại, một link đặt lại đã được gửi đến hộp thư của bạn (hết hạn sau 30 phút).",
-            status="success"
-        ))
+        admin = db.admins.find_one({"email": email})
         if admin:
-            if not send_reset_email(admin):
-                return redirect(url_for("forgot_password", message="❌ Lỗi gửi email, vui lòng thử lại sau.", status="error"))
-        return message_redirect
+            reset_token = str(uuid.uuid4())
+            db.admins.update_one({"_id": admin["_id"]}, {"$set": {"reset_token": reset_token, "reset_expiry": datetime.now(VN_TZ) + timedelta(hours=1)}})
+            reset_url = f"{request.host_url.rstrip('/')}/reset-password/{reset_token}"
+            body = f"""
+            <!DOCTYPE html>
+            <html><head><meta charset="UTF-8"></head><body>
+                <h2>🔄 Đặt lại mật khẩu</h2>
+                <p>Nhấp vào link để đặt lại: <a href="{reset_url}">Đặt lại mật khẩu</a></p>
+                <p>Token hết hạn sau 1 giờ.</p>
+            </body></html>
+            """
+            send_email(email, "Đặt lại mật khẩu Admin", body)
+            flash("Email đặt lại mật khẩu đã gửi!", "success")
+        else:
+            flash("Email không tồn tại!", "error")
+        return redirect(url_for("login"))
+    return f"""
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Quên mật khẩu</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
+            .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+            input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
+            button {{ background: #007bff; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
+            button:hover {{ background: #0056b3; }}
+            a {{ color: #007bff; text-decoration: none; display: block; margin-top: 10px; text-align: center; }}
+            .flash {{ margin: 10px 0; padding: 10px; border-radius: 4px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>🔒 Quên mật khẩu</h2>
+            {render_flash_messages()}
+            <form method="POST">
+                <input type="email" name="email" placeholder="Email" required>
+                <button type="submit">Gửi email đặt lại</button>
+            </form>
+            <a href="/login">Quay về đăng nhập</a>
+        </div>
+    </body>
+    </html>
+    """
 
+# ---- Trang đặt lại mật khẩu ----
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
-    email = verify_reset_token(token)
-    if not email:
-        return render_template("error.html", message="🚫 Token không hợp lệ hoặc đã hết hạn (30 phút). Vui lòng yêu cầu đặt lại mật khẩu <a href='/forgot-password'>tại đây</a>.")
-    admin = admins.find_one({"email": email})
+    admin = db.admins.find_one({"reset_token": token, "reset_expiry": {"$gt": datetime.now(VN_TZ)}})
     if not admin:
-        return render_template("error.html", message="🚫 Tài khoản không tồn tại.")
-    if request.method == "GET":
-        return render_template("reset_password.html", email=email)
+        flash("Token không hợp lệ hoặc hết hạn!", "error")
+        return redirect(url_for("login"))
     if request.method == "POST":
-        new_password = request.form.get("new_password")
-        if not new_password:
-            return render_template("reset_password.html", email=email, error="❌ Vui lòng nhập mật khẩu mới")
+        new_password = request.form.get("password")
         hashed_pw = generate_password_hash(new_password)
-        admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
-        return redirect(url_for("index", success=1))
-
-def build_attendance_query(filter_type, start_date, end_date, search):
-    today = datetime.now(VN_TZ)
-    regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
-    conditions = []
-    date_filter = {}
-    if filter_type == "custom" and start_date and end_date:
-        date_filter = {"CheckinDate": {"$gte": start_date, "$lte": end_date}}
-    elif filter_type == "hôm nay":
-        date_filter = {"CheckinDate": today.strftime("%Y-%m-%d")}
-    elif filter_type == "tuần":
-        start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
-        end = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
-        date_filter = {"CheckinDate": {"$gte": start, "$lte": end}}
-    elif filter_type == "tháng":
-        start = today.replace(day=1).strftime("%Y-%m-%d")
-        end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).strftime("%Y-%m-%d")
-        date_filter = {"CheckinDate": {"$gte": start, "$lte": end}}
-    elif filter_type == "năm":
-        date_filter = {"CheckinDate": {"$regex": f"^{today.year}"}}
-    if date_filter:
-        conditions.append(date_filter)
-    not_leave_or = {
-        "$or": [
-            {"Tasks": {"$not": regex_leave}},
-            {"Tasks": {"$exists": False}},
-            {"Tasks": None}
-        ]
-    }
-    conditions.append(not_leave_or)
-    if search:
-        regex = re.compile(search, re.IGNORECASE)
-        search_or = {
-            "$or": [
-                {"EmployeeId": {"$regex": regex}},
-                {"EmployeeName": {"$regex": regex}}
-            ]
-        }
-        conditions.append(search_or)
-    return {"$and": conditions} if len(conditions) > 1 else conditions[0]
+        db.admins.update_one({"_id": admin["_id"]}, {"$set": {"password": hashed_pw, "reset_token": None, "reset_expiry": None}})
+        flash("Mật khẩu đã được cập nhật!", "success")
+        return redirect(url_for("login"))
+    return f"""
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Đặt lại mật khẩu</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
+            .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+            input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
+            button {{ background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
+            button:hover {{ background: #218838; }}
+            a {{ color: #007bff; text-decoration: none; display: block; margin-top: 10px; text-align: center; }}
+            .flash {{ margin: 10px 0; padding: 10px; border-radius: 4px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>🔄 Đặt lại mật khẩu</h2>
+            {render_flash_messages()}
+            <form method="POST">
+                <input type="password" name="password" placeholder="Mật khẩu mới" required>
+                <button type="submit">Cập nhật</button>
+            </form>
+            <a href="/login">Quay về đăng nhập</a>
+        </div>
+    </body>
+    </html>
+    """
 
 def build_leave_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
