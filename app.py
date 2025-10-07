@@ -194,11 +194,14 @@ def build_leave_query(filter_type, start_date, end_date, search):
         week_end = (today + timedelta(days=6 - today.weekday())).strftime("%d/%m/%Y")
         date_filter = {"CheckinTime": {"$regex": f"^{week_start}|^{week_end}"}}
     elif filter_type == "tháng":
-        month_start = today.replace(day=1).strftime("%d/%m/%Y")
-        month_end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).strftime("%d/%m/%Y")
-        date_filter = {"CheckinTime": {"$regex": f"^{month_start}|^{month_end}"}}
+        month = f"{today.month:02d}"
+        year = str(today.year)
+        # Regex match bất kỳ ngày nào trong tháng: dd/mm/yyyy với mm = month
+        date_filter = {"CheckinTime": {"$regex": f"^([0-3][0-9])/{month}/{year}"}}
     elif filter_type == "năm":
-        date_filter = {"CheckinTime": {"$regex": f"/{today.year}/"}}
+        year = str(today.year)
+        # Regex match năm trong phần date
+        date_filter = {"CheckinTime": {"$regex": f"/{year}/"}}
     
     if date_filter:
         conditions.append(date_filter)
@@ -213,7 +216,7 @@ def build_leave_query(filter_type, start_date, end_date, search):
             ]
         }
         conditions.append(search_or)
-    
+
     # Kết hợp tất cả với $and
     if len(conditions) == 1:
         return conditions[0]
