@@ -14,14 +14,23 @@
       --muted: #6c757d;
       --shadow: 0 3px 12px rgba(0,0,0,0.08);
     }
-    body { font-family: "Segoe UI", Arial, sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+    body { 
+      font-family: "Segoe UI", Arial, sans-serif; 
+      background: var(--bg); 
+      margin: 0; 
+      padding: 20px; 
+      position: relative; 
+    }
     h1 { text-align: center; color: var(--primary); }
     .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
     button {
       background: var(--primary);
-      color: white; border: none;
-      padding: 6px 12px; border-radius: 6px;
-      cursor: pointer; font-size: 14px;
+      color: white; 
+      border: none;
+      padding: 6px 12px; 
+      border-radius: 6px;
+      cursor: pointer; 
+      font-size: 14px;
       transition: 0.2s;
     }
     button:hover { opacity: 0.9; }
@@ -42,37 +51,69 @@
     }
     .pagination button.active { background: var(--primary); color: white; }
     img.checkin-photo { height: 60px; width: auto; border-radius: 6px; object-fit: cover; }
-    .login-box { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .msg { margin: 10px 0; padding: 8px 10px; border-radius: 6px; }
     .msg.error { background: #ffe6e6; color: var(--danger); }
     .msg.success { background: #e8fbe8; color: var(--success); }
     a.map-link { color: var(--primary); text-decoration: none; font-weight: 500; }
     a.map-link:hover { text-decoration: underline; }
-    #greeting, #dataTabs, #filters, #dateFilter, #searchFilter, #tableContainer, #pagination { display: none; }
+    #greeting, #dataTabs, #filters, #dateFilter, #searchFilter, #tableContainer, #pagination, #logoutBtn { display: none; }
     #greeting { text-align: center; margin: 10px 0; font-size: 18px; color: var(--primary); font-weight: bold; }
     #dataTabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; }
     #dataTabs button { padding: 8px 16px; font-size: 15px; min-width: 120px; }
     #leaveSection { display: none; }
     #leaveTableContainer table th:first-child { min-width: 100px; }
     .export-group { display: flex; gap: 5px; align-items: center; }
+    /* Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background: var(--card);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      width: 90%;
+      max-width: 400px;
+      text-align: center;
+    }
+    .modal-content h2 { margin: 0 0 15px; color: var(--primary); }
+    .modal-content input {
+      width: calc(100% - 16px);
+      margin-bottom: 10px;
+    }
+    .modal-content button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0 5px;
+    }
+    .modal-content a { 
+      color: var(--muted); 
+      font-size: 13px; 
+      text-decoration: none; 
+      display: inline-block; 
+      margin-top: 10px; 
+    }
+    .modal-content a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <h1>📍Dữ liệu Chấm công & Nghỉ phép</h1>
-  <div class="controls login-box">
-    <input type="email" id="loginEmail" placeholder="Nhập email admin..." />
-    <input type="password" id="loginPass" placeholder="Mật khẩu..." />
-    <button id="loginBtn">Đăng nhập</button>
-    <button id="logoutBtn" style="display:none;background:var(--danger);">Đăng xuất</button>
-    <a href="/forgot-password" style="color:var(--muted);font-size:13px;text-decoration:none;">Reset mật khẩu</a>
-  </div>
   <div id="messageArea"></div>
   <div id="greeting"></div>
+  <button id="logoutBtn" style="background:var(--danger);">Đăng xuất</button>
   <div id="dataTabs">
     <button id="tabAttendance" class="active" onclick="switchTab('attendance')">Điểm danh</button>
     <button id="tabLeave" onclick="switchTab('leave')">Nghỉ phép</button>
   </div>
-  
   <div id="filters" class="controls">
     <label><b>Bộ lọc:</b></label>
     <button onclick="applyFilter('hôm nay')" id="btn-homnay">Hôm nay</button>
@@ -81,13 +122,11 @@
     <button onclick="applyFilter('năm')" id="btn-nam">Năm</button>
     <button onclick="applyFilter('tất cả')" id="btn-tatca">Tất cả</button>
   </div>
-  
   <div id="dateFilter" class="controls">
     <label><b>Từ ngày:</b></label><input type="date" id="startDate" />
     <label><b>Đến ngày:</b></label><input type="date" id="endDate" />
     <button onclick="applyDateRange()">Áp dụng</button>
   </div>
-  
   <div id="searchFilter" class="controls">
     <input type="text" id="searchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
     <select id="rowsPerPage" onchange="updateRowsPerPage()">
@@ -109,7 +148,6 @@
     <button onclick="refreshData()">🔄 Làm mới</button>
     <button onclick="resetFilter()">↻ Reset</button>
   </div>
-  
   <div id="tableContainer" class="table-container">
     <table id="dataTable">
       <thead>
@@ -131,7 +169,6 @@
     </table>
   </div>
   <div id="pagination" class="pagination"></div>
-  
   <div id="leaveSection">
     <div class="controls">
       <label><b>Bộ lọc:</b></label>
@@ -175,7 +212,7 @@
             <th onclick="sortLeaveTable('EmployeeName')">Tên nhân viên</th>
             <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
             <th onclick="sortLeaveTable('CheckinTime')">Ngày tạo đơn</th>
-            <th onclick="sortLeaveTable('ApprovalDate')">Ngày duyệt</th>        
+            <th onclick="sortLeaveTable('ApprovalDate')">Ngày duyệt</th>
             <th onclick="sortLeaveTable('Tasks')">Ghi chú</th>
             <th onclick="sortLeaveTable('Status')">Trạng thái</th>
           </tr>
@@ -185,7 +222,16 @@
     </div>
     <div id="leavePagination" class="pagination"></div>
   </div>
-  
+  <div id="loginModal" class="modal">
+    <div class="modal-content">
+      <h2>Đăng nhập</h2>
+      <input type="email" id="loginEmail" placeholder="Nhập email admin..." />
+      <input type="password" id="loginPass" placeholder="Mật khẩu..." />
+      <button id="loginBtn">Đăng nhập</button>
+      <a href="/forgot-password">Reset mật khẩu</a>
+      <div id="modalMessage" class="msg" style="display:none;"></div>
+    </div>
+  </div>
   <script>
     let currentTab = "attendance";
     let currentFilter = "hôm nay";
@@ -203,20 +249,27 @@
     let currentLeavePage = 1;
     let leaveRowsPerPage = 10;
 
-    function showMessage(msg, type="success") {
-      const el = document.getElementById("messageArea");
+    function showMessage(msg, type="success", isModal=false) {
+      const el = isModal ? document.getElementById("modalMessage") : document.getElementById("messageArea");
       el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
-      setTimeout(() => el.innerHTML="", 4000);
+      el.style.display = "block";
+      setTimeout(() => {
+        el.innerHTML = "";
+        el.style.display = "none";
+      }, 4000);
     }
 
     function showDashboard() {
+      document.getElementById("loginModal").style.display = "none";
       document.getElementById("greeting").style.display = "block";
+      document.getElementById("logoutBtn").style.display = "inline-block";
       document.getElementById("dataTabs").style.display = "flex";
       switchTab(currentTab);
     }
 
     function hideDashboard() {
       document.getElementById("greeting").style.display = "none";
+      document.getElementById("logoutBtn").style.display = "none";
       document.getElementById("dataTabs").style.display = "none";
       document.getElementById("leaveSection").style.display = "none";
       document.getElementById("filters").style.display = "none";
@@ -262,7 +315,7 @@
     async function login() {
       const email = document.getElementById("loginEmail").value.trim();
       const pass = document.getElementById("loginPass").value;
-      if (!email || !pass) return showMessage("⚠️ Nhập email và mật khẩu", "error");
+      if (!email || !pass) return showMessage("⚠️ Nhập email và mật khẩu", "error", true);
       const formData = new FormData();
       formData.append("email", email);
       formData.append("password", pass);
@@ -271,23 +324,20 @@
       if (res.ok && data.success) {
         localStorage.setItem("adminEmail", email);
         localStorage.setItem("adminUser", data.username || data.email);
-        document.getElementById("loginEmail").style.display = "none";
-        document.getElementById("loginPass").style.display = "none";
-        document.getElementById("loginBtn").style.display = "none";
-        document.getElementById("logoutBtn").style.display = "inline-block";
         document.getElementById("greeting").innerHTML = `Xin chào, ${data.username || email}!`;
         showDashboard();
         showMessage("✅ Đăng nhập thành công", "success");
         applyFilter("hôm nay");
-      } else showMessage(data.message || "🚫 Sai thông tin", "error");
+      } else {
+        showMessage(data.message || "🚫 Sai thông tin", "error", true);
+      }
     }
 
     function logout() {
       localStorage.clear();
-      document.getElementById("loginEmail").style.display = "";
-      document.getElementById("loginPass").style.display = "";
-      document.getElementById("loginBtn").style.display = "";
-      document.getElementById("logoutBtn").style.display = "none";
+      document.getElementById("loginEmail").value = "";
+      document.getElementById("loginPass").value = "";
+      document.getElementById("loginModal").style.display = "flex";
       hideDashboard();
       showMessage("👋 Đã đăng xuất", "success");
     }
@@ -297,7 +347,10 @@
 
     async function loadData() {
       const email = localStorage.getItem("adminEmail");
-      if (!email) return showMessage("🚫 Chưa đăng nhập!", "error");
+      if (!email) {
+        document.getElementById("loginModal").style.display = "flex";
+        return showMessage("🚫 Chưa đăng nhập!", "error");
+      }
       let url = `/api/attendances?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
       if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
       if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
@@ -350,7 +403,10 @@
 
     async function loadLeaveData() {
       const email = localStorage.getItem("adminEmail");
-      if (!email) return showMessage("🚫 Chưa đăng nhập!", "error");
+      if (!email) {
+        document.getElementById("loginModal").style.display = "flex";
+        return showMessage("🚫 Chưa đăng nhập!", "error");
+      }
       let url = `/api/leaves?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}`;
       if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
       if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
@@ -481,8 +537,8 @@
       let exportOptionsEl;
       let url = "";
       if (!email) {
-        showMessage("⚠️ Chưa đăng nhập", "error");
-        return;
+        document.getElementById("loginModal").style.display = "flex";
+        return showMessage("⚠️ Chưa đăng nhập", "error");
       }
       if (currentTab === "attendance") {
         exportOptionsEl = document.getElementById('exportOptionsAttendance');
@@ -577,17 +633,19 @@
       const email = localStorage.getItem("adminEmail");
       if (email) {
         const username = localStorage.getItem("adminUser");
-        document.getElementById("loginEmail").style.display = "none";
-        document.getElementById("loginPass").style.display = "none";
-        document.getElementById("loginBtn").style.display = "none";
-        document.getElementById("logoutBtn").style.display = "inline-block";
         document.getElementById("greeting").innerHTML = `Xin chào, ${username}!`;
         showDashboard();
         applyFilter("hôm nay");
       } else {
         hideDashboard();
+        document.getElementById("loginModal").style.display = "flex";
       }
     };
+
+    // Allow Enter key to trigger login
+    document.getElementById("loginPass").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") login();
+    });
   </script>
 </body>
 </html>
