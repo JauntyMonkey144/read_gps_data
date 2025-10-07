@@ -7,3 +7,4 @@ openpyxl
 Werkzeug
 itsdangerous
 python-dotenv
+Flask-Mail
