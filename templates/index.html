@@ -143,7 +143,7 @@
       <button onclick="applyLeaveFilter('tuần')" id="leave-btn-tuan">Tuần</button>
       <button onclick="applyLeaveFilter('tháng')" id="leave-btn-thang">Tháng</button>
       <button onclick="applyLeaveFilter('năm')" id="leave-btn-nam">Năm</button>
-      <button onclick="applyLeaveFilter('tất cả')" id="leave-btn-tatca">Tất</button>
+      <button onclick="applyLeaveFilter('tất cả')" id="leave-btn-tatca">Tất cả</button>
     </div>
     <div class="controls">
       <label><b>Từ ngày:</b></label><input type="date" id="leaveStartDate" />
@@ -159,6 +159,15 @@
         <option value="25">25 dòng</option>
       </select>
       <button onclick="applyLeaveSearch()">Tìm kiếm</button>
+      <div class="export-group">
+        <select id="exportOptions" style="border: 1px solid var(--primary);">
+            <option value="">-- Chọn loại file --</option>
+            <option value="attendance">Điểm Danh Hiện Tại</option>
+            <option value="leave">Nghỉ Phép Hiện Tại</option>
+            <option value="combined">Toàn Bộ (Cả hai)</option>
+        </select>
+        <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button> 
+      </div>
       <button onclick="refreshLeaveData()">🔄 Làm mới</button>
       <button onclick="resetLeaveFilter()">↻ Reset</button>
     </div>
