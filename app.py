@@ -1,60 +1,50 @@
-from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file
-from pymongo import MongoClient
-from flask_cors import CORS
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
 from datetime import datetime, timedelta, timezone
-from pytz import timezone as pytz_timezone
-import os
-import re
-import calendar
-from io import BytesIO
-from openpyxl import load_workbook
-from openpyxl.styles import Border, Side, Alignment
-import secrets
-import smtplib
-import threading
-import time
+from flask_cors import CORS
+from pymongo import MongoClient
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask import get_flashed_messages
+import os, requests, smtplib, secrets
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from concurrent.futures import ThreadPoolExecutor
-from functools import wraps
+from email.utils import formataddr
 import logging
 from contextlib import contextmanager
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 # Thiết lập logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__, template_folder="templates")
-CORS(app, methods=["GET", "POST"])
+# ---- Init App ----
+app = Flask(__name__, static_folder="static", template_folder="templates")
+app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-in-prod")
+CORS(app)
 
 # ---- Timezone VN ----
-VN_TZ = pytz_timezone('Asia/Ho_Chi_Minh')
+VN_TZ = timezone(timedelta(hours=7))
 
-# ---- MongoDB Config ----
+# ---- MongoDB config ----
 MONGO_URI = os.getenv(
     "MONGO_URI",
     "mongodb+srv://banhbaobeo2205:lm2hiCLXp6B0D7hq@cluster0.festnla.mongodb.net/?retryWrites=true&w=majority"
 )
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
+client = MongoClient(MONGO_URI)
+db = client[DB_NAME]
+admins = db["admins"]
+reset_tokens = db["reset_tokens"]
 
-# ---- SMTP Config for Email ----
+# ---- SMTP Config ----
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME", "sun.automation.sys@gmail.com")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "igzaunbokbaiimen")
-APP_URL = os.getenv("APP_URL", "https://read-gps-data.vercel.app")
+SMTP_USER = os.getenv("SMTP_USER", "banhbaobeo2205@gmail.com")
+SMTP_PASS = os.getenv("SMTP_PASS", "vynqvvvmbcigpdvy")
 SMTP_MAX_CONNECTIONS = int(os.getenv("SMTP_MAX_CONNECTIONS", 5))
 SMTP_RETRY_COUNT = int(os.getenv("SMTP_RETRY_COUNT", 3))
 SMTP_TIMEOUT = int(os.getenv("SMTP_TIMEOUT", 10))
-
-# ---- Kết nối MongoDB ----
-client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
-# Các collection sử dụng
-admins = db["admins"]
-collection = db["alt_checkins"]
-reset_tokens = db["reset_tokens"]
+APP_URL = os.getenv("APP_URL", "https://read-gps-data.vercel.app")
 
 # ---- Quản lý kết nối SMTP với ThreadPoolExecutor ----
 smtp_pool = ThreadPoolExecutor(max_workers=SMTP_MAX_CONNECTIONS)
@@ -83,7 +73,7 @@ def get_smtp_connection():
         try:
             conn = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=SMTP_TIMEOUT)
             conn.starttls()
-            conn.login(SMTP_USERNAME, SMTP_PASSWORD)
+            conn.login(SMTP_USER, SMTP_PASS)
             smtp_connections.append(conn)
             logger.info("New SMTP connection established")
             yield conn
@@ -111,20 +101,72 @@ def send_reset_email_async(email, token):
     """Gửi email bất đồng bộ với retry và logging."""
     def send_email():
         msg = MIMEMultipart()
-        msg["From"] = SMTP_USERNAME
+        msg["From"] = formataddr(("Sun Automation System", SMTP_USER))
         msg["To"] = email
-        msg["Subject"] = "Đặt lại mật khẩu"
-        reset_link = f"{APP_URL}/reset-password?token={token}"
+        msg["Subject"] = "Đặt lại mật khẩu Admin"
+        reset_url = f"{APP_URL}/reset-password/{token}"
         body = f"""
-        Xin chào,
-        Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết dưới đây để đặt lại mật khẩu:
-        {reset_link}
-        Liên kết này sẽ hết hạn sau 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
-        Trân trọng,
-        Đội ngũ hỗ trợ
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; line-height: 1.6; }}
+                .container {{ max-width: 500px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); overflow: hidden; }}
+                .header {{ background: linear-gradient(135deg, #007bff, #0056b3); color: white; padding: 20px; text-align: center; }}
+                .header h2 {{ margin: 0; font-size: 24px; font-weight: 500; }}
+                .content {{ padding: 20px; }}
+                .btn-detail-wrapper {{ text-align: center; margin-top: 24px; }}
+                .btn-detail {{
+                    display: inline-block;
+                    padding: 14px 32px;
+                    background: linear-gradient(90deg, #007bff 60%, #2196f3 100%);
+                    color: white;
+                    border-radius: 8px;
+                    text-decoration: none;
+                    font-weight: 600;
+                    font-size: 16px;
+                    box-shadow: 0 2px 8px rgba(0,123,255,0.15);
+                    transition: background 0.2s, box-shadow 0.2s, transform 0.2s;
+                    border: none;
+                    outline: none;
+                }}
+                .btn-detail:hover {{
+                    background: linear-gradient(90deg, #0056b3 60%, #42a5f5 100%);
+                    box-shadow: 0 4px 16px rgba(0,123,255,0.25);
+                    transform: translateY(-1px);
+                    color: white;
+                }}
+                .footer {{ background: #e3f2fd; padding: 15px; text-align: center; font-size: 12px; color: #1976d2; }}
+                .footer p {{ margin: 0; }}
+                @media (prefers-color-scheme: dark) {{
+                    body {{ background-color: #121212; color: #e0e0e0; }}
+                    .container {{ background: #1e1e1e; color: #e0e0e0; }}
+                    .header {{ background: linear-gradient(135deg, #0d47a1, #1976d2); }}
+                    .footer {{ background: #303030; color: #bbdefb; }}
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>🔄 Đặt lại mật khẩu</h2>
+                </div>
+                <div class="content">
+                    <p>Nhấp vào liên kết dưới đây để đặt lại mật khẩu của bạn:</p>
+                    <div class="btn-detail-wrapper">
+                        <a href="{reset_url}" class="btn-detail">Đặt lại mật khẩu</a>
+                    </div>
+                    <p>Liên kết này sẽ hết hạn sau 1 giờ.</p>
+                </div>
+                <div class="footer">
+                    <p>Sun Automation - Hệ thống chấm công GPS</p>
+                </div>
+            </div>
+        </body>
+        </html>
         """
-        msg.attach(MIMEText(body, "plain"))
-
+        msg.attach(MIMEText(body, "html", "utf-8"))
         for attempt in range(SMTP_RETRY_COUNT):
             try:
                 start_time = time.time()
@@ -160,8 +202,15 @@ def send_reset_email_async(email, token):
             "attempts": SMTP_RETRY_COUNT
         })
         return False
-
     smtp_pool.submit(send_email)
+
+# ---- Helper render flash messages ----
+def render_flash_messages():
+    messages_html = ""
+    for category, message in get_flashed_messages(with_categories=True):
+        color = "green" if category == "success" else "red"
+        messages_html += f'<p style="color: {color}; margin: 10px 0; padding: 5px; background: #f8f9fa; border-radius: 4px;">{message}</p>'
+    return messages_html
 
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
@@ -191,80 +240,67 @@ def login():
 # ---- Gửi email quên mật khẩu ----
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
-    if request.method == "GET":
-        return """
-        <!DOCTYPE html>
-        <html lang="vi">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Quên mật khẩu</title>
-            <style>
-                body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
-                .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
-                button { background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-                button:hover { background: #218838; }
-                .success { color: #28a745; text-align: center; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h2>🔒 Quên mật khẩu</h2>
-                <form method="POST">
-                    <input type="email" name="email" placeholder="Email" required>
-                    <button type="submit">Gửi liên kết đặt lại mật khẩu</button>
-                    <a href="/">Quay về trang chủ</a>
-                </form>
-            </div>
-        </body>
-        </html>
-        """
-    if request.method == "POST":
-        email = request.form.get("email")
-        if not email:
-            return jsonify({"success": False, "message": "❌ Vui lòng nhập email"}), 400
-       
-        admin = admins.find_one({"email": email})
-        if not admin:
-            return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
-       
-        token = secrets.token_urlsafe(32)
-        expiry = datetime.now(VN_TZ) + timedelta(hours=1)
-       
-        reset_tokens.delete_one({"email": email})
-        reset_tokens.insert_one({
-            "email": email,
-            "token": token,
-            "expiry": expiry
-        })
-       
-        send_reset_email_async(email, token)
-       
-        return """
-        <!DOCTYPE html>
-        <html lang="vi">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Quên mật khẩu</title>
-            <style>
-                body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
-                .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
-                .success { color: #28a745; font-size: 18px; margin-bottom: 20px; }
-                button { background: #28a745; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-                button:hover { background: #218838; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="success">✅ Liên kết đặt lại mật khẩu đang được gửi đến email của bạn!</div>
-                <button onclick="window.location.href='/'">Quay về trang chủ</button>
-            </div>
-        </body>
-        </html>
-        """
+    try:
+        logger.info(f"Processing forgot_password request at {datetime.now(VN_TZ)}")
+        if request.method == "GET":
+            return f"""
+            <!DOCTYPE html>
+            <html lang="vi">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Quên mật khẩu</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
+                    .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                    input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
+                    button {{ background: #007bff; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer;ondag: 5px; background: #f8f9fa; border-radius: 4px;">{message}</p>'
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h2>🔒 Quên mật khẩu</h2>
+                        {render_flash_messages()}
+                        <form method="POST">
+                            <input type="email" name="email" placeholder="Email" required>
+                            <button type="submit">Gửi email đặt lại</button>
+                        </form>
+                        <a href="/login">Quay về đăng nhập</a>
+                    </div>
+                </body>
+                </html>
+            """
 
+        if request.method == "POST":
+            email = request.form.get("email")
+            if not email:
+                flash("Vui lòng nhập email!", "error")
+                return redirect(url_for("forgot_password"))
+
+            admin = admins.find_one({"email": email})
+            if not admin:
+                flash("Email không tồn tại!", "error")
+                return redirect(url_for("forgot_password"))
+
+            token = secrets.token_urlsafe(32)
+            expiry = datetime.now(VN_TZ) + timedelta(hours=1)
+
+            reset_tokens.delete_one({"email": email})
+            reset_tokens.insert_one({
+                "email": email,
+                "token": token,
+                "expiry": expiry
+            })
+
+            send_reset_email_async(email, token)
+            flash("Email đặt lại mật khẩu đã gửi!", "success")
+            return redirect(url_for("login"))
+
+    except Exception as e:
+        logger.error(f"Error in forgot_password: {e}")
+        flash("Lỗi máy chủ nội bộ, vui lòng thử lại sau!", "error")
+        return redirect(url_for("forgot_password"))
+        
 # ---- Đặt lại mật khẩu ----
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
