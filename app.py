@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file
+  from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file
 from pymongo import MongoClient
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -59,32 +59,7 @@ def login():
         "username": admin["username"],
         "email": admin["email"]
     })
-# ---- Gửi email quên mật khẩu ----
-def send_reset_email(email, token):
-    msg = MIMEMultipart()
-    msg["From"] = SMTP_USERNAME
-    msg["To"] = email
-    msg["Subject"] = "Đặt lại mật khẩu"
-    reset_link = f"{APP_URL}/reset-password?token={token}"
-    body = f"""
-    Xin chào,
-    Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết dưới đây để đặt lại mật khẩu:
-    {reset_link}
-    Liên kết này sẽ hết hạn sau 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
-    Trân trọng,
-    Đội ngũ hỗ trợ
-    """
-    msg.attach(MIMEText(body, "plain"))
-    try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg)
-        print(f"DEBUG: Reset email sent to {email}")
-        return True
-    except Exception as e:
-        print(f"❌ Error sending reset email: {e}")
-        return False
+# ---- Reset mật khẩu (không gửi email) ----
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     if request.method == "GET":
@@ -94,7 +69,7 @@ def forgot_password():
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Quên mật khẩu</title>
+            <title>Đặt lại mật khẩu</title>
             <style>
                 body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
                 .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -106,10 +81,10 @@ def forgot_password():
         </head>
         <body>
             <div class="container">
-                <h2>🔒 Quên mật khẩu</h2>
+                <h2>🔒 Đặt lại mật khẩu</h2>
                 <form method="POST">
                     <input type="email" name="email" placeholder="Email" required>
-                    <button type="submit">Gửi liên kết đặt lại mật khẩu</button>
+                    <button type="submit">Xác nhận email để đặt lại mật khẩu</button>
                     <a href="/">Quay về trang chủ</a>
                 </form>
             </div>
@@ -137,33 +112,8 @@ def forgot_password():
             "expiry": expiry
         })
        
-        # Send reset email
-        if send_reset_email(email, token):
-            return """
-            <!DOCTYPE html>
-            <html lang="vi">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Quên mật khẩu</title>
-                <style>
-                    body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
-                    .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
-                    .success { color: #28a745; font-size: 18px; margin-bottom: 20px; }
-                    button { background: #28a745; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-                    button:hover { background: #218838; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="success">✅ Liên kết đặt lại mật khẩu đã được gửi đến email của bạn!</div>
-                    <button onclick="window.location.href='/'">Quay về trang chủ</button>
-                </div>
-            </body>
-            </html>
-            """
-        else:
-            return jsonify({"success": False, "message": "❌ Lỗi khi gửi email. Vui lòng thử lại sau."}), 500
+        # Redirect to reset password page with token
+        return redirect(url_for("reset_password", token=token))
 # ---- Đặt lại mật khẩu ----
 @app.route("/reset-password", methods=["GET", "POST"])
 def reset_password():
@@ -440,7 +390,7 @@ def get_leaves():
         print(f"❌ Error in get_leaves: {e}")
         return jsonify({"error": str(e)}), 500
        
-# ---- API xuất Excel cho nghỉ phép (unchanged from previous response) ----
+# ---- API xuất Excel cho nghỉ phép (unchanged) ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
     try:
@@ -560,7 +510,7 @@ def export_leaves_to_excel():
     except Exception as e:
         print("❌ Lỗi export leaves:", e)
         return jsonify({"error": str(e)}), 500
-# ---- API xuất Excel kết hợp chấm công và nghỉ phép (unchanged from previous response) ----
+# ---- API xuất Excel kết hợp chấm công và nghỉ phép (unchanged) ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
