@@ -302,6 +302,7 @@ def get_leaves():
             "EmployeeName": 1,
             "CheckinDate": 1,
             "CheckinTime": 1,
+            "ApprovalDate": 1,
             "Tasks": 1,
             "Status": 1
         }))
