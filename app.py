@@ -61,7 +61,7 @@ def login():
 def forgot_password():
     if request.method == "GET":
         # Form HTML đơn giản cho reset mật khẩu
-        return render_template("index.html", success=success)
+        return render_template("reset-password")
 
     if request.method == "POST":
         email = request.form.get("email")
