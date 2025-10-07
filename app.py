@@ -409,16 +409,35 @@ def get_leaves():
             "EmployeeName": 1,
             "CheckinDate": 1,
             "CheckinTime": 1,
-            "ApprovalDate": 1,
             "Tasks": 1,
-            "Status": 1
+            "Status": 1,
+            "ApprovalDate": 1,  # Thêm trường ApprovalDate
+            "ApprovedBy": 1,    # Thêm trường ApprovedBy
+            "ApproveNote": 1    # Thêm trường ApproveNote
         }))
+        # Định dạng ApprovalDate cho mỗi bản ghi
+        for item in data:
+            approval_date = item.get("ApprovalDate")
+            if approval_date:
+                if isinstance(approval_date, datetime):
+                    item["ApprovalDate"] = approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
+                elif isinstance(approval_date, str) and approval_date.strip():
+                    try:
+                        parsed = datetime.strptime(approval_date, "%d/%m/%Y %H:%M:%S")
+                        item["ApprovalDate"] = parsed.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
+                    except Exception:
+                        item["ApprovalDate"] = approval_date  # Giữ nguyên nếu không parse được
+            else:
+                item["ApprovalDate"] = None  # Đặt None nếu không có ApprovalDate
+            # Thêm các trường khác nếu cần
+            item["ApprovedBy"] = item.get("ApprovedBy", "")
+            item["ApproveNote"] = item.get("ApproveNote", "")
         print(f"DEBUG: Fetched {len(data)} leave records for email {email} with filter {filter_type}")
         return jsonify(data)
     except Exception as e:
         print(f"❌ Error in get_leaves: {e}")
         return jsonify({"error": str(e)}), 500
-
+        
 # ---- API xuất Excel cho nghỉ phép (unchanged from previous response) ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
