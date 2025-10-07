@@ -608,5 +608,240 @@ def export_leaves_to_excel():
     except Exception as e:
         print("❌ Lỗi export leaves:", e)
         return jsonify({"error": str(e)}), 500
+# ---- API xuất Excel cho cả điểm danh và nghỉ phép vào các sheet riêng ----
+@app.route("/api/export-combined-excel", methods=["GET"])
+def export_combined_to_excel():
+    try:
+        email = request.args.get("email")
+        if not email:
+            return jsonify({"error": "❌ Thiếu email"}), 400
+        # ✅ Kiểm tra quyền admin
+        admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
+        if not admin:
+            return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
+        # ---- Tham số lọc ----
+        filter_type = request.args.get("filter", "hôm nay").lower()
+        start_date = request.args.get("startDate")
+        end_date = request.args.get("endDate")
+        search = request.args.get("search", "").strip()
+        tab = request.args.get("tab", "điểm danh").lower()  # Lấy tab hiện tại: 'điểm danh' hoặc 'nghỉ phép'
+        # ---- Tạo queries cho cả điểm danh và nghỉ phép ----
+        attendance_query = build_attendance_query(filter_type, start_date, end_date, search)
+        leave_query = build_leave_query(filter_type, start_date, end_date, search)
+        # ---- Lấy dữ liệu ----
+        attendance_data = list(db.alt_checkins.find(attendance_query, {
+            "_id": 0,
+            "EmployeeId": 1,
+            "EmployeeName": 1,
+            "ProjectId": 1,
+            "Tasks": 1,
+            "OtherNote": 1,
+            "Address": 1,
+            "CheckinTime": 1,
+            "CheckinDate": 1,
+            "Status": 1,
+            "ApprovedBy": 1,
+            "Latitude": 1,
+            "Longitude": 1
+        }))
+        leave_data = list(db.alt_checkins.find(leave_query, {
+            "_id": 0,
+            "EmployeeId": 1,
+            "EmployeeName": 1,
+            "CheckinDate": 1,
+            "CheckinTime": 1,
+            "Tasks": 1,
+            "Status": 1,
+            "ApprovedBy": 1,
+            "ApproveNote": 1
+        }))
+        # ---- Nhóm dữ liệu điểm danh ----
+        attendance_grouped = {}
+        for d in attendance_data:
+            emp_id = d.get("EmployeeId", "")
+            emp_name = d.get("EmployeeName", "")
+            date = d.get("CheckinDate") or (
+                d["CheckinTime"].astimezone(VN_TZ).strftime("%Y-%m-%d")
+                if isinstance(d.get("CheckinTime"), datetime) else ""
+            )
+            key = (emp_id, emp_name, date)
+            attendance_grouped.setdefault(key, []).append(d)
+        # ---- Nhóm dữ liệu nghỉ phép ----
+        leave_grouped = {}
+        for d in leave_data:
+            emp_id = d.get("EmployeeId", "")
+            emp_name = d.get("EmployeeName", "")
+            date = d.get("CheckinDate") or (
+                d["CheckinTime"].astimezone(VN_TZ).strftime("%Y-%m-%d")
+                if isinstance(d.get("CheckinTime"), datetime) else ""
+            )
+            key = (emp_id, emp_name, date)
+            leave_grouped.setdefault(key, []).append(d)
+        # ---- Load template Excel ----
+        template_path = "templates/Form chấm công.xlsx"
+        wb = load_workbook(template_path)
+        # Tạo hoặc lấy các sheet
+        ws_attendance = wb["Sheet1"] if "Sheet1" in wb.sheetnames else wb.create_sheet("Điểm danh")
+        ws_attendance.title = "Điểm danh"
+        ws_leaves = wb.create_sheet("Nghỉ phép") if "Nghỉ phép" not in wb.sheetnames else wb["Nghỉ phép"]
+        border = Border(
+            left=Side(style="thin", color="000000"),
+            right=Side(style="thin", color="000000"),
+            top=Side(style="thin", color="000000"),
+            bottom=Side(style="thin", color="000000"),
+        )
+        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        # ---- Điền dữ liệu điểm danh (nếu tab là điểm danh hoặc tất cả) ----
+        if tab in ["điểm danh", "tất cả"]:
+            start_row = 2
+            for i, ((emp_id, emp_name, date), records) in enumerate(attendance_grouped.items(), start=0):
+                row = start_row + i
+                ws_attendance.cell(row=row, column=1, value=emp_id)
+                ws_attendance.cell(row=row, column=2, value=emp_name)
+                ws_attendance.cell(row=row, column=3, value=date)
+                for j, rec in enumerate(records[:10], start=1):
+                    checkin_time = rec.get("CheckinTime")
+                    time_str = ""
+                    if isinstance(checkin_time, datetime):
+                        time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
+                    elif isinstance(checkin_time, str) and checkin_time.strip():
+                        try:
+                            parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
+                            time_str = parsed.strftime("%H:%M:%S")
+                        except Exception:
+                            time_str = checkin_time
+                    parts = []
+                    tasks = rec.get("Tasks")
+                    if isinstance(tasks, list):
+                        tasks_str = ", ".join(tasks)
+                    else:
+                        tasks_str = str(tasks or "")
+                    leave_reason = ""
+                    if "nghỉ phép" in tasks_str.lower():
+                        if ":" in tasks_str:
+                            split_task = tasks_str.split(":", 1)
+                            tasks_str = split_task[0].strip()
+                            leave_reason = split_task[1].strip()
+                        else:
+                            tasks_str = tasks_str.strip()
+                        status = rec.get("Status", "")
+                        approve_date = ""
+                        if rec.get("ApprovedBy"):
+                            if isinstance(checkin_time, datetime):
+                                approve_date = checkin_time.astimezone(VN_TZ).strftime("%d/%m/%Y")
+                            else:
+                                approve_date = datetime.now(VN_TZ).strftime("%d/%m/%Y")
+                        entry = f"{date}; Nghỉ phép; {leave_reason}; {status}; {approve_date}"
+                    else:
+                        if time_str:
+                            parts.append(time_str)
+                        if rec.get("ProjectId"):
+                            parts.append(str(rec["ProjectId"]))
+                        if tasks_str:
+                            parts.append(tasks_str)
+                        if leave_reason:
+                            parts.append(leave_reason)
+                        if rec.get("Status"):
+                            parts.append(rec["Status"])
+                        if rec.get("OtherNote"):
+                            parts.append(rec["OtherNote"])
+                        if rec.get("Address"):
+                            parts.append(rec["Address"])
+                        entry = "; ".join(parts)
+                    ws_attendance.cell(row=row, column=3 + j, value=entry)
+                for col in range(1, 14):
+                    cell = ws_attendance.cell(row=row, column=col)
+                    cell.border = border
+                    cell.alignment = align_left
+                max_lines = max(
+                    (str(ws_attendance.cell(row=row, column=col).value).count("\n") + 1 if ws_attendance.cell(row=row, column=col).value else 1)
+                    for col in range(1, 14)
+                )
+                ws_attendance.row_dimensions[row].height = max_lines * 20
+            for col in ws_attendance.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    if cell.value:
+                        length = len(str(cell.value))
+                        max_length = max(max_length, length)
+                ws_attendance.column_dimensions[col_letter].width = max_length + 2
+        # ---- Điền dữ liệu nghỉ phép (nếu tab là nghỉ phép hoặc tất cả) ----
+        if tab in ["nghỉ phép", "tất cả"]:
+            start_row = 2
+            for i, ((emp_id, emp_name, date), records) in enumerate(leave_grouped.items(), start=0):
+                row = start_row + i
+                ws_leaves.cell(row=row, column=1, value=emp_id)
+                ws_leaves.cell(row=row, column=2, value=emp_name)
+                ws_leaves.cell(row=row, column=3, value=date)
+                for j, rec in enumerate(records[:10], start=1):
+                    checkin_time = rec.get("CheckinTime")
+                    time_str = ""
+                    if isinstance(checkin_time, datetime):
+                        time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
+                    elif isinstance(checkin_time, str) and checkin_time.strip():
+                        try:
+                            parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
+                            time_str = parsed.strftime("%H:%M:%S")
+                        except Exception:
+                            time_str = checkin_time
+                    tasks = rec.get("Tasks")
+                    tasks_str = ""
+                    leave_reason = ""
+                    if isinstance(tasks, list):
+                        tasks_str = ", ".join(tasks)
+                    else:
+                        tasks_str = str(tasks or "")
+                    if "nghỉ phép" in tasks_str.lower():
+                        if ":" in tasks_str:
+                            split_task = tasks_str.split(":", 1)
+                            tasks_str = split_task[0].strip()
+                            leave_reason = split_task[1].strip()
+                        else:
+                            tasks_str = tasks_str.strip()
+                    status = rec.get("Status", "")
+                    if rec.get("ApprovedBy"):
+                        status = f"Đã duyệt bởi {rec['ApprovedBy']}"
+                    entry = f"{time_str};{tasks_str};{leave_reason};{status}"
+                    ws_leaves.cell(row=row, column=3 + j, value=entry)
+                for col in range(1, 14):
+                    cell = ws_leaves.cell(row=row, column=col)
+                    cell.border = border
+                    cell.alignment = align_left
+                max_lines = max(
+                    (str(ws_leaves.cell(row=row, column=col).value).count("\n") + 1 if ws_leaves.cell(row=row, column=col).value else 1)
+                    for col in range(1, 14)
+                )
+                ws_leaves.row_dimensions[row].height = max_lines * 20
+            for col in ws_leaves.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    if cell.value:
+                        length = len(str(cell.value))
+                        max_length = max(max_length, length)
+                ws_leaves.column_dimensions[col_letter].width = max_length + 2
+        # ---- Xuất file ----
+        today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
+        if search:
+            filename = f"Danh sách chấm công và nghỉ phép theo tìm kiếm_{today_str}.xlsx"
+        elif filter_type == "hôm nay":
+            filename = f"Danh sách chấm công và nghỉ phép hôm nay_{today_str}.xlsx"
+        elif filter_type == "custom" and start_date and end_date:
+            filename = f"Danh sách chấm công và nghỉ phép từ {start_date} đến {end_date}_{today_str}.xlsx"
+        else:
+            filename = f"Danh sách chấm công và nghỉ phép_{today_str}.xlsx"
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except Exception as e:
+        print("❌ Lỗi export combined:", e)
+        return jsonify({"error": str(e)}), 500
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
