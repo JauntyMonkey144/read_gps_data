@@ -443,6 +443,139 @@ def export_leaves_to_excel():
         print("❌ Lỗi export leaves:", e)
         return jsonify({"error": str(e)}), 500
 
+# ---- API xuất Excel cho chấm công ----
+@app.route("/api/export-excel", methods=["GET"])
+def export_to_excel():
+    try:
+        email = request.args.get("email")
+        if not email:
+            return jsonify({"error": "❌ Thiếu email"}), 400
+        admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
+        if not admin:
+            return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
+        filter_type = request.args.get("filter", "hôm nay").lower()
+        start_date = request.args.get("startDate")
+        end_date = request.args.get("endDate")
+        search = request.args.get("search", "").strip()
+        query = build_attendance_query(filter_type, start_date, end_date, search)
+        data = list(collection.find(query, {
+            "_id": 0,
+            "EmployeeId": 1,
+            "EmployeeName": 1,
+            "ProjectId": 1,
+            "Tasks": 1,
+            "OtherNote": 1,
+            "Address": 1,
+            "CheckinTime": 1,
+            "CheckinDate": 1,
+            "Status": 1,
+            "ApprovedBy": 1,
+            "Latitude": 1,
+            "Longitude": 1
+        }))
+        grouped = {}
+        for d in data:
+            emp_id = d.get("EmployeeId", "")
+            emp_name = d.get("EmployeeName", "")
+            date = d.get("CheckinDate", "")
+            key = (emp_id, emp_name, date)
+            grouped.setdefault(key, []).append(d)
+        template_path = "templates/Form kết hợp.xlsx"
+        wb = load_workbook(template_path)
+        ws = wb.active
+        border = Border(
+            left=Side(style="thin", color="000000"),
+            right=Side(style="thin", color="000000"),
+            top=Side(style="thin", color="000000"),
+            bottom=Side(style="thin", color="000000"),
+        )
+        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        start_row = 2
+        for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
+            row = start_row + i
+            ws.cell(row=row, column=1, value=emp_id)
+            ws.cell(row=row, column=2, value=emp_name)
+            ws.cell(row=row, column=3, value=date)
+            for j, rec in enumerate(records[:10], start=1):
+                checkin_time = rec.get("CheckinTime")
+                time_str = ""
+                if isinstance(checkin_time, datetime):
+                    time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
+                elif isinstance(checkin_time, str) and checkin_time.strip():
+                    try:
+                        parsed = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S")
+                        time_str = parsed.strftime("%H:%M:%S")
+                    except Exception:
+                        time_str = checkin_time
+                parts = []
+                tasks = rec.get("Tasks")
+                tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")
+                leave_reason = ""
+                if "nghỉ phép" in tasks_str.lower():
+                    if ":" in tasks_str:
+                        split_task = tasks_str.split(":", 1)
+                        tasks_str = split_task[0].strip()
+                        leave_reason = split_task[1].strip()
+                    else:
+                        tasks_str = tasks_str.strip()
+                    status = rec.get("Status", "")
+                    approve_date = ""
+                    if rec.get("ApprovedBy"):
+                        approve_date = datetime.now(VN_TZ).strftime("%d/%m/%Y") if isinstance(checkin_time, str) else checkin_time.astimezone(VN_TZ).strftime("%d/%m/%Y")
+                    entry = f"{date}; Nghỉ phép; {leave_reason}; {status}; {approve_date}"
+                else:
+                    if time_str:
+                        parts.append(time_str)
+                    if rec.get("ProjectId"):
+                        parts.append(str(rec["ProjectId"]))
+                    if tasks_str:
+                        parts.append(tasks_str)
+                    if leave_reason:
+                        parts.append(leave_reason)
+                    if rec.get("Status"):
+                        parts.append(rec["Status"])
+                    if rec.get("OtherNote"):
+                        parts.append(rec["OtherNote"])
+                    if rec.get("Address"):
+                        parts.append(rec["Address"])
+                    entry = "; ".join(parts)
+                ws.cell(row=row, column=3 + j, value=entry)
+            for col in range(1, 14):
+                cell = ws.cell(row=row, column=col)
+                cell.border = border
+                cell.alignment = align_left
+            max_lines = max(
+                (str(ws.cell(row=row, column=col).value).count("\n") + 1 if ws.cell(row=row, column=col).value else 1)
+                for col in range(1, 14)
+            )
+            ws.row_dimensions[row].height = max_lines * 20
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                if cell.value:
+                    length = len(str(cell.value))
+                    max_length = max(max_length, length)
+            ws.column_dimensions[col_letter].width = max_length + 2
+        today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
+        filename = f"Danh sách chấm công_{today_str}.xlsx"
+        if search:
+            filename = f"Danh sách chấm công theo tìm kiếm_{today_str}.xlsx"
+        elif filter_type == "custom" and start_date and end_date:
+            filename = f"Danh sách chấm công từ {start_date} đến {end_date}_{today_str}.xlsx"
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except Exception as e:
+        print("❌ Lỗi export:", e)
+        return jsonify({"error": str(e)}), 500
+
 # ---- API xuất Excel kết hợp chấm công và nghỉ phép ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
