@@ -10,8 +10,15 @@ from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
 
+# Imports mới cho chức năng gửi mail và token
+from flask_mail import Mail, Message
+from itsdangerous import URLSafeTimedSerializer as Serializer, SignatureExpired # Thư viện tạo token bảo mật
+
 app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
+
+# ---- Cấu hình chung ----
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'mot_key_bi_mat_va_dai_duoc_giu_kin') # Rất quan trọng cho token!
 
 # ---- Timezone VN ----
 VN_TZ = timezone(timedelta(hours=7))
@@ -31,11 +38,82 @@ db = client[DB_NAME]
 admins = db["admins"]
 collection = db["alt_checkins"]
 
+# ---- Flask-Mail Config ----
+# Cần thay đổi các giá trị này bằng thông tin SMTP của bạn
+app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com') # Ví dụ: SMTP của Gmail
+app.config['MAIL_PORT'] = os.getenv('MAIL_PORT', 587)
+app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', True)
+# Thay thế bằng email và mật khẩu ứng dụng của bạn!
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'your_email@gmail.com')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'your_app_password')
+app.config['MAIL_DEFAULT_SENDER'] = ('Admin', app.config['MAIL_USERNAME'])
+
+mail = Mail(app)
+
+# ---- ItsDangerous Serializer ----
+s = Serializer(app.config['SECRET_KEY'])
+
+# --------------------------
+# ---- HÀM TIỆN ÍCH MAIL ----
+# --------------------------
+
+def get_reset_token(email, expires_sec=1800): # 30 phút
+    """Tạo token đặt lại mật khẩu với thời hạn (mặc định 30 phút)"""
+    # Dùng email làm payload, mã hóa và trả về chuỗi token
+    return s.dumps({'user_email': email}).decode('utf-8')
+
+def verify_reset_token(token):
+    """Xác minh token và trả về email nếu hợp lệ, ngược lại trả về None"""
+    try:
+        # Giải mã token và kiểm tra thời hạn
+        data = s.loads(token, max_age=1800)
+        return data['user_email']
+    except SignatureExpired:
+        return None # Token hết hạn
+    except Exception:
+        return None # Lỗi khác (token sai)
+
+def send_reset_email(admin):
+    """Gửi email chứa link đặt lại mật khẩu"""
+    token = get_reset_token(admin['email'])
+    
+    # Tạo đường link đặt lại mật khẩu
+    reset_url = url_for('reset_password', token=token, _external=True)
+    
+    msg = Message(
+        'Yêu cầu Đặt lại Mật khẩu',
+        recipients=[admin['email']],
+        html=f"""
+        <p>Xin chào {admin['username']},</p>
+        <p>Bạn (hoặc ai đó) đã yêu cầu đặt lại mật khẩu cho tài khoản admin.</p>
+        <p>Vui lòng nhấp vào đường link sau để **ĐẶT LẠI MẬT KHẨU**: <a href="{reset_url}">{reset_url}</a></p>
+        <p style="color: red;">**Link này sẽ hết hạn sau 30 phút.**</p>
+        <p>Nếu bạn không yêu cầu điều này, hãy bỏ qua email này.</p>
+        <p>Trân trọng,</p>
+        <p>Hệ thống Admin</p>
+        """
+    )
+    try:
+        mail.send(msg)
+        return True
+    except Exception as e:
+        print(f"❌ Lỗi gửi email: {e}")
+        return False
+
+# --------------------------
+# ---- ROUTES ỨNG DỤNG ----
+# --------------------------
+
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
 def index():
-    success = request.args.get("success")  # nếu =1 -> hiển thị thông báo
-    return render_template("index.html", success=success)
+    success = request.args.get("success")
+    message = None
+    if success == '1':
+        message = "✅ Đặt lại mật khẩu thành công! Vui lòng đăng nhập."
+    
+    # Giữ nguyên `success` cho logic ban đầu của bạn nếu có, thêm `message` cho thông báo cụ thể
+    return render_template("index.html", success=success, message=message)
 
 # ---- Đăng nhập API ----
 @app.route("/login", methods=["POST", "GET"])
@@ -56,11 +134,15 @@ def login():
         "email": admin["email"]
     })
 
-# ---- Quên mật khẩu ----
+# ---- Yêu cầu Quên mật khẩu (Gửi email) ----
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     if request.method == "GET":
-        return """
+        status = request.args.get('status', 'info')
+        message = request.args.get('message')
+        
+        # HTML form để người dùng nhập email
+        return f"""
         <!DOCTYPE html>
         <html lang="vi">
         <head>
@@ -68,37 +150,114 @@ def forgot_password():
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Quên mật khẩu</title>
             <style>
-                body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
-                .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
-                button { background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-                button:hover { background: #218838; }
+                body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; text-align: center; }}
+                .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
+                button {{ background: #ffc107; color: black; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; }}
+                button:hover {{ background: #e0a800; }}
+                p.success {{ color: green; font-weight: bold; }}
+                p.error {{ color: red; font-weight: bold; }}
             </style>
         </head>
         <body>
             <div class="container">
-                <h2>🔒 Đặt lại mật khẩu</h2>
+                <h2>🔒 Yêu cầu Đặt lại Mật khẩu</h2>
+                <p>Nhập email của bạn để nhận link đặt lại.</p>
+                {f'<p class="{status}">{message}</p>' if message else ''}
                 <form method="POST">
-                    <input type="email" name="email" placeholder="Email" required>
-                    <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
-                    <button type="submit">Cập nhật mật khẩu</button>
-                    <a href="/">Quay về trang chủ</a>
+                    <input type="email" name="email" placeholder="Email đăng nhập" required>
+                    <button type="submit">Gửi Link Đặt lại</button>
+                    <p style="margin-top: 15px;"><a href="/">Quay về trang chủ</a></p>
                 </form>
             </div>
         </body>
         </html>
         """
+
     if request.method == "POST":
         email = request.form.get("email")
-        new_password = request.form.get("new_password")
-        if not email or not new_password:
-            return jsonify({"success": False, "message": "❌ Vui lòng nhập email và mật khẩu mới"}), 400
+        if not email:
+            return redirect(url_for("forgot_password", message="❌ Vui lòng nhập email", status="error"))
+
         admin = admins.find_one({"email": email})
-        if not admin:
-            return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+        
+        # Luôn trả về thông báo thành công chung để tránh lộ thông tin user
+        message_redirect = redirect(url_for(
+            "forgot_password", 
+            message="✅ Nếu email tồn tại, một link đặt lại đã được gửi đến hộp thư của bạn (hết hạn sau 30 phút).", 
+            status="success"
+        ))
+
+        if admin:
+            # Chỉ gửi mail nếu email tồn tại
+            send_reset_email(admin)
+        
+        return message_redirect
+
+# ---- Đặt lại mật khẩu (Xử lý token và mật khẩu mới) ----
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    email = verify_reset_token(token)
+
+    if not email:
+        return """
+        <p style="color:red; text-align:center; margin-top: 50px; font-size: 20px;">
+            🚫 Token không hợp lệ hoặc đã hết hạn (30 phút). 
+            Vui lòng yêu cầu đặt lại mật khẩu <a href="/forgot-password">tại đây</a>.
+        </p>
+        """, 403
+    
+    admin = admins.find_one({"email": email})
+    if not admin:
+        return """
+        <p style="color:red; text-align:center; margin-top: 50px; font-size: 20px;">
+            🚫 Tài khoản không tồn tại.
+        </p>
+        """, 404
+
+    if request.method == "GET":
+        # HTML form để người dùng nhập mật khẩu mới
+        return f"""
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Đặt lại mật khẩu</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; text-align: center; }}
+                .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
+                button {{ background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
+                button:hover {{ background: #218838; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>✅ Đặt lại Mật khẩu cho {email}</h2>
+                <form method="POST">
+                    <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
+                    <button type="submit">Cập nhật mật khẩu</button>
+                    <p style="margin-top: 15px;"><a href="/">Quay về trang chủ</a></p>
+                </form>
+            </div>
+        </body>
+        </html>
+        """
+
+    if request.method == "POST":
+        new_password = request.form.get("new_password")
+        
+        if not new_password:
+            return "❌ Vui lòng nhập mật khẩu mới", 400
+        
+        # Cập nhật mật khẩu
         hashed_pw = generate_password_hash(new_password)
         admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
-        return redirect(url_for("index", success=1))
+
+        # Chuyển hướng về trang đăng nhập với thông báo thành công
+        return redirect(url_for("index", success=1)) # success=1: thông báo đặt lại mật khẩu thành công
+
 
 def build_attendance_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
