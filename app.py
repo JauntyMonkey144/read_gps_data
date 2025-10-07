@@ -35,7 +35,8 @@ collection = db["alt_checkins"]
 @app.route("/")
 def index():
     success = request.args.get("success") # nếu =1 -> hiển thị thông báo
-    return render_template("index.html", success=success)
+    message = "Thay đổi mật khẩu thành công" if success == "1" else None
+    return render_template("index.html", success=success, message=message)
 
 # ---- Đăng nhập API ----
 @app.route("/login", methods=["POST", "GET"])
