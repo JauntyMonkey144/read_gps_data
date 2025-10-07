@@ -34,9 +34,7 @@ collection = db["alt_checkins"]
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
 def index():
-    success = request.args.get("success") # nếu =1 -> hiển thị thông báo
-    message = "Thay đổi mật khẩu thành công" if success == "1" else None
-    return render_template("index.html", success=success, message=message)
+    return render_template("index.html")
 
 # ---- Đăng nhập API ----
 @app.route("/login", methods=["POST", "GET"])
@@ -110,7 +108,30 @@ def forgot_password():
         hashed_pw = generate_password_hash(new_password)
         admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
         
-        return redirect(url_for("index", success=1))
+        # Hiển thị thông báo thành công với nút quay về trang chủ
+        return """
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Thay đổi mật khẩu thành công</title>
+            <style>
+                body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
+                .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                .success { color: #28a745; text-align: center; font-size: 18px; margin-bottom: 20px; }
+                button { background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+                button:hover { background: #218838; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="success">✅ Thay đổi mật khẩu thành công</div>
+                <a href="/"><button>Quay về trang chủ</button></a>
+            </div>
+        </body>
+        </html>
+        """
 
 # ---- Build attendance query (unchanged) ----
 def build_attendance_query(filter_type, start_date, end_date, search):
@@ -345,7 +366,7 @@ def export_leaves_to_excel():
             date = d.get("CheckinDate", "")
             key = (emp_id, emp_name, date)
             grouped.setdefault(key, []).append(d)
-        template_path = "templates/Copy of Form chấm công.xlsx"
+        template_path = "templates/Copy of Form nghỉ phép.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
         border = Border(
