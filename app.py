@@ -152,37 +152,49 @@ def build_leave_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
     # Luôn lọc cho nghỉ phép
-    query["$or"] = [
-        {"Tasks": {"$regex": regex_leave}},
-        {"Status": {"$regex": regex_leave}},
-        {"OtherNote": {"$regex": regex_leave}}
-    ]
+    leave_or = {
+        "$or": [
+            {"Tasks": {"$regex": regex_leave}},
+            {"Status": {"$regex": regex_leave}},
+            {"OtherNote": {"$regex": regex_leave}}
+        ]
+    }
     # --- Bộ lọc thời gian (dùng CheckinDate làm ngày nghỉ) ---
+    date_filter = {}
     if filter_type == "custom" and start_date and end_date:
-        query["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
+        date_filter["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
     elif filter_type == "hôm nay":
-        query["CheckinDate"] = today.strftime("%Y-%m-%d")
+        date_filter["CheckinDate"] = today.strftime("%Y-%m-%d")
     elif filter_type == "tuần":
         start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
         end = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
-        query["CheckinDate"] = {"$gte": start, "$lte": end}
+        date_filter["CheckinDate"] = {"$gte": start, "$lte": end}
     elif filter_type == "tháng":
         start = today.replace(day=1).strftime("%Y-%m-%d")
         end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).strftime("%Y-%m-%d")
-        query["CheckinDate"] = {"$gte": start, "$lte": end}
+        date_filter["CheckinDate"] = {"$gte": start, "$lte": end}
     elif filter_type == "năm":
-        query["CheckinDate"] = {"$regex": f"^{today.year}"}
+        date_filter["CheckinDate"] = {"$regex": f"^{today.year}"}
+    
+    # Kết hợp leave_or và date_filter
+    if date_filter:
+        query = {"$and": [leave_or, date_filter]}
+    else:
+        query = leave_or
+    
     # --- Bộ lọc tìm kiếm ---
     if search:
         regex = re.compile(search, re.IGNORECASE)
-        query["$and"] = [
-            query["$or"],
-            {"$or": [
+        search_or = {
+            "$or": [
                 {"EmployeeId": {"$regex": regex}},
                 {"EmployeeName": {"$regex": regex}}
-            ]}
-        ]
-        del query["$or"]  # Di chuyển $or vào $and
+            ]
+        }
+        if "$and" in query:
+            query["$and"].append(search_or)
+        else:
+            query = {"$and": [query, search_or]}
     return query
 # ---- API lấy dữ liệu chấm công (validate email từ admins) ----
 @app.route("/api/attendances", methods=["GET"])
