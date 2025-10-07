@@ -266,27 +266,24 @@ def forgot_password():
         """
 
 # ---- Đặt lại mật khẩu ----
-@app.route("/reset-password", methods=["GET", "POST"])
-def reset_password():
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
     try:
-        logger.info(f"Processing reset_password request at {datetime.now(VN_TZ)}")
+        logger.info(f"Processing reset_password request for token {token} at {datetime.now(VN_TZ)}")
         if request.method == "GET":
-            token = request.args.get("token")
-            if not token:
-                logger.warning("Missing token in request")
-                return jsonify({"success": False, "message": "❌ Thiếu token"}), 400
-            
             token_data = reset_tokens.find_one({"token": token})
             if not token_data:
                 logger.warning(f"Invalid or missing token: {token}")
-                return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
+                flash("Token không hợp lệ hoặc đã hết hạn!", "error")
+                return redirect(url_for("index"))
             
             # Ensure expiry is timezone-aware
             expiry = token_data.get("expiry")
             if expiry and not isinstance(expiry, datetime):
                 logger.error(f"Invalid expiry format for token {token}: {expiry}")
                 reset_tokens.delete_one({"token": token})
-                return jsonify({"success": False, "message": "🚫 Token không hợp lệ, vui lòng thử lại"}), 400
+                flash("Token không hợp lệ, vui lòng thử lại!", "error")
+                return redirect(url_for("index"))
             
             if expiry and expiry.tzinfo is None:
                 expiry = VN_TZ.localize(expiry)
@@ -294,9 +291,10 @@ def reset_password():
             if expiry < datetime.now(VN_TZ):
                 reset_tokens.delete_one({"token": token})
                 logger.info(f"Token {token} expired at {expiry}")
-                return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
+                flash("Token đã hết hạn!", "error")
+                return redirect(url_for("index"))
             
-            return """
+            return f"""
             <!DOCTYPE html>
             <html lang="vi">
             <head>
@@ -304,42 +302,40 @@ def reset_password():
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Đặt lại mật khẩu</title>
                 <style>
-                    body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
-                    .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                    input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
-                    button { background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-                    button:hover { background: #218838; }
+                    body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
+                    .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+                    input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
+                    button {{ background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
+                    button:hover {{ background: #218838; }}
+                    a {{ color: #007bff; text-decoration: none; display: block; margin-top: 10px; text-align: center; }}
+                    .flash {{ margin: 10px 0; padding: 10px; border-radius: 4px; }}
                 </style>
             </head>
             <body>
                 <div class="container">
                     <h2>🔒 Đặt lại mật khẩu</h2>
+                    {render_flash_messages()}
                     <form method="POST">
-                        <input type="hidden" name="token" value="{}">
-                        <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
-                        <input type="password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
-                        <button type="submit">Cập nhật mật khẩu</button>
-                        <a href="/">Quay về trang chủ</a>
+                        <input type="hidden" name="token" value="{token}">
+                        <input type="password" name="password" placeholder="Mật khẩu mới" required>
+                        <button type="submit">Cập nhật</button>
                     </form>
+                    <a href="/">Quay về trang chủ</a>
                 </div>
             </body>
             </html>
-            """.format(token)
-        
+            """
+
         if request.method == "POST":
-            token = request.form.get("token")
-            new_password = request.form.get("new_password")
-            confirm_password = request.form.get("confirm_password")
-            
-            if not token or not new_password or not confirm_password:
-                return jsonify({"success": False, "message": "❌ Vui lòng điền đầy đủ thông tin"}), 400
-            
-            if new_password != confirm_password:
-                return jsonify({"success": False, "message": "❌ Mật khẩu xác nhận không khớp"}), 400
+            password = request.form.get("password")
+            if not password:
+                flash("Vui lòng nhập mật khẩu mới!", "error")
+                return redirect(url_for("reset_password", token=token))
             
             token_data = reset_tokens.find_one({"token": token})
             if not token_data:
-                return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
+                flash("Token không hợp lệ hoặc đã hết hạn!", "error")
+                return redirect(url_for("index"))
             
             # Ensure expiry is timezone-aware
             expiry = token_data.get("expiry")
@@ -348,22 +344,30 @@ def reset_password():
             
             if expiry < datetime.now(VN_TZ):
                 reset_tokens.delete_one({"token": token})
-                return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
+                flash("Token đã hết hạn!", "error")
+                return redirect(url_for("index"))
             
             email = token_data["email"]
             admin = admins.find_one({"email": email})
             if not admin:
-                return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+                flash("Email không tồn tại!", "error")
+                return redirect(url_for("index"))
             
-            hashed_pw = generate_password_hash(new_password)
-            admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
+            hashed_pw = generate_password_hash(password)
+            admins.update_one(
+                {"email": email},
+                {"$set": {"password": hashed_pw}}
+            )
             reset_tokens.delete_one({"token": token})
             
+            flash("Mật khẩu đã được cập nhật!", "success")
+            logger.info(f"Password reset successfully for email {email}")
             return redirect(url_for("index", success=1))
-    
+
     except Exception as e:
-        logger.error(f"Error in reset_password: {e}")
-        return jsonify({"success": False, "message": "❌ Lỗi máy chủ nội bộ, vui lòng thử lại sau"}), 500
+        logger.error(f"Error in reset_password for token {token}: {e}")
+        flash("Lỗi máy chủ nội bộ, vui lòng thử lại sau!", "error")
+        return redirect(url_for("index"))
     
 # ---- Build attendance query ----
 def build_attendance_query(filter_type, start_date, end_date, search):
