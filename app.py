@@ -36,7 +36,7 @@ SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
 SMTP_PORT = os.getenv('SMTP_PORT', 587)
 SMTP_USERNAME = os.getenv('SMTP_USERNAME', 'banhbaobeo2205@gmail.com')
 SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', 'vynqvvvmbcigpdvy')  # Thay bằng mật khẩu ứng dụng Gmail
-SMTP_FROM = os.getenv('SMTP_FROM', 'Admin <sun.automation.sys@gmail.com>')
+SMTP_FROM = os.getenv('SMTP_FROM', 'it.trankhanhvinh@gmail.com')
 
 # ---- ItsDangerous Serializer ----
 s = Serializer(app.config['SECRET_KEY'])
