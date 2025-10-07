@@ -165,9 +165,10 @@ def build_attendance_query(filter_type, start_date, end_date, search):
         return {"$and": conditions}
 
 def build_leave_query(filter_type, start_date, end_date, search):
-    query = {}
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
+    conditions = []
+    
     # Luôn lọc cho nghỉ phép
     leave_or = {
         "$or": [
@@ -176,28 +177,31 @@ def build_leave_query(filter_type, start_date, end_date, search):
             {"OtherNote": {"$regex": regex_leave}}
         ]
     }
-    # --- Bộ lọc thời gian (dùng CheckinDate làm ngày nghỉ) ---
+    conditions.append(leave_or)
+    
+    # --- Bộ lọc thời gian (dựa trên ngày tạo đơn - CheckinTime string "%d/%m/%Y %H:%M:%S") ---
     date_filter = {}
     if filter_type == "custom" and start_date and end_date:
-        date_filter["CheckinDate"] = {"$gte": start_date, "$lte": end_date}
+        # Chuyển %Y-%m-%d sang %d/%m/%Y để match đầu string CheckinTime
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").strftime("%d/%m/%Y")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").strftime("%d/%m/%Y")
+        date_filter = {"CheckinTime": {"$regex": f"^{start_dt}|^{end_dt}"}}
     elif filter_type == "hôm nay":
-        date_filter["CheckinDate"] = today.strftime("%Y-%m-%d")
+        today_str = today.strftime("%d/%m/%Y")
+        date_filter = {"CheckinTime": {"$regex": f"^{today_str}"}}
     elif filter_type == "tuần":
-        start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
-        end = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
-        date_filter["CheckinDate"] = {"$gte": start, "$lte": end}
+        week_start = (today - timedelta(days=today.weekday())).strftime("%d/%m/%Y")
+        week_end = (today + timedelta(days=6 - today.weekday())).strftime("%d/%m/%Y")
+        date_filter = {"CheckinTime": {"$regex": f"^{week_start}|^{week_end}"}}
     elif filter_type == "tháng":
-        start = today.replace(day=1).strftime("%Y-%m-%d")
-        end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).strftime("%Y-%m-%d")
-        date_filter["CheckinDate"] = {"$gte": start, "$lte": end}
+        month_start = today.replace(day=1).strftime("%d/%m/%Y")
+        month_end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).strftime("%d/%m/%Y")
+        date_filter = {"CheckinTime": {"$regex": f"^{month_start}|^{month_end}"}}
     elif filter_type == "năm":
-        date_filter["CheckinDate"] = {"$regex": f"^{today.year}"}
+        date_filter = {"CheckinTime": {"$regex": f"/{today.year}/"}}
     
-    # Kết hợp leave_or và date_filter
     if date_filter:
-        query = {"$and": [leave_or, date_filter]}
-    else:
-        query = leave_or
+        conditions.append(date_filter)
     
     # --- Bộ lọc tìm kiếm ---
     if search:
@@ -208,11 +212,13 @@ def build_leave_query(filter_type, start_date, end_date, search):
                 {"EmployeeName": {"$regex": regex}}
             ]
         }
-        if "$and" in query:
-            query["$and"].append(search_or)
-        else:
-            query = {"$and": [query, search_or]}
-    return query
+        conditions.append(search_or)
+    
+    # Kết hợp tất cả với $and
+    if len(conditions) == 1:
+        return conditions[0]
+    else:
+        return {"$and": conditions}
 # ---- API lấy dữ liệu chấm công (validate email từ admins) ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
@@ -469,15 +475,17 @@ def export_leaves_to_excel():
         search = request.args.get("search", "").strip()
         # ---- Tạo query ----
         query = build_leave_query(filter_type, start_date, end_date, search)
-        # ---- Lấy dữ liệu nghỉ phép ----
-        data = list(db.alt_checkins.find(query, {
+        # Fetch dữ liệu nghỉ phép với fields phù hợp
+        data = list(collection.find(query, {
             "_id": 0,
             "EmployeeId": 1,
             "EmployeeName": 1,
             "CheckinDate": 1,  # Ngày nghỉ
             "CheckinTime": 1,  # Ngày tạo đơn
             "Tasks": 1,        # Ghi chú
-            "Status": 1
+            "Status": 1,
+            "ApprovedBy": 1,   # Thêm để export
+            "ApproveNote": 1   # Thêm để export
         }))
         # ---- Load template Excel (sử dụng cùng template, nhưng điền theo cột nghỉ phép) ----
         template_path = "templates/Copy of Form chấm công.xlsx"
