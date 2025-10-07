@@ -116,11 +116,13 @@
           <th onclick="sortTable('EmployeeName')">Tên nhân viên</th>
           <th onclick="sortTable('CheckinDate')">Ngày</th>
           <th onclick="sortTable('CheckinTime')">Giờ Check-in</th>
+          <th onclick="sortTable('ProjectId')">Mã dự án</th>   
+          <th onclick="sortTable('Tasks')">Công việc</th>
+          <th onclick="sortTable('OtherNote')">Công việc khác</th>
           <th>Ảnh</th>
           <th>Địa chỉ</th>
           <th>Vị trí</th>
           <th onclick="sortTable('Status')">Trạng thái</th>
-          <th>Ghi chú</th>
         </tr>
       </thead>
       <tbody id="dataBody"></tbody>
@@ -323,11 +325,13 @@
             <td>${r.EmployeeName||""}</td>
             <td>${r.CheckinDate||""}</td>
             <td>${r.CheckinTime||""}</td>
+            <td>${r.ProjectId||""}</td>
+            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
+            <td>${r.OtherNote||""}</td>
             <td>${img}</td>
             <td>${r.Address||""}</td>
             <td>${mapLink}</td>
             <td>${r.Status||""}</td>
-            <td>${r.OtherNote||r.Tasks||""}</td>
           </tr>
         `;
       });
@@ -377,7 +381,7 @@
             <td>${r.EmployeeName||""}</td>
             <td>${r.CheckinDate||""}</td>
             <td>${r.CheckinTime||""}</td>
-            <td>${r.Tasks||""}</td>
+            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
             <td>${r.Status||""}</td>
           </tr>
         `;
