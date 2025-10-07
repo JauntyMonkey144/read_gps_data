@@ -443,8 +443,6 @@ def export_leaves_to_excel():
         print("❌ Lỗi export leaves:", e)
         return jsonify({"error": str(e)}), 500
 
----
-
 # ---- API xuất Excel kết hợp chấm công và nghỉ phép ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
