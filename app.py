@@ -9,38 +9,34 @@ import calendar
 from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
-import secrets
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+
 app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
+
 # ---- Timezone VN ----
 VN_TZ = timezone(timedelta(hours=7))
+
 # ---- MongoDB Config ----
 MONGO_URI = os.getenv(
     "MONGO_URI",
     "mongodb+srv://banhbaobeo2205:lm2hiCLXp6B0D7hq@cluster0.festnla.mongodb.net/?retryWrites=true&w=majority"
 )
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
-# ---- SMTP Config for Email ----
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME", "sun.automation.sys@gmail.com")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "ihgzxunefndizeub")
-APP_URL = os.getenv("APP_URL", "https://read-gps-data.vercel.app")
+
 # ---- Kết nối MongoDB ----
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
+
 # Các collection sử dụng
 admins = db["admins"]
 collection = db["alt_checkins"]
-reset_tokens = db["reset_tokens"] # New collection for password reset tokens
+
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
 def index():
     success = request.args.get("success") # nếu =1 -> hiển thị thông báo
     return render_template("index.html", success=success)
+
 # ---- Đăng nhập API ----
 @app.route("/login", methods=["POST", "GET"])
 def login():
@@ -59,7 +55,8 @@ def login():
         "username": admin["username"],
         "email": admin["email"]
     })
-# ---- Reset mật khẩu (không gửi email) ----
+
+# ---- Reset mật khẩu ----
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     if request.method == "GET":
@@ -84,72 +81,6 @@ def forgot_password():
                 <h2>🔒 Đặt lại mật khẩu</h2>
                 <form method="POST">
                     <input type="email" name="email" placeholder="Email" required>
-                    <button type="submit">Xác nhận email để đặt lại mật khẩu</button>
-                    <a href="/">Quay về trang chủ</a>
-                </form>
-            </div>
-        </body>
-        </html>
-        """
-    if request.method == "POST":
-        email = request.form.get("email")
-        if not email:
-            return jsonify({"success": False, "message": "❌ Vui lòng nhập email"}), 400
-       
-        admin = admins.find_one({"email": email})
-        if not admin:
-            return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
-       
-        # Generate reset token
-        token = secrets.token_urlsafe(32)
-        expiry = datetime.now(VN_TZ) + timedelta(hours=1) # Token expires in 1 hour
-       
-        # Store token in reset_tokens collection
-        reset_tokens.delete_one({"email": email}) # Remove any existing tokens
-        reset_tokens.insert_one({
-            "email": email,
-            "token": token,
-            "expiry": expiry
-        })
-       
-        # Redirect to reset password page with token
-        return redirect(url_for("reset_password", token=token))
-# ---- Đặt lại mật khẩu ----
-@app.route("/reset-password", methods=["GET", "POST"])
-def reset_password():
-    if request.method == "GET":
-        token = request.args.get("token")
-        if not token:
-            return jsonify({"success": False, "message": "❌ Thiếu token"}), 400
-       
-        token_data = reset_tokens.find_one({"token": token})
-        if not token_data:
-            return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
-       
-        if token_data["expiry"] < datetime.now(VN_TZ):
-            reset_tokens.delete_one({"token": token})
-            return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
-       
-        return """
-        <!DOCTYPE html>
-        <html lang="vi">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Đặt lại mật khẩu</title>
-            <style>
-                body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
-                .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
-                button { background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-                button:hover { background: #218838; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h2>🔒 Đặt lại mật khẩu</h2>
-                <form method="POST">
-                    <input type="hidden" name="token" value="{}">
                     <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
                     <input type="password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
                     <button type="submit">Cập nhật mật khẩu</button>
@@ -158,40 +89,28 @@ def reset_password():
             </div>
         </body>
         </html>
-        """.format(token)
-   
+        """
     if request.method == "POST":
-        token = request.form.get("token")
+        email = request.form.get("email")
         new_password = request.form.get("new_password")
         confirm_password = request.form.get("confirm_password")
-       
-        if not token or not new_password or not confirm_password:
+        
+        if not email or not new_password or not confirm_password:
             return jsonify({"success": False, "message": "❌ Vui lòng điền đầy đủ thông tin"}), 400
-       
+        
         if new_password != confirm_password:
             return jsonify({"success": False, "message": "❌ Mật khẩu xác nhận không khớp"}), 400
-       
-        token_data = reset_tokens.find_one({"token": token})
-        if not token_data:
-            return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
-       
-        if token_data["expiry"] < datetime.now(VN_TZ):
-            reset_tokens.delete_one({"token": token})
-            return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
-       
-        email = token_data["email"]
+        
         admin = admins.find_one({"email": email})
         if not admin:
             return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
-       
+        
         # Update password
         hashed_pw = generate_password_hash(new_password)
         admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
-       
-        # Remove used token
-        reset_tokens.delete_one({"token": token})
-       
+        
         return redirect(url_for("index", success=1))
+
 # ---- Build attendance query (unchanged) ----
 def build_attendance_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
@@ -235,6 +154,7 @@ def build_attendance_query(filter_type, start_date, end_date, search):
         return conditions[0]
     else:
         return {"$and": conditions}
+
 # ---- Build leave query (unchanged) ----
 def build_leave_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
@@ -309,6 +229,7 @@ def build_leave_query(filter_type, start_date, end_date, search):
         return conditions[0]
     else:
         return {"$and": conditions}
+
 # ---- API lấy dữ liệu chấm công (unchanged) ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
@@ -340,6 +261,7 @@ def get_attendances():
     except Exception as e:
         print(f"❌ Error in get_attendances: {e}")
         return jsonify({"error": str(e)}), 500
+
 # ---- API lấy dữ liệu nghỉ phép (unchanged) ----
 @app.route("/api/leaves", methods=["GET"])
 def get_leaves():
@@ -363,11 +285,10 @@ def get_leaves():
             "CheckinTime": 1,
             "Tasks": 1,
             "Status": 1,
-            "ApprovalDate": 1, # Thêm trường ApprovalDate
-            "ApprovedBy": 1, # Thêm trường ApprovedBy
-            "ApproveNote": 1 # Thêm trường ApproveNote
+            "ApprovalDate": 1,
+            "ApprovedBy": 1,
+            "ApproveNote": 1
         }))
-        # Định dạng ApprovalDate cho mỗi bản ghi
         for item in data:
             approval_date = item.get("ApprovalDate")
             if approval_date:
@@ -378,10 +299,9 @@ def get_leaves():
                         parsed = datetime.strptime(approval_date, "%d/%m/%Y %H:%M:%S")
                         item["ApprovalDate"] = parsed.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
                     except Exception:
-                        item["ApprovalDate"] = approval_date # Giữ nguyên nếu không parse được
+                        item["ApprovalDate"] = approval_date
             else:
-                item["ApprovalDate"] = None # Đặt None nếu không có ApprovalDate
-            # Thêm các trường khác nếu cần
+                item["ApprovalDate"] = None
             item["ApprovedBy"] = item.get("ApprovedBy", "")
             item["ApproveNote"] = item.get("ApproveNote", "")
         print(f"DEBUG: Fetched {len(data)} leave records for email {email} with filter {filter_type}")
@@ -389,7 +309,7 @@ def get_leaves():
     except Exception as e:
         print(f"❌ Error in get_leaves: {e}")
         return jsonify({"error": str(e)}), 500
-       
+
 # ---- API xuất Excel cho nghỉ phép (unchanged) ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
@@ -510,6 +430,7 @@ def export_leaves_to_excel():
     except Exception as e:
         print("❌ Lỗi export leaves:", e)
         return jsonify({"error": str(e)}), 500
+
 # ---- API xuất Excel kết hợp chấm công và nghỉ phép (unchanged) ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
@@ -683,5 +604,6 @@ def export_combined_to_excel():
     except Exception as e:
         print("❌ Lỗi export combined:", e)
         return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
