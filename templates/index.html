@@ -79,9 +79,9 @@
   <div id="filters" class="controls">
     <label><b>Bộ lọc:</b></label>
     <button onclick="applyFilter('hôm nay')" id="btn-homnay">Hôm nay</button>
-    <button onclick="applyFilter('tuần')" id="btn-tuan">Tuần này</button>
-    <button onclick="applyFilter('tháng')" id="btn-thang">Tháng này</button>
-    <button onclick="applyFilter('năm')" id="btn-nam">Năm nay</button>
+    <button onclick="applyFilter('tuần')" id="btn-tuan">Tuần</button>
+    <button onclick="applyFilter('tháng')" id="btn-thang">Tháng</button>
+    <button onclick="applyFilter('năm')" id="btn-nam">Năm</button>
     <button onclick="applyFilter('tất cả')" id="btn-tatca">Tất cả</button>
   </div>
   <!-- Lọc theo ngày cho điểm danh -->
@@ -101,7 +101,7 @@
     </select>
     <button onclick="applySearch()">Tìm kiếm</button>
     <button onclick="exportExcel()">📤 Xuất Điểm Danh</button>
-    <button onclick="exportCombinedExcel()">📤 Xuất Cả Hai</button>
+    <button onclick="exportCombinedExcel()">📤 Xuất Toàn Bộ Dữ Liệu</button>
     <button onclick="refreshData()">🔄 Làm mới</button>
     <button onclick="resetFilter()">↻ Reset</button>
   </div>
@@ -132,10 +132,10 @@
     <div class="controls">
       <label><b>Bộ lọc:</b></label>
       <button onclick="applyLeaveFilter('hôm nay')" id="leave-btn-homnay">Hôm nay</button>
-      <button onclick="applyLeaveFilter('tuần')" id="leave-btn-tuan">Tuần này</button>
-      <button onclick="applyLeaveFilter('tháng')" id="leave-btn-thang">Tháng này</button>
-      <button onclick="applyLeaveFilter('năm')" id="leave-btn-nam">Năm nay</button>
-      <button onclick="applyLeaveFilter('tất cả')" id="leave-btn-tatca">Tất cả</button>
+      <button onclick="applyLeaveFilter('tuần')" id="leave-btn-tuan">Tuần</button>
+      <button onclick="applyLeaveFilter('tháng')" id="leave-btn-thang">Tháng</button>
+      <button onclick="applyLeaveFilter('năm')" id="leave-btn-nam">Năm</button>
+      <button onclick="applyLeaveFilter('tất cả')" id="leave-btn-tatca">Tất</button>
     </div>
     <div class="controls">
       <label><b>Từ ngày:</b></label><input type="date" id="leaveStartDate" />
@@ -152,7 +152,7 @@
       </select>
       <button onclick="applyLeaveSearch()">Tìm kiếm</button>
       <button onclick="exportLeaveExcel()">📤 Xuất Nghỉ Phép</button>
-      <button onclick="exportCombinedExcel()">📤 Xuất Cả Hai</button>
+      <button onclick="exportCombinedExcel()">📤 Xuất Toàn Bộ Dữ Liệu</button>
       <button onclick="refreshLeaveData()">🔄 Làm mới</button>
       <button onclick="resetLeaveFilter()">↻ Reset</button>
     </div>
