@@ -78,7 +78,7 @@
   <!-- Tabs dữ liệu -->
   <div id="dataTabs">
     <button id="tabAttendance" class="active" onclick="switchTab('attendance')">Điểm danh</button>
-    <button id="tabLeave" onclick="switchTab('leave')">Nghỉ phép</button>
+    <button id="tabLeave" onclick="switchTab('leave')";>Nghỉ phép</button>
   </div>
 
   <!-- Bộ lọc cho điểm danh -->
@@ -89,7 +89,6 @@
     <button onclick="applyFilter('tháng')" id="btn-thang">Tháng này</button>
     <button onclick="applyFilter('năm')" id="btn-nam">Năm nay</button>
     <button onclick="applyFilter('tất cả')" id="btn-tatca">Tất cả</button>
-    <button onclick="applyFilter('nghỉ phép')" id="btn-nghiphep">Nghỉ phép</button>
   </div>
 
   <!-- Lọc theo ngày cho điểm danh -->
@@ -157,10 +156,9 @@
           <tr>
             <th onclick="sortLeaveTable('EmployeeId')">Mã NV</th>
             <th onclick="sortLeaveTable('EmployeeName')">Tên nhân viên</th>
-            <th onclick="sortLeaveTable('LeaveDate')">Ngày nghỉ</th>
-            <th onclick="sortLeaveTable('LeaveType')">Loại nghỉ</th>
-            <th onclick="sortLeaveTable('Duration')">Thời gian</th>
-            <th>Ghi chú</th>
+            <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
+            <th onclick="sortLeaveTable('CheckinTime')">Ngày tạo đơn</th>
+            <th onclick="sortLeaveTable('Task')">Ghi chú</th>
             <th onclick="sortLeaveTable('Status')">Trạng thái</th>
           </tr>
         </thead>
