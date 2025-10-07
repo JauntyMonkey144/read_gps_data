@@ -175,6 +175,7 @@
             <th onclick="sortLeaveTable('EmployeeName')">Tên nhân viên</th>
             <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
             <th onclick="sortLeaveTable('CheckinTime')">Ngày tạo đơn</th>
+            <th onclick="sortLeaveTable('ApprovalDate')">Ngày duyệt</th>        
             <th onclick="sortLeaveTable('Tasks')">Ghi chú</th>
             <th onclick="sortLeaveTable('Status')">Trạng thái</th>
           </tr>
@@ -382,6 +383,7 @@
             <td>${r.EmployeeName||""}</td>
             <td>${r.CheckinDate||""}</td>
             <td>${r.CheckinTime||""}</td>
+            <td>${r.ApprovalDate||""}</td>
             <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
             <td>${r.Status||""}</td>
           </tr>
