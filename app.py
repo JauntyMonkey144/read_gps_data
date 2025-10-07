@@ -44,8 +44,8 @@ app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com') # Ví d�
 app.config['MAIL_PORT'] = os.getenv('MAIL_PORT', 587)
 app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', True)
 # Thay thế bằng email và mật khẩu ứng dụng của bạn!
-app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'your_email@gmail.com')
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'your_app_password')
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME', 'sun.automation.sys@gmail.com')
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD', 'ihgzxunefndizeub')
 app.config['MAIL_DEFAULT_SENDER'] = ('Admin', app.config['MAIL_USERNAME'])
 
 mail = Mail(app)
