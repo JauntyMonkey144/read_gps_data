@@ -78,7 +78,7 @@
   <!-- Tabs dữ liệu -->
   <div id="dataTabs">
     <button id="tabAttendance" class="active" onclick="switchTab('attendance')">Điểm danh</button>
-    <button id="tabLeave" onclick="switchTab('leave')";>Nghỉ phép</button>
+    <button id="tabLeave" onclick="switchTab('leave')">Nghỉ phép</button>
   </div>
 
   <!-- Bộ lọc cho điểm danh -->
@@ -103,6 +103,8 @@
     <input type="text" id="searchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
     <button onclick="applySearch()">Tìm kiếm</button>
     <button onclick="exportExcel()">📤 Xuất Excel</button>
+    <button onclick="refreshData()">🔄 Làm mới</button>
+    <button onclick="resetFilter()">↻ Reset</button>
   </div>
 
   <!-- Bảng dữ liệu điểm danh -->
@@ -148,6 +150,8 @@
       <input type="text" id="leaveSearchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
       <button onclick="applyLeaveSearch()">Tìm kiếm</button>
       <button onclick="exportLeaveExcel()">📤 Xuất Excel</button>
+      <button onclick="refreshLeaveData()">🔄 Làm mới</button>
+      <button onclick="resetLeaveFilter()">↻ Reset</button>
     </div>
 
     <div id="leaveTableContainer" class="table-container">
@@ -158,7 +162,7 @@
             <th onclick="sortLeaveTable('EmployeeName')">Tên nhân viên</th>
             <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
             <th onclick="sortLeaveTable('CheckinTime')">Ngày tạo đơn</th>
-            <th onclick="sortLeaveTable('Task')">Ghi chú</th>
+            <th onclick="sortLeaveTable('Tasks')">Ghi chú</th>
             <th onclick="sortLeaveTable('Status')">Trạng thái</th>
           </tr>
         </thead>
@@ -180,7 +184,7 @@
     const rowsPerPage = 10;
 
     // Biến cho phần nghỉ phép
-    let currentLeaveFilter = "tất cả";
+    let currentLeaveFilter = "hôm nay";
     let currentLeaveSearch = "";
     let currentLeaveSort = { column: null, order: null };
     let leaveStartDate = "", leaveEndDate = "";
@@ -437,6 +441,21 @@
       window.location.href = url;
     }
 
+    function refreshLeaveData() {
+      loadLeaveData();
+    }
+
+    function resetLeaveFilter() {
+      currentLeaveSearch = "";
+      leaveStartDate = leaveEndDate = "";
+      currentLeaveFilter = "hôm nay";
+      document.getElementById("leaveSearchBox").value = "";
+      document.getElementById("leaveStartDate").value = "";
+      document.getElementById("leaveEndDate").value = "";
+      highlightLeaveFilterButton();
+      loadLeaveData();
+    }
+
     function highlightLeaveFilterButton() {
       document.querySelectorAll("#leaveSection button").forEach(btn=>btn.classList.remove("active"));
       const map = {
@@ -499,6 +518,21 @@
       if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
       if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
       window.location.href = url;
+    }
+
+    function refreshData() {
+      loadData();
+    }
+
+    function resetFilter() {
+      currentSearch = "";
+      startDate = endDate = "";
+      currentFilter = "hôm nay";
+      document.getElementById("searchBox").value = "";
+      document.getElementById("startDate").value = "";
+      document.getElementById("endDate").value = "";
+      highlightFilterButton();
+      loadData();
     }
 
     function highlightFilterButton() {
