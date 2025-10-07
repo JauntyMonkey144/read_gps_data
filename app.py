@@ -35,7 +35,7 @@ collection = db["alt_checkins"]
 SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
 SMTP_PORT = os.getenv('SMTP_PORT', 587)
 SMTP_USERNAME = os.getenv('SMTP_USERNAME', 'banhbaobeo2205@gmail.com')
-SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', 'vynqvvvmbcigpdvy')  # Sử dụng mật khẩu ứng dụng Gmail
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', 'vynqvvvmbcigpdvy')  # Thay bằng mật khẩu ứng dụng Gmail
 SMTP_FROM = os.getenv('SMTP_FROM', 'Admin <sun.automation.sys@gmail.com>')
 
 # ---- ItsDangerous Serializer ----
@@ -71,14 +71,20 @@ def send_reset_email(admin):
     msg['To'] = admin['email']
 
     try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        print(f"DEBUG: Trying to connect to {SMTP_SERVER}:{SMTP_PORT} with {SMTP_USERNAME}")
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
             server.starttls()  # Bật TLS
+            print(f"DEBUG: Logging in with {SMTP_USERNAME}")
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            print(f"DEBUG: Sending email to {admin['email']}")
             server.send_message(msg)
         print(f"✅ Email gửi thành công đến {admin['email']} tại {datetime.now(VN_TZ).strftime('%H:%M:%S %d/%m/%Y')}")
         return True
     except smtplib.SMTPAuthenticationError as e:
         print(f"❌ Lỗi xác thực SMTP: {str(e)} tại {datetime.now(VN_TZ).strftime('%H:%M:%S %d/%m/%Y')}")
+        return False
+    except smtplib.SMTPConnectError as e:
+        print(f"❌ Lỗi kết nối SMTP: {str(e)} tại {datetime.now(VN_TZ).strftime('%H:%M:%S %d/%m/%Y')}")
         return False
     except smtplib.SMTPException as e:
         print(f"❌ Lỗi SMTP: {str(e)} tại {datetime.now(VN_TZ).strftime('%H:%M:%S %d/%m/%Y')}")
