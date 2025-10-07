@@ -15,6 +15,14 @@ import threading
 import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from concurrent.futures import ThreadPoolExecutor
+from functools import wraps
+import logging
+from contextlib import contextmanager
+
+# Thiết lập logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
@@ -35,45 +43,71 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME", "sun.automation.sys@gmail.com")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "igzaunbokbaiimen")
 APP_URL = os.getenv("APP_URL", "https://read-gps-data.vercel.app")
+SMTP_MAX_CONNECTIONS = int(os.getenv("SMTP_MAX_CONNECTIONS", 5))
+SMTP_RETRY_COUNT = int(os.getenv("SMTP_RETRY_COUNT", 3))
+SMTP_TIMEOUT = int(os.getenv("SMTP_TIMEOUT", 10))
 
 # ---- Kết nối MongoDB ----
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
-
 # Các collection sử dụng
 admins = db["admins"]
 collection = db["alt_checkins"]
 reset_tokens = db["reset_tokens"]
 
-# ---- Quản lý kết nối SMTP ----
-smtp_server = None
+# ---- Quản lý kết nối SMTP với ThreadPoolExecutor ----
+smtp_pool = ThreadPoolExecutor(max_workers=SMTP_MAX_CONNECTIONS)
+smtp_connections = []
+smtp_lock = threading.Lock()
 
-def get_smtp_server(timeout=10):
-    global smtp_server
-    if smtp_server is None:
+@contextmanager
+def get_smtp_connection():
+    """Lấy một kết nối SMTP từ pool hoặc tạo mới."""
+    global smtp_connections
+    with smtp_lock:
+        # Tìm kết nối còn sống
+        for conn in smtp_connections:
+            try:
+                conn.noop()  # Kiểm tra kết nối còn sống
+                yield conn
+                return
+            except smtplib.SMTPServerDisconnected:
+                smtp_connections.remove(conn)
+                logger.warning("Removed dead SMTP connection")
+            except Exception as e:
+                logger.error(f"Error checking SMTP connection: {e}")
+                smtp_connections.remove(conn)
+        
+        # Tạo kết nối mới nếu không có kết nối khả dụng
         try:
-            smtp_server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=timeout)
-            smtp_server.starttls()
-            smtp_server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            print("DEBUG: SMTP connection established")
+            conn = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=SMTP_TIMEOUT)
+            conn.starttls()
+            conn.login(SMTP_USERNAME, SMTP_PASSWORD)
+            smtp_connections.append(conn)
+            logger.info("New SMTP connection established")
+            yield conn
         except Exception as e:
-            print(f"❌ Error establishing SMTP connection: {e}")
-            smtp_server = None
+            logger.error(f"Failed to create SMTP connection: {e}")
             raise
-    return smtp_server
+        finally:
+            # Không đóng kết nối ngay, giữ lại để tái sử dụng
+            pass
 
-def close_smtp_server():
-    global smtp_server
-    if smtp_server is not None:
-        try:
-            smtp_server.quit()
-            print("DEBUG: SMTP connection closed")
-        except Exception as e:
-            print(f"❌ Error closing SMTP connection: {e}")
-        smtp_server = None
+def close_all_smtp_connections():
+    """Đóng tất cả kết nối SMTP khi ứng dụng tắt."""
+    global smtp_connections
+    with smtp_lock:
+        for conn in smtp_connections:
+            try:
+                conn.quit()
+                logger.info("SMTP connection closed")
+            except Exception as e:
+                logger.error(f"Error closing SMTP connection: {e}")
+        smtp_connections = []
 
-# ---- Gửi email bất đồng bộ ----
-def send_reset_email_async(email, token, retries=3, timeout=10):
+# ---- Gửi email bất đồng bộ với retry và logging ----
+def send_reset_email_async(email, token):
+    """Gửi email bất đồng bộ với retry và logging."""
     def send_email():
         msg = MIMEMultipart()
         msg["From"] = SMTP_USERNAME
@@ -89,26 +123,44 @@ def send_reset_email_async(email, token, retries=3, timeout=10):
         Đội ngũ hỗ trợ
         """
         msg.attach(MIMEText(body, "plain"))
-        for attempt in range(retries):
+
+        for attempt in range(SMTP_RETRY_COUNT):
             try:
                 start_time = time.time()
-                server = get_smtp_server(timeout=timeout)
-                server.send_message(msg)
+                with get_smtp_connection() as server:
+                    server.send_message(msg)
                 end_time = time.time()
-                print(f"DEBUG: Reset email sent to {email} in {end_time - start_time:.2f} seconds")
+                logger.info(f"Reset email sent to {email} in {end_time - start_time:.2f} seconds")
+                db["email_logs"].insert_one({
+                    "email": email,
+                    "token": token,
+                    "status": "success",
+                    "timestamp": datetime.now(VN_TZ),
+                    "attempts": attempt + 1
+                })
                 return True
+            except smtplib.SMTPAuthenticationError:
+                logger.error(f"Authentication error sending email to {email}")
+                break
+            except smtplib.SMTPRecipientsRefused:
+                logger.error(f"Recipient refused for {email}")
+                break
             except Exception as e:
-                print(f"❌ Attempt {attempt + 1} failed: {e}")
-                global smtp_server
-                smtp_server = None  # Reset kết nối nếu lỗi
-                if attempt < retries - 1:
-                    time.sleep(2)  # Chờ trước khi thử lại
+                logger.error(f"Attempt {attempt + 1} failed for {email}: {e}")
+                if attempt < SMTP_RETRY_COUNT - 1:
+                    time.sleep(2 ** attempt)
                 continue
-        print(f"❌ Failed to send reset email to {email} after {retries} attempts")
+        logger.error(f"Failed to send reset email to {email} after {SMTP_RETRY_COUNT} attempts")
+        db["email_logs"].insert_one({
+            "email": email,
+            "token": token,
+            "status": "failed",
+            "timestamp": datetime.now(VN_TZ),
+            "attempts": SMTP_RETRY_COUNT
+        })
         return False
 
-    thread = threading.Thread(target=send_email)
-    thread.start()
+    smtp_pool.submit(send_email)
 
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
@@ -171,26 +223,23 @@ def forgot_password():
         email = request.form.get("email")
         if not email:
             return jsonify({"success": False, "message": "❌ Vui lòng nhập email"}), 400
-        
+       
         admin = admins.find_one({"email": email})
         if not admin:
             return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
-        
-        # Generate reset token
+       
         token = secrets.token_urlsafe(32)
         expiry = datetime.now(VN_TZ) + timedelta(hours=1)
-        
-        # Store token in reset_tokens collection
+       
         reset_tokens.delete_one({"email": email})
         reset_tokens.insert_one({
             "email": email,
             "token": token,
             "expiry": expiry
         })
-        
-        # Gửi email bất đồng bộ
+       
         send_reset_email_async(email, token)
-        
+       
         return """
         <!DOCTYPE html>
         <html lang="vi">
@@ -222,15 +271,15 @@ def reset_password():
         token = request.args.get("token")
         if not token:
             return jsonify({"success": False, "message": "❌ Thiếu token"}), 400
-        
+       
         token_data = reset_tokens.find_one({"token": token})
         if not token_data:
             return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
-        
+       
         if token_data["expiry"] < datetime.now(VN_TZ):
             reset_tokens.delete_one({"token": token})
             return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
-        
+       
         return """
         <!DOCTYPE html>
         <html lang="vi">
@@ -260,41 +309,39 @@ def reset_password():
         </body>
         </html>
         """.format(token)
-    
+   
     if request.method == "POST":
         token = request.form.get("token")
         new_password = request.form.get("new_password")
         confirm_password = request.form.get("confirm_password")
-        
+       
         if not token or not new_password or not confirm_password:
             return jsonify({"success": False, "message": "❌ Vui lòng điền đầy đủ thông tin"}), 400
-        
+       
         if new_password != confirm_password:
             return jsonify({"success": False, "message": "❌ Mật khẩu xác nhận không khớp"}), 400
-        
+       
         token_data = reset_tokens.find_one({"token": token})
         if not token_data:
             return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
-        
+       
         if token_data["expiry"] < datetime.now(VN_TZ):
             reset_tokens.delete_one({"token": token})
             return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
-        
+       
         email = token_data["email"]
         admin = admins.find_one({"email": email})
         if not admin:
             return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
-        
-        # Update password
+       
         hashed_pw = generate_password_hash(new_password)
         admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
-        
-        # Remove used token
+       
         reset_tokens.delete_one({"token": token})
-        
+       
         return redirect(url_for("index", success=1))
 
-# ---- Build attendance query (không thay đổi) ----
+# ---- Build attendance query ----
 def build_attendance_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -338,7 +385,7 @@ def build_attendance_query(filter_type, start_date, end_date, search):
     else:
         return {"$and": conditions}
 
-# ---- Build leave query (không thay đổi) ----
+# ---- Build leave query ----
 def build_leave_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -413,7 +460,7 @@ def build_leave_query(filter_type, start_date, end_date, search):
     else:
         return {"$and": conditions}
 
-# ---- API lấy dữ liệu chấm công (không thay đổi) ----
+# ---- API lấy dữ liệu chấm công ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
@@ -439,13 +486,13 @@ def get_attendances():
             if item.get('OtherNote'):
                 ghi_chu_parts.append(f"Note: {item['OtherNote']}")
             item['GhiChu'] = '; '.join(ghi_chu_parts) if ghi_chu_parts else ''
-        print(f"DEBUG: Fetched {len(data)} records for email {email} with filter {filter_type}")
+        logger.info(f"Fetched {len(data)} attendance records for email {email} with filter {filter_type}")
         return jsonify(data)
     except Exception as e:
-        print(f"❌ Error in get_attendances: {e}")
+        logger.error(f"Error in get_attendances: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ---- API lấy dữ liệu nghỉ phép (không thay đổi) ----
+# ---- API lấy dữ liệu nghỉ phép ----
 @app.route("/api/leaves", methods=["GET"])
 def get_leaves():
     try:
@@ -487,13 +534,13 @@ def get_leaves():
                 item["ApprovalDate"] = None
             item["ApprovedBy"] = item.get("ApprovedBy", "")
             item["ApproveNote"] = item.get("ApproveNote", "")
-        print(f"DEBUG: Fetched {len(data)} leave records for email {email} with filter {filter_type}")
+        logger.info(f"Fetched {len(data)} leave records for email {email} with filter {filter_type}")
         return jsonify(data)
     except Exception as e:
-        print(f"❌ Error in get_leaves: {e}")
+        logger.error(f"Error in get_leaves: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ---- API xuất Excel cho nghỉ phép (không thay đổi) ----
+# ---- API xuất Excel cho nghỉ phép ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
     try:
@@ -611,10 +658,10 @@ def export_leaves_to_excel():
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     except Exception as e:
-        print("❌ Lỗi export leaves:", e)
+        logger.error(f"Error in export_leaves_to_excel: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ---- API xuất Excel kết hợp chấm công và nghỉ phép (không thay đổi) ----
+# ---- API xuất Excel kết hợp chấm công và nghỉ phép ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
@@ -785,13 +832,13 @@ def export_combined_to_excel():
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     except Exception as e:
-        print("❌ Lỗi export combined:", e)
+        logger.error(f"Error in export_combined_to_excel: {e}")
         return jsonify({"error": str(e)}), 500
 
 # ---- Đóng kết nối SMTP khi ứng dụng tắt ----
 @app.teardown_appcontext
 def cleanup(exception=None):
-    close_smtp_server()
+    close_all_smtp_connections()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
