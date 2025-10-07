@@ -102,13 +102,13 @@
     <button onclick="applySearch()">Tìm kiếm</button>
     
     <div class="export-group">
-        <button>📤 Xuất Dữ Liệu</button>
-        <select id="exportOptions" onchange="handleExportSelection(this.value)">
+        <select id="exportOptions" style="border: 1px solid var(--primary);">
             <option value="">-- Chọn loại file --</option>
             <option value="attendance">Điểm Danh Hiện Tại</option>
             <option value="leave">Nghỉ Phép Hiện Tại</option>
             <option value="combined">Toàn Bộ (Cả hai)</option>
         </select>
+        <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button> 
     </div>
     <button onclick="refreshData()">🔄 Làm mới</button>
     <button onclick="resetFilter()">↻ Reset</button>
@@ -317,7 +317,7 @@
         const img = r.FaceImage || r.PhotoURL ? `<img src="${r.FaceImage || r.PhotoURL}" class="checkin-photo">` : "";
         // Sửa lỗi cú pháp URL trong template literal
         const mapLink = (r.Latitude && r.Longitude)
-          ? `<a href="http://maps.google.com/maps?q=${r.Latitude},${r.Longitude}" target="_blank" class="map-link">Xem</a>`
+          ? `<a href="http://maps.google.com/maps?q=$${r.Latitude},${r.Longitude}" target="_blank" class="map-link">Xem</a>`
           : "";
         tbody.innerHTML += `
           <tr>
@@ -474,49 +474,53 @@
       loadLeaveData();
     }
 
-    // --- HÀM EXPORT MỚI (THAY THẾ 3 HÀM CŨ) ---
-    function handleExportSelection(exportType) {
-      const email = localStorage.getItem("adminEmail");
-      const exportOptionsEl = document.getElementById('exportOptions');
+    // --- HÀM MỚI KHI BẤM NÚT "XUẤT DỮ LIỆU" ---
+    function handleExportClick() {
+        const exportType = document.getElementById('exportOptions').value;
+        const email = localStorage.getItem("adminEmail");
+        const exportOptionsEl = document.getElementById('exportOptions');
 
-      if (!email) {
-          showMessage("⚠️ Chưa đăng nhập", "error");
-          exportOptionsEl.value = ""; 
-          return;
-      }
+        if (!email) {
+            showMessage("⚠️ Chưa đăng nhập", "error");
+            exportOptionsEl.value = ""; 
+            return;
+        }
 
-      let url = "";
+        if (exportType === "") {
+            showMessage("⚠️ Vui lòng chọn loại dữ liệu cần xuất!", "error");
+            return;
+        }
 
-      if (exportType === "attendance") {
-          // Xuất Điểm Danh (Attendance)
-          url = `/api/export-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
-          if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
-          if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
-      } else if (exportType === "leave") {
-          // Xuất Nghỉ Phép (Leave)
-          url = `/api/export-leaves-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}`;
-          if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
-          if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
-      } else if (exportType === "combined") {
-          // Xuất Toàn Bộ (Combined) - Lấy bộ lọc của tab đang hiển thị
-          let activeFilter = currentTab === "attendance" ? currentFilter : currentLeaveFilter;
-          let activeStartDate = currentTab === "attendance" ? startDate : leaveStartDate;
-          let activeEndDate = currentTab === "attendance" ? endDate : leaveEndDate;
-          let activeSearch = currentTab === "attendance" ? currentSearch : currentLeaveSearch;
+        let url = "";
 
-          url = `/api/export-combined-excel?email=${encodeURIComponent(email)}&tab=${encodeURIComponent(currentTab)}`;
-          
-          url += `&filter=${encodeURIComponent(activeFilter)}`;
-          if (activeStartDate && activeEndDate) url += `&startDate=${activeStartDate}&endDate=${activeEndDate}`;
-          if (activeSearch) url += `&search=${encodeURIComponent(activeSearch)}`;
-      }
+        if (exportType === "attendance") {
+            // Xuất Điểm Danh (Attendance)
+            url = `/api/export-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
+            if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
+            if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
+        } else if (exportType === "leave") {
+            // Xuất Nghỉ Phép (Leave)
+            url = `/api/export-leaves-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}`;
+            if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
+            if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
+        } else if (exportType === "combined") {
+            // Xuất Toàn Bộ (Combined) - Lấy bộ lọc của tab đang hiển thị
+            let activeFilter = currentTab === "attendance" ? currentFilter : currentLeaveFilter;
+            let activeStartDate = currentTab === "attendance" ? startDate : leaveStartDate;
+            let activeEndDate = currentTab === "attendance" ? endDate : leaveEndDate;
+            let activeSearch = currentTab === "attendance" ? currentSearch : currentLeaveSearch;
 
-      if (url) {
-          window.location.href = url;
-      }
-      
-      // Đặt lại select box sau khi xuất để người dùng có thể chọn lại
-      exportOptionsEl.value = ""; 
+            url = `/api/export-combined-excel?email=${encodeURIComponent(email)}&tab=${encodeURIComponent(currentTab)}`;
+            
+            url += `&filter=${encodeURIComponent(activeFilter)}`;
+            if (activeStartDate && activeEndDate) url += `&startDate=${activeStartDate}&endDate=${activeEndDate}`;
+            if (activeSearch) url += `&search=${encodeURIComponent(activeSearch)}`;
+        }
+
+        if (url) {
+            window.location.href = url;
+            // Không reset select box để người dùng có thể tải lại file tương tự
+        }
     }
     // --- KẾT THÚC HÀM EXPORT MỚI ---
 
