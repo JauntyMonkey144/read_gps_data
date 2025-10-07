@@ -69,7 +69,6 @@ def send_reset_email(admin):
     msg['Subject'] = 'Yêu cầu Đặt lại Mật khẩu'
     msg['From'] = SMTP_FROM
     msg['To'] = admin['email']
-
     try:
         print(f"DEBUG: Trying to connect to {SMTP_SERVER}:{SMTP_PORT} with {SMTP_USERNAME}")
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
@@ -101,24 +100,6 @@ def index():
     if success == '1':
         message = "✅ Đặt lại mật khẩu thành công! Vui lòng đăng nhập."
     return render_template("index.html", success=success, message=message)
-
-@app.route("/login", methods=["POST", "GET"])
-def login():
-    if request.method == "GET":
-        return redirect(url_for("index"))
-    email = request.form.get("email")
-    password = request.form.get("password")
-    if not email or not password:
-        return jsonify({"success": False, "message": "❌ Vui lòng nhập email và mật khẩu"}), 400
-    admin = admins.find_one({"email": email})
-    if not admin or not check_password_hash(admin.get("password", ""), password):
-        return jsonify({"success": False, "message": "🚫 Email hoặc mật khẩu không đúng!"}), 401
-    return jsonify({
-        "success": True,
-        "message": "✅ Đăng nhập thành công",
-        "username": admin["username"],
-        "email": admin["email"]
-    })
 
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
