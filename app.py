@@ -1,88 +1,46 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
-from datetime import datetime, timedelta, timezone
-from flask_cors import CORS
+from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file
 from pymongo import MongoClient
+from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask import get_flashed_messages
-import os, requests, smtplib, secrets
+from datetime import datetime, timedelta, timezone
+import os
+import re
+import calendar
+from io import BytesIO
+from openpyxl import load_workbook
+from openpyxl.styles import Border, Side, Alignment
+import secrets
+import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.utils import formataddr
-import logging
-from contextlib import contextmanager
-import threading
-from concurrent.futures import ThreadPoolExecutor
-
-# Thiết lập logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-# ---- Init App ----
-app = Flask(__name__, static_folder="static", template_folder="templates")
-app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key-change-in-prod")
-CORS(app)
-
+app = Flask(__name__, template_folder="templates")
+CORS(app, methods=["GET", "POST"])
 # ---- Timezone VN ----
 VN_TZ = timezone(timedelta(hours=7))
-
-# ---- MongoDB config ----
+# ---- MongoDB Config ----
 MONGO_URI = os.getenv(
     "MONGO_URI",
     "mongodb+srv://banhbaobeo2205:lm2hiCLXp6B0D7hq@cluster0.festnla.mongodb.net/?retryWrites=true&w=majority"
 )
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
-client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
-admins = db["admins"]
-reset_tokens = db["reset_tokens"]
-
-# ---- SMTP Config ----
+# ---- SMTP Config for Email ----
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_USER = os.getenv("SMTP_USER", "sun.automation.sys@gmail.com")
-SMTP_PASS = os.getenv("SMTP_PASS", "igzaunbokbaiimen")
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "it.trankhanhvinh@gmail.com")
-
-APPROVAL_EXPIRY_DAYS = 1
-
-# ---- Hàm gửi email ----
-def send_email(to_email, subject, body, cc=None):
-    try:
-        msg = MIMEMultipart()
-        msg["From"] = formataddr(("Sun Automation System", SMTP_USER))
-        if isinstance(to_email, list):
-            msg["To"] = ", ".join(to_email)
-            recipients = to_email.copy()
-        else:
-            msg["To"] = to_email
-            recipients = [to_email]
-        if cc:
-            msg["Cc"] = ", ".join(cc)
-            recipients += cc
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "html", "utf-8"))
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_USER, recipients, msg.as_string())
-        print(f"✅ Email đã gửi thành công đến {recipients}")
-    except Exception as e:
-        print("❌ Lỗi gửi email:", e)
-
-# ---- Helper render flash messages ----
-def render_flash_messages():
-    messages_html = ""
-    for category, message in get_flashed_messages(with_categories=True):
-        color = "green" if category == "success" else "red"
-        messages_html += f'<p style="color: {color}; margin: 10px 0; padding: 5px; background: #f8f9fa; border-radius: 4px;">{message}</p>'
-    return messages_html
-
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "sun.automation.sys@gmail.com")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "ihgzxunefndizeub")
+APP_URL = os.getenv("APP_URL", "https://read-gps-data.vercel.app")
+# ---- Kết nối MongoDB ----
+client = MongoClient(MONGO_URI)
+db = client[DB_NAME]
+# Các collection sử dụng
+admins = db["admins"]
+collection = db["alt_checkins"]
+reset_tokens = db["reset_tokens"] # New collection for password reset tokens
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
 def index():
-    success = request.args.get("success")
+    success = request.args.get("success") # nếu =1 -> hiển thị thông báo
     return render_template("index.html", success=success)
-
 # ---- Đăng nhập API ----
 @app.route("/login", methods=["POST", "GET"])
 def login():
@@ -101,107 +59,190 @@ def login():
         "username": admin["username"],
         "email": admin["email"]
     })
-
-# ---- Trang quên mật khẩu ----
+# ---- Gửi email quên mật khẩu ----
+def send_reset_email(email, token):
+    msg = MIMEMultipart()
+    msg["From"] = SMTP_USERNAME
+    msg["To"] = email
+    msg["Subject"] = "Đặt lại mật khẩu"
+    reset_link = f"{APP_URL}/reset-password?token={token}"
+    body = f"""
+    Xin chào,
+    Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết dưới đây để đặt lại mật khẩu:
+    {reset_link}
+    Liên kết này sẽ hết hạn sau 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
+    Trân trọng,
+    Đội ngũ hỗ trợ
+    """
+    msg.attach(MIMEText(body, "plain"))
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+        print(f"DEBUG: Reset email sent to {email}")
+        return True
+    except Exception as e:
+        print(f"❌ Error sending reset email: {e}")
+        return False
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
+    if request.method == "GET":
+        return """
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Quên mật khẩu</title>
+            <style>
+                body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
+                .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
+                button { background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+                button:hover { background: #218838; }
+                .success { color: #28a745; text-align: center; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>🔒 Quên mật khẩu</h2>
+                <form method="POST">
+                    <input type="email" name="email" placeholder="Email" required>
+                    <button type="submit">Gửi liên kết đặt lại mật khẩu</button>
+                    <a href="/">Quay về trang chủ</a>
+                </form>
+            </div>
+        </body>
+        </html>
+        """
     if request.method == "POST":
         email = request.form.get("email")
-        admin = db.admins.find_one({"email": email})
-        if admin:
-            reset_token = str(uuid.uuid4())
-            db.admins.update_one({"_id": admin["_id"]}, {"$set": {"reset_token": reset_token, "reset_expiry": datetime.now(VN_TZ) + timedelta(hours=1)}})
-            reset_url = f"{request.host_url.rstrip('/')}/reset-password/{reset_token}"
-            body = f"""
+        if not email:
+            return jsonify({"success": False, "message": "❌ Vui lòng nhập email"}), 400
+       
+        admin = admins.find_one({"email": email})
+        if not admin:
+            return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+       
+        # Generate reset token
+        token = secrets.token_urlsafe(32)
+        expiry = datetime.now(VN_TZ) + timedelta(hours=1) # Token expires in 1 hour
+       
+        # Store token in reset_tokens collection
+        reset_tokens.delete_one({"email": email}) # Remove any existing tokens
+        reset_tokens.insert_one({
+            "email": email,
+            "token": token,
+            "expiry": expiry
+        })
+       
+        # Send reset email
+        if send_reset_email(email, token):
+            return """
             <!DOCTYPE html>
-            <html><head><meta charset="UTF-8"></head><body>
-                <h2>🔄 Đặt lại mật khẩu</h2>
-                <p>Nhấp vào link để đặt lại: <a href="{reset_url}">Đặt lại mật khẩu</a></p>
-                <p>Token hết hạn sau 1 giờ.</p>
-            </body></html>
+            <html lang="vi">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Quên mật khẩu</title>
+                <style>
+                    body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
+                    .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+                    .success { color: #28a745; font-size: 18px; margin-bottom: 20px; }
+                    button { background: #28a745; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+                    button:hover { background: #218838; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="success">✅ Liên kết đặt lại mật khẩu đã được gửi đến email của bạn!</div>
+                    <button onclick="window.location.href='/'">Quay về trang chủ</button>
+                </div>
+            </body>
+            </html>
             """
-            send_email(email, "Đặt lại mật khẩu Admin", body)
-            flash("Email đặt lại mật khẩu đã gửi!", "success")
         else:
-            flash("Email không tồn tại!", "error")
-        return redirect(url_for("login"))
-    return f"""
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Quên mật khẩu</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
-            .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-            input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
-            button {{ background: #007bff; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
-            button:hover {{ background: #0056b3; }}
-            a {{ color: #007bff; text-decoration: none; display: block; margin-top: 10px; text-align: center; }}
-            .flash {{ margin: 10px 0; padding: 10px; border-radius: 4px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>🔒 Quên mật khẩu</h2>
-            {render_flash_messages()}
-            <form method="POST">
-                <input type="email" name="email" placeholder="Email" required>
-                <button type="submit">Gửi email đặt lại</button>
-            </form>
-            <a href="/login">Quay về đăng nhập</a>
-        </div>
-    </body>
-    </html>
-    """
-
-# ---- Trang đặt lại mật khẩu ----
-@app.route("/reset-password/<token>", methods=["GET", "POST"])
-def reset_password(token):
-    admin = db.admins.find_one({"reset_token": token, "reset_expiry": {"$gt": datetime.now(VN_TZ)}})
-    if not admin:
-        flash("Token không hợp lệ hoặc hết hạn!", "error")
-        return redirect(url_for("login"))
+            return jsonify({"success": False, "message": "❌ Lỗi khi gửi email. Vui lòng thử lại sau."}), 500
+# ---- Đặt lại mật khẩu ----
+@app.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    if request.method == "GET":
+        token = request.args.get("token")
+        if not token:
+            return jsonify({"success": False, "message": "❌ Thiếu token"}), 400
+       
+        token_data = reset_tokens.find_one({"token": token})
+        if not token_data:
+            return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
+       
+        if token_data["expiry"] < datetime.now(VN_TZ):
+            reset_tokens.delete_one({"token": token})
+            return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
+       
+        return """
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Đặt lại mật khẩu</title>
+            <style>
+                body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
+                .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
+                button { background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+                button:hover { background: #218838; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>🔒 Đặt lại mật khẩu</h2>
+                <form method="POST">
+                    <input type="hidden" name="token" value="{}">
+                    <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
+                    <input type="password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
+                    <button type="submit">Cập nhật mật khẩu</button>
+                    <a href="/">Quay về trang chủ</a>
+                </form>
+            </div>
+        </body>
+        </html>
+        """.format(token)
+   
     if request.method == "POST":
-        new_password = request.form.get("password")
+        token = request.form.get("token")
+        new_password = request.form.get("new_password")
+        confirm_password = request.form.get("confirm_password")
+       
+        if not token or not new_password or not confirm_password:
+            return jsonify({"success": False, "message": "❌ Vui lòng điền đầy đủ thông tin"}), 400
+       
+        if new_password != confirm_password:
+            return jsonify({"success": False, "message": "❌ Mật khẩu xác nhận không khớp"}), 400
+       
+        token_data = reset_tokens.find_one({"token": token})
+        if not token_data:
+            return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
+       
+        if token_data["expiry"] < datetime.now(VN_TZ):
+            reset_tokens.delete_one({"token": token})
+            return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
+       
+        email = token_data["email"]
+        admin = admins.find_one({"email": email})
+        if not admin:
+            return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+       
+        # Update password
         hashed_pw = generate_password_hash(new_password)
-        db.admins.update_one({"_id": admin["_id"]}, {"$set": {"password": hashed_pw, "reset_token": None, "reset_expiry": None}})
-        flash("Mật khẩu đã được cập nhật!", "success")
-        return redirect(url_for("login"))
-    return f"""
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Đặt lại mật khẩu</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }}
-            .container {{ max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-            input {{ width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }}
-            button {{ background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }}
-            button:hover {{ background: #218838; }}
-            a {{ color: #007bff; text-decoration: none; display: block; margin-top: 10px; text-align: center; }}
-            .flash {{ margin: 10px 0; padding: 10px; border-radius: 4px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>🔄 Đặt lại mật khẩu</h2>
-            {render_flash_messages()}
-            <form method="POST">
-                <input type="password" name="password" placeholder="Mật khẩu mới" required>
-                <button type="submit">Cập nhật</button>
-            </form>
-            <a href="/login">Quay về đăng nhập</a>
-        </div>
-    </body>
-    </html>
-    """
-
-    
-# ---- Build attendance query ----
+        admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
+       
+        # Remove used token
+        reset_tokens.delete_one({"token": token})
+       
+        return redirect(url_for("index", success=1))
+# ---- Build attendance query (unchanged) ----
 def build_attendance_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -244,8 +285,7 @@ def build_attendance_query(filter_type, start_date, end_date, search):
         return conditions[0]
     else:
         return {"$and": conditions}
-
-# ---- Build leave query ----
+# ---- Build leave query (unchanged) ----
 def build_leave_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -319,8 +359,7 @@ def build_leave_query(filter_type, start_date, end_date, search):
         return conditions[0]
     else:
         return {"$and": conditions}
-
-# ---- API lấy dữ liệu chấm công ----
+# ---- API lấy dữ liệu chấm công (unchanged) ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
@@ -346,13 +385,12 @@ def get_attendances():
             if item.get('OtherNote'):
                 ghi_chu_parts.append(f"Note: {item['OtherNote']}")
             item['GhiChu'] = '; '.join(ghi_chu_parts) if ghi_chu_parts else ''
-        logger.info(f"Fetched {len(data)} attendance records for email {email} with filter {filter_type}")
+        print(f"DEBUG: Fetched {len(data)} records for email {email} with filter {filter_type}")
         return jsonify(data)
     except Exception as e:
-        logger.error(f"Error in get_attendances: {e}")
+        print(f"❌ Error in get_attendances: {e}")
         return jsonify({"error": str(e)}), 500
-
-# ---- API lấy dữ liệu nghỉ phép ----
+# ---- API lấy dữ liệu nghỉ phép (unchanged) ----
 @app.route("/api/leaves", methods=["GET"])
 def get_leaves():
     try:
@@ -375,10 +413,11 @@ def get_leaves():
             "CheckinTime": 1,
             "Tasks": 1,
             "Status": 1,
-            "ApprovalDate": 1,
-            "ApprovedBy": 1,
-            "ApproveNote": 1
+            "ApprovalDate": 1, # Thêm trường ApprovalDate
+            "ApprovedBy": 1, # Thêm trường ApprovedBy
+            "ApproveNote": 1 # Thêm trường ApproveNote
         }))
+        # Định dạng ApprovalDate cho mỗi bản ghi
         for item in data:
             approval_date = item.get("ApprovalDate")
             if approval_date:
@@ -389,18 +428,19 @@ def get_leaves():
                         parsed = datetime.strptime(approval_date, "%d/%m/%Y %H:%M:%S")
                         item["ApprovalDate"] = parsed.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
                     except Exception:
-                        item["ApprovalDate"] = approval_date
+                        item["ApprovalDate"] = approval_date # Giữ nguyên nếu không parse được
             else:
-                item["ApprovalDate"] = None
+                item["ApprovalDate"] = None # Đặt None nếu không có ApprovalDate
+            # Thêm các trường khác nếu cần
             item["ApprovedBy"] = item.get("ApprovedBy", "")
             item["ApproveNote"] = item.get("ApproveNote", "")
-        logger.info(f"Fetched {len(data)} leave records for email {email} with filter {filter_type}")
+        print(f"DEBUG: Fetched {len(data)} leave records for email {email} with filter {filter_type}")
         return jsonify(data)
     except Exception as e:
-        logger.error(f"Error in get_leaves: {e}")
+        print(f"❌ Error in get_leaves: {e}")
         return jsonify({"error": str(e)}), 500
-
-# ---- API xuất Excel cho nghỉ phép ----
+       
+# ---- API xuất Excel cho nghỉ phép (unchanged from previous response) ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
     try:
@@ -518,10 +558,9 @@ def export_leaves_to_excel():
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     except Exception as e:
-        logger.error(f"Error in export_leaves_to_excel: {e}")
+        print("❌ Lỗi export leaves:", e)
         return jsonify({"error": str(e)}), 500
-
-# ---- API xuất Excel kết hợp chấm công và nghỉ phép ----
+# ---- API xuất Excel kết hợp chấm công và nghỉ phép (unchanged from previous response) ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
@@ -692,13 +731,8 @@ def export_combined_to_excel():
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     except Exception as e:
-        logger.error(f"Error in export_combined_to_excel: {e}")
+        print("❌ Lỗi export combined:", e)
         return jsonify({"error": str(e)}), 500
-
-# ---- Đóng kết nối SMTP khi ứng dụng tắt ----
-@app.teardown_appcontext
-def cleanup(exception=None):
-    close_all_smtp_connections()
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+Đã xác nhận gửi thành công nhưng thời gian gửi rất lâu
