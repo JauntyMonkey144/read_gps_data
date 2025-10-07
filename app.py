@@ -9,6 +9,10 @@ import calendar
 from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
+import secrets
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
@@ -23,6 +27,13 @@ MONGO_URI = os.getenv(
 )
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 
+# ---- SMTP Config for Email ----
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "your-email@gmail.com")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "your-app-password")
+APP_URL = os.getenv("APP_URL", "http://localhost:5000")
+
 # ---- Kết nối MongoDB ----
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
@@ -30,6 +41,7 @@ db = client[DB_NAME]
 # Các collection sử dụng
 admins = db["admins"]
 collection = db["alt_checkins"]
+reset_tokens = db["reset_tokens"]  # New collection for password reset tokens
 
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
@@ -56,6 +68,38 @@ def login():
         "email": admin["email"]
     })
 
+# ---- Gửi email quên mật khẩu ----
+def send_reset_email(email, token):
+    msg = MIMEMultipart()
+    msg["From"] = SMTP_USERNAME
+    msg["To"] = email
+    msg["Subject"] = "Đặt lại mật khẩu"
+
+    reset_link = f"{APP_URL}/reset-password?token={token}"
+    body = f"""
+    Xin chào,
+
+    Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết dưới đây để đặt lại mật khẩu:
+    {reset_link}
+
+    Liên kết này sẽ hết hạn sau 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
+
+    Trân trọng,
+    Đội ngũ hỗ trợ
+    """
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+        print(f"DEBUG: Reset email sent to {email}")
+        return True
+    except Exception as e:
+        print(f"❌ Error sending reset email: {e}")
+        return False
+
 # ---- Quên mật khẩu ----
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
@@ -77,11 +121,10 @@ def forgot_password():
         </head>
         <body>
             <div class="container">
-                <h2>🔒 Đặt lại mật khẩu</h2>
+                <h2>🔒 Quên mật khẩu</h2>
                 <form method="POST">
                     <input type="email" name="email" placeholder="Email" required>
-                    <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
-                    <button type="submit">Cập nhật mật khẩu</button>
+                    <button type="submit">Gửi liên kết đặt lại mật khẩu</button>
                     <a href="/">Quay về trang chủ</a>
                 </form>
             </div>
@@ -90,22 +133,115 @@ def forgot_password():
         """
     if request.method == "POST":
         email = request.form.get("email")
-        new_password = request.form.get("new_password")
-        if not email or not new_password:
-            return jsonify({"success": False, "message": "❌ Vui lòng nhập email và mật khẩu mới"}), 400
+        if not email:
+            return jsonify({"success": False, "message": "❌ Vui lòng nhập email"}), 400
+        
         admin = admins.find_one({"email": email})
         if not admin:
             return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+        
+        # Generate reset token
+        token = secrets.token_urlsafe(32)
+        expiry = datetime.now(VN_TZ) + timedelta(hours=1)  # Token expires in 1 hour
+        
+        # Store token in reset_tokens collection
+        reset_tokens.delete_one({"email": email})  # Remove any existing tokens
+        reset_tokens.insert_one({
+            "email": email,
+            "token": token,
+            "expiry": expiry
+        })
+        
+        # Send reset email
+        if send_reset_email(email, token):
+            return jsonify({"success": True, "message": "✅ Liên kết đặt lại mật khẩu đã được gửi đến email của bạn!"})
+        else:
+            return jsonify({"success": False, "message": "❌ Lỗi khi gửi email. Vui lòng thử lại sau."}), 500
+
+# ---- Đặt lại mật khẩu ----
+@app.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    if request.method == "GET":
+        token = request.args.get("token")
+        if not token:
+            return jsonify({"success": False, "message": "❌ Thiếu token"}), 400
+        
+        token_data = reset_tokens.find_one({"token": token})
+        if not token_data:
+            return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
+        
+        if token_data["expiry"] < datetime.now(VN_TZ):
+            reset_tokens.delete_one({"token": token})
+            return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
+        
+        return """
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Đặt lại mật khẩu</title>
+            <style>
+                body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
+                .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
+                button { background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+                button:hover { background: #218838; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>🔒 Đặt lại mật khẩu</h2>
+                <form method="POST">
+                    <input type="hidden" name="token" value="{}">
+                    <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
+                    <input type="password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
+                    <button type="submit">Cập nhật mật khẩu</button>
+                    <a href="/">Quay về trang chủ</a>
+                </form>
+            </div>
+        </body>
+        </html>
+        """.format(token)
+    
+    if request.method == "POST":
+        token = request.form.get("token")
+        new_password = request.form.get("new_password")
+        confirm_password = request.form.get("confirm_password")
+        
+        if not token or not new_password or not confirm_password:
+            return jsonify({"success": False, "message": "❌ Vui lòng điền đầy đủ thông tin"}), 400
+        
+        if new_password != confirm_password:
+            return jsonify({"success": False, "message": "❌ Mật khẩu xác nhận không khớp"}), 400
+        
+        token_data = reset_tokens.find_one({"token": token})
+        if not token_data:
+            return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
+        
+        if token_data["expiry"] < datetime.now(VN_TZ):
+            reset_tokens.delete_one({"token": token})
+            return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
+        
+        email = token_data["email"]
+        admin = admins.find_one({"email": email})
+        if not admin:
+            return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+        
+        # Update password
         hashed_pw = generate_password_hash(new_password)
         admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
+        
+        # Remove used token
+        reset_tokens.delete_one({"token": token})
+        
         return redirect(url_for("index", success=1))
 
+# ---- Build attendance query (unchanged) ----
 def build_attendance_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
     conditions = []
-
-    # --- Bộ lọc thời gian ---
     date_filter = {}
     if filter_type == "custom" and start_date and end_date:
         date_filter = {"CheckinDate": {"$gte": start_date, "$lte": end_date}}
@@ -121,11 +257,8 @@ def build_attendance_query(filter_type, start_date, end_date, search):
         date_filter = {"CheckinDate": {"$gte": start, "$lte": end}}
     elif filter_type == "năm":
         date_filter = {"CheckinDate": {"$regex": f"^{today.year}"}}
-
     if date_filter:
         conditions.append(date_filter)
-
-    # --- Bộ lọc nghỉ phép ---
     not_leave_or = {
         "$or": [
             {"Tasks": {"$not": regex_leave}},
@@ -134,8 +267,6 @@ def build_attendance_query(filter_type, start_date, end_date, search):
         ]
     }
     conditions.append(not_leave_or)
-
-    # --- Bộ lọc tìm kiếm ---
     if search:
         regex = re.compile(search, re.IGNORECASE)
         search_or = {
@@ -145,19 +276,16 @@ def build_attendance_query(filter_type, start_date, end_date, search):
             ]
         }
         conditions.append(search_or)
-
-    # Kết hợp tất cả với $and
     if len(conditions) == 1:
         return conditions[0]
     else:
         return {"$and": conditions}
 
+# ---- Build leave query (unchanged) ----
 def build_leave_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
     conditions = []
-
-    # Luôn lọc cho nghỉ phép
     leave_or = {
         "$or": [
             {"Tasks": {"$regex": regex_leave}},
@@ -166,8 +294,6 @@ def build_leave_query(filter_type, start_date, end_date, search):
         ]
     }
     conditions.append(leave_or)
-
-    # --- Bộ lọc thời gian ---
     date_filter = {}
     if filter_type == "custom" and start_date and end_date:
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").strftime("%d/%m/%Y")
@@ -214,11 +340,8 @@ def build_leave_query(filter_type, start_date, end_date, search):
                 "$lte": f"31/12/{year} 23:59:59"
             }
         }
-
     if date_filter:
         conditions.append(date_filter)
-
-    # --- Bộ lọc tìm kiếm ---
     if search:
         regex = re.compile(search, re.IGNORECASE)
         search_or = {
@@ -228,13 +351,12 @@ def build_leave_query(filter_type, start_date, end_date, search):
             ]
         }
         conditions.append(search_or)
-
     if len(conditions) == 1:
         return conditions[0]
     else:
         return {"$and": conditions}
 
-# ---- API lấy dữ liệu chấm công ----
+# ---- API lấy dữ liệu chấm công (unchanged) ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
@@ -266,7 +388,7 @@ def get_attendances():
         print(f"❌ Error in get_attendances: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ---- API lấy dữ liệu nghỉ phép ----
+# ---- API lấy dữ liệu nghỉ phép (unchanged) ----
 @app.route("/api/leaves", methods=["GET"])
 def get_leaves():
     try:
@@ -296,7 +418,7 @@ def get_leaves():
         print(f"❌ Error in get_leaves: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ---- API xuất Excel cho nghỉ phép ----
+# ---- API xuất Excel cho nghỉ phép (unchanged from previous response) ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
     try:
@@ -306,15 +428,11 @@ def export_leaves_to_excel():
         admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
         if not admin:
             return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
-       
         filter_type = request.args.get("filter", "tất cả").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
-       
         query = build_leave_query(filter_type, start_date, end_date, search)
-       
-        # Chỉ lấy các trường cần thiết
         data = list(collection.find(query, {
             "_id": 0,
             "EmployeeId": 1,
@@ -327,7 +445,6 @@ def export_leaves_to_excel():
             "ApprovedBy": 1,
             "ApproveNote": 1
         }))
-       
         grouped = {}
         for d in data:
             emp_id = d.get("EmployeeId", "")
@@ -335,11 +452,9 @@ def export_leaves_to_excel():
             date = d.get("CheckinDate", "")
             key = (emp_id, emp_name, date)
             grouped.setdefault(key, []).append(d)
-       
-        template_path = "templates/Copy of Form nghỉ phép.xlsx"
+        template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
-       
         border = Border(
             left=Side(style="thin", color="000000"),
             right=Side(style="thin", color="000000"),
@@ -347,7 +462,6 @@ def export_leaves_to_excel():
             bottom=Side(style="thin", color="000000"),
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-       
         start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
@@ -355,7 +469,6 @@ def export_leaves_to_excel():
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date)
             for j, rec in enumerate(records[:10], start=1):
-                # 1. Chuyển đổi CheckinTime (Ngày tạo đơn)
                 checkin_time = rec.get("CheckinTime")
                 full_datetime_str = ""
                 if isinstance(checkin_time, datetime):
@@ -366,8 +479,6 @@ def export_leaves_to_excel():
                         full_datetime_str = parsed.strftime("%d/%m/%Y %H:%M:%S")
                     except Exception:
                         full_datetime_str = checkin_time
-                
-                # 2. Phân tích Tasks và Lý do nghỉ
                 tasks = rec.get("Tasks")
                 tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")
                 leave_task = tasks_str.strip()
@@ -378,8 +489,6 @@ def export_leaves_to_excel():
                     leave_reason = split_task[1].strip()
                 else:
                     leave_reason = rec.get("ApproveNote", "") or ""
-                
-                # 3. Xử lý ApprovalDate và ApprovedBy
                 approved_by = rec.get("ApprovedBy", "")
                 approval_date = rec.get("ApprovalDate")
                 approval_date_str = ""
@@ -391,13 +500,9 @@ def export_leaves_to_excel():
                         approval_date_str = parsed.strftime("%d/%m/%Y %H:%M:%S")
                     except Exception:
                         approval_date_str = approval_date
-                
-                # 4. Tạo chuỗi entry theo format: {Ngày tạo đơn}; {Nghỉ phép}; {Lý do}; Đã duyệt bởi {ApprovedBy} lúc {ApprovalDate}
                 approval_status = f"Đã duyệt bởi {approved_by} lúc {approval_date_str}" if approved_by and approval_date_str else "Chưa duyệt"
                 entry = f"{full_datetime_str}; {leave_task}; {leave_reason}; {approval_status}"
                 ws.cell(row=row, column=3 + j, value=entry)
-               
-            # Áp dụng style và tính chiều cao dòng
             for col in range(1, 14):
                 cell = ws.cell(row=row, column=col)
                 cell.border = border
@@ -407,8 +512,6 @@ def export_leaves_to_excel():
                 for col in range(1, 14)
             )
             ws.row_dimensions[row].height = max_lines * 20
-       
-        # Tự động điều chỉnh độ rộng cột
         for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -417,19 +520,15 @@ def export_leaves_to_excel():
                     length = len(str(cell.value).split("\n")[0])
                     max_length = max(max_length, length)
             ws.column_dimensions[col_letter].width = min(max_length + 2, 70)
-       
-        # Xuất file
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
         filename = f"Danh sách nghỉ phép_{today_str}.xlsx"
         if search:
             filename = f"Danh sách nghỉ phép theo tìm kiếm_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
             filename = f"Danh sách nghỉ phép từ {start_date} đến {end_date}_{today_str}.xlsx"
-           
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-       
         return send_file(
             output,
             as_attachment=True,
@@ -440,7 +539,7 @@ def export_leaves_to_excel():
         print("❌ Lỗi export leaves:", e)
         return jsonify({"error": str(e)}), 500
 
-# ---- API xuất Excel kết hợp chấm công và nghỉ phép ----
+# ---- API xuất Excel kết hợp chấm công và nghỉ phép (unchanged from previous response) ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
@@ -450,15 +549,12 @@ def export_combined_to_excel():
         admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
         if not admin:
             return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
-       
         filter_type = request.args.get("filter", "hôm nay").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
-        # Xác định bộ lọc
         attendance_query = build_attendance_query(filter_type, start_date, end_date, search)
         leave_query = build_leave_query(filter_type, start_date, end_date, search)
-        # Lấy dữ liệu
         attendance_data = list(collection.find(attendance_query, {
             "_id": 0,
             "EmployeeId": 1, "EmployeeName": 1, "ProjectId": 1, "Tasks": 1,
@@ -470,7 +566,6 @@ def export_combined_to_excel():
             "EmployeeId": 1, "EmployeeName": 1, "CheckinDate": 1, "CheckinTime": 1,
             "Tasks": 1, "Status": 1, "ApprovedBy": 1, "ApproveNote": 1, "ApprovalDate": 1
         }))
-        # Nhóm dữ liệu
         attendance_grouped = {}
         for d in attendance_data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate", ""))
@@ -479,12 +574,10 @@ def export_combined_to_excel():
         for d in leave_data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate", ""))
             leave_grouped.setdefault(key, []).append(d)
-        # Load template Excel
         template_path = "templates/Form kết hợp.xlsx"
         wb = load_workbook(template_path)
         ws_attendance = wb["Điểm danh"] if "Điểm danh" in wb.sheetnames else wb.create_sheet("Điểm danh")
         ws_leaves = wb["Nghỉ phép"] if "Nghỉ phép" in wb.sheetnames else wb.create_sheet("Nghỉ phép")
-        # Ghi tiêu đề
         headers = ["Mã NV", "Tên NV", "Ngày", "Check 1", "Check 2", "Check 3", "Check 4", "Check 5",
                    "Check 6", "Check 7", "Check 8", "Check 9", "Check 10"]
         for col, header in enumerate(headers, start=1):
@@ -495,7 +588,6 @@ def export_combined_to_excel():
             top=Side(style="thin", color="000000"), bottom=Side(style="thin", color="000000"),
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        # Điền dữ liệu chấm công (giữ nguyên logic cũ)
         start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(attendance_grouped.items(), start=0):
             row = start_row + i
@@ -513,11 +605,9 @@ def export_combined_to_excel():
                         time_str = parsed.strftime("%H:%M:%S")
                     except Exception:
                         time_str = checkin_time
-               
                 parts = []
                 tasks = rec.get("Tasks")
                 tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")
-               
                 if "nghỉ phép" in tasks_str.lower():
                     entry = "NGHỈ PHÉP (xem chi tiết ở sheet Nghỉ phép)"
                 else:
@@ -528,9 +618,7 @@ def export_combined_to_excel():
                     if rec.get("OtherNote"): parts.append(rec["OtherNote"])
                     if rec.get("Address"): parts.append(rec["Address"])
                     entry = "; ".join(parts)
-                   
                 ws_attendance.cell(row=row, column=3 + j, value=entry)
-               
             for col in range(1, 14):
                 cell = ws_attendance.cell(row=row, column=col)
                 cell.border = border
@@ -540,7 +628,6 @@ def export_combined_to_excel():
                 for col in range(1, 14)
             )
             ws_attendance.row_dimensions[row].height = max_lines * 20
-       
         for col in ws_attendance.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -549,16 +636,13 @@ def export_combined_to_excel():
                     length = len(str(cell.value).split("\n")[0])
                     max_length = max(max_length, length)
             ws_attendance.column_dimensions[col_letter].width = min(max_length + 2, 70)
-        # Điền dữ liệu nghỉ phép (logic mới)
         start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(leave_grouped.items(), start=0):
             row = start_row + i
             ws_leaves.cell(row=row, column=1, value=emp_id)
             ws_leaves.cell(row=row, column=2, value=emp_name)
             ws_leaves.cell(row=row, column=3, value=date)
-           
             for j, rec in enumerate(records[:10], start=1):
-                # 1. Chuyển đổi CheckinTime (Ngày tạo đơn)
                 checkin_time = rec.get("CheckinTime")
                 full_datetime_str = ""
                 if isinstance(checkin_time, datetime):
@@ -569,8 +653,6 @@ def export_combined_to_excel():
                         full_datetime_str = parsed.strftime("%d/%m/%Y %H:%M:%S")
                     except Exception:
                         full_datetime_str = checkin_time
-                
-                # 2. Phân tích Tasks và Lý do nghỉ
                 tasks = rec.get("Tasks")
                 tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")
                 leave_task = tasks_str.strip()
@@ -581,8 +663,6 @@ def export_combined_to_excel():
                     leave_reason = split_task[1].strip()
                 else:
                     leave_reason = rec.get("ApproveNote", "") or ""
-                
-                # 3. Xử lý ApprovalDate và ApprovedBy
                 approved_by = rec.get("ApprovedBy", "")
                 approval_date = rec.get("ApprovalDate")
                 approval_date_str = ""
@@ -594,12 +674,9 @@ def export_combined_to_excel():
                         approval_date_str = parsed.strftime("%d/%m/%Y %H:%M:%S")
                     except Exception:
                         approval_date_str = approval_date
-                
-                # 4. Tạo chuỗi entry theo format: {Ngày tạo đơn}; {Nghỉ phép}; {Lý do}; Đã duyệt bởi {ApprovedBy} lúc {ApprovalDate}
                 approval_status = f"Đã duyệt bởi {approved_by} lúc {approval_date_str}" if approved_by and approval_date_str else "Chưa duyệt"
                 entry = f"{full_datetime_str}; {leave_task}; {leave_reason}; {approval_status}"
                 ws_leaves.cell(row=row, column=3 + j, value=entry)
-               
             for col in range(1, 14):
                 cell = ws_leaves.cell(row=row, column=col)
                 cell.border = border
@@ -609,7 +686,6 @@ def export_combined_to_excel():
                 for col in range(1, 14)
             )
             ws_leaves.row_dimensions[row].height = max_lines * 20
-           
         for col in ws_leaves.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -618,19 +694,15 @@ def export_combined_to_excel():
                     length = len(str(cell.value).split("\n")[0])
                     max_length = max(max_length, length)
             ws_leaves.column_dimensions[col_letter].width = min(max_length + 2, 70)
-           
-        # Xuất file
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
         filename = f"Danh sách chấm công và nghỉ phép_{today_str}.xlsx"
         if search:
             filename = f"Danh sách chấm công và nghỉ phép theo tìm kiếm_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
             filename = f"Danh sách chấm công và nghỉ phép từ {start_date} đến {end_date}_{today_str}.xlsx"
-           
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-       
         return send_file(
             output,
             as_attachment=True,
@@ -640,6 +712,6 @@ def export_combined_to_excel():
     except Exception as e:
         print("❌ Lỗi export combined:", e)
         return jsonify({"error": str(e)}), 500
-        
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
