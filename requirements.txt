@@ -1,4 +1,3 @@
-threading
 flask
 flask-cors
 pymongo
@@ -8,5 +7,3 @@ openpyxl
 Werkzeug
 itsdangerous
 python-dotenv
-Flask-Mail
-
