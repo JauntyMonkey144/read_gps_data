@@ -3,6 +3,7 @@ from pymongo import MongoClient
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta, timezone
+from pytz import timezone as pytz_timezone
 import os
 import re
 import calendar
@@ -28,7 +29,7 @@ app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
 
 # ---- Timezone VN ----
-VN_TZ = timezone(timedelta(hours=7))
+VN_TZ = pytz_timezone('Asia/Ho_Chi_Minh')
 
 # ---- MongoDB Config ----
 MONGO_URI = os.getenv(
@@ -268,17 +269,31 @@ def forgot_password():
 @app.route("/reset-password", methods=["GET", "POST"])
 def reset_password():
     try:
+        logger.info(f"Processing reset_password request at {datetime.now(VN_TZ)}")
         if request.method == "GET":
             token = request.args.get("token")
             if not token:
+                logger.warning("Missing token in request")
                 return jsonify({"success": False, "message": "❌ Thiếu token"}), 400
             
             token_data = reset_tokens.find_one({"token": token})
             if not token_data:
+                logger.warning(f"Invalid or missing token: {token}")
                 return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
             
-            if token_data["expiry"] < datetime.now(VN_TZ):
+            # Ensure expiry is timezone-aware
+            expiry = token_data.get("expiry")
+            if expiry and not isinstance(expiry, datetime):
+                logger.error(f"Invalid expiry format for token {token}: {expiry}")
                 reset_tokens.delete_one({"token": token})
+                return jsonify({"success": False, "message": "🚫 Token không hợp lệ, vui lòng thử lại"}), 400
+            
+            if expiry and expiry.tzinfo is None:
+                expiry = VN_TZ.localize(expiry)
+            
+            if expiry < datetime.now(VN_TZ):
+                reset_tokens.delete_one({"token": token})
+                logger.info(f"Token {token} expired at {expiry}")
                 return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
             
             return """
@@ -326,7 +341,12 @@ def reset_password():
             if not token_data:
                 return jsonify({"success": False, "message": "🚫 Token không hợp lệ hoặc đã hết hạn"}), 400
             
-            if token_data["expiry"] < datetime.now(VN_TZ):
+            # Ensure expiry is timezone-aware
+            expiry = token_data.get("expiry")
+            if expiry and expiry.tzinfo is None:
+                expiry = VN_TZ.localize(expiry)
+            
+            if expiry < datetime.now(VN_TZ):
                 reset_tokens.delete_one({"token": token})
                 return jsonify({"success": False, "message": "🚫 Token đã hết hạn"}), 400
             
@@ -344,7 +364,7 @@ def reset_password():
     except Exception as e:
         logger.error(f"Error in reset_password: {e}")
         return jsonify({"success": False, "message": "❌ Lỗi máy chủ nội bộ, vui lòng thử lại sau"}), 500
-
+    
 # ---- Build attendance query ----
 def build_attendance_query(filter_type, start_date, end_date, search):
     today = datetime.now(VN_TZ)
