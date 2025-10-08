@@ -551,7 +551,7 @@
         return;
       }
       if (exportType === "attendance") {
-        url = `/api/attendances/export-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
+        url = `/api/export-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
         if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
         if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
       } else if (exportType === "leave") {
