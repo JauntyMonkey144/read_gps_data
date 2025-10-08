@@ -89,7 +89,6 @@ def forgot_password():
                 input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
                 button { background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
                 button:hover { background: #218838; }
-                .success { color: #28a745; text-align: center; }
             </style>
         </head>
         <body>
@@ -211,7 +210,7 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
         return {"$and": conditions}
 
 
-# ---- Build leave query (FIXED) ----
+# ---- Build leave query ----
 def build_leave_query(filter_type, start_date, end_date, search, username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -286,6 +285,29 @@ def calculate_leave_days_from_record(record):
 
     return 1.0
 
+# ---- Helper function để format ngày duyệt ----
+def get_formatted_approval_date(approval_date):
+    if not approval_date:
+        return ""
+    
+    formatted_date = ""
+    try:
+        if isinstance(approval_date, str):
+            if 'Z' in approval_date:
+                parsed_date = datetime.fromisoformat(approval_date.replace('Z', '+00:00'))
+            else:
+                parsed_date = datetime.strptime(approval_date, "%d/%m/%Y %H:%M:%S")
+        elif isinstance(approval_date, datetime):
+            parsed_date = approval_date
+        else:
+            return ""
+        
+        formatted_date = parsed_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
+    except (ValueError, TypeError):
+        return str(approval_date) # Trả về chuỗi gốc nếu không thể format
+        
+    return formatted_date
+
 # ---- API lấy dữ liệu chấm công ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
@@ -350,15 +372,7 @@ def get_leaves():
         }))
 
         for item in data:
-            approval_date = item.get("ApprovalDate")
-            if approval_date and isinstance(approval_date, str):
-                try:
-                    parsed_date = datetime.fromisoformat(approval_date.replace('Z', '+00:00'))
-                    item["ApprovalDate"] = parsed_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
-                except ValueError:
-                    item["ApprovalDate"] = approval_date
-            elif approval_date and isinstance(approval_date, datetime):
-                 item["ApprovalDate"] = approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
+            item["ApprovalDate"] = get_formatted_approval_date(item.get("ApprovalDate"))
 
         return jsonify(data)
     except Exception as e:
@@ -467,6 +481,9 @@ def export_leaves_to_excel():
         wb = load_workbook(template_path)
         ws = wb.active
         
+        # Đổi tên tiêu đề cột E thành "Ngày duyệt đơn"
+        ws['E1'] = "Ngày duyệt đơn"
+
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
         start_row = 2
@@ -481,7 +498,9 @@ def export_leaves_to_excel():
             leave_days = calculate_leave_days_from_record(rec)
             ws.cell(row=row, column=4, value=leave_days)
             
-            ws.cell(row=row, column=5, value=rec.get("CheckinTime", ""))
+            # Cột 5: Ngày duyệt đơn (SỬA Ở ĐÂY)
+            approval_date_str = get_formatted_approval_date(rec.get("ApprovalDate"))
+            ws.cell(row=row, column=5, value=approval_date_str)
             
             tasks = rec.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
@@ -547,11 +566,12 @@ def export_combined_to_excel():
             ws_attendance.cell(row=row, column=3, value=date).border = border
 
             for j, rec in enumerate(records[:10], start=1):
-                # ... (logic tương tự như export_to_excel)
-                pass # Thêm logic điền dữ liệu chấm công ở đây
+                # Logic điền dữ liệu chấm công
+                pass
 
         # ---- Xử lý sheet Nghỉ phép ----
         ws_leaves = wb["Nghỉ phép"]
+        ws_leaves['E1'] = "Ngày duyệt đơn" # Đổi tên tiêu đề
         start_row_leaves = 2
         for i, rec in enumerate(leave_data, start=0):
             row = start_row_leaves + i
@@ -563,7 +583,9 @@ def export_combined_to_excel():
             leave_days = calculate_leave_days_from_record(rec)
             ws_leaves.cell(row=row, column=4, value=leave_days)
             
-            ws_leaves.cell(row=row, column=5, value=rec.get("CheckinTime"))
+            # Cột 5: Ngày duyệt đơn (SỬA Ở ĐÂY)
+            approval_date_str = get_formatted_approval_date(rec.get("ApprovalDate"))
+            ws_leaves.cell(row=row, column=5, value=approval_date_str)
             
             tasks = rec.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
