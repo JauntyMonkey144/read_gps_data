@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -14,22 +15,22 @@
       --muted: #6c757d;
       --shadow: 0 3px 12px rgba(0,0,0,0.08);
     }
-    body { 
-      font-family: "Segoe UI", Arial, sans-serif; 
-      background: var(--bg); 
-      margin: 0; 
-      padding: 20px; 
-      position: relative; 
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: var(--bg);
+      margin: 0;
+      padding: 20px;
+      position: relative;
     }
     h1 { text-align: center; color: var(--primary); }
     .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
     button {
       background: var(--primary);
-      color: white; 
+      color: white;
       border: none;
-      padding: 6px 12px; 
+      padding: 6px 12px;
       border-radius: 6px;
-      cursor: pointer; 
+      cursor: pointer;
       font-size: 14px;
       transition: 0.2s;
     }
@@ -95,12 +96,12 @@
       padding: 10px;
       margin: 10px 0 5px;
     }
-    .modal-content a { 
-      color: var(--muted); 
-      font-size: 13px; 
-      text-decoration: none; 
-      display: inline-block; 
-      margin-top: 10px; 
+    .modal-content a {
+      color: var(--muted);
+      font-size: 13px;
+      text-decoration: none;
+      display: inline-block;
+      margin-top: 10px;
     }
     .modal-content a:hover { text-decoration: underline; }
   </style>
@@ -136,7 +137,6 @@
       <option value="20">20 dòng</option>
       <option value="25">25 dòng</option>
     </select>
-
     <div class="export-group" id="exportGroupAttendance">
       <select id="exportOptionsAttendance" style="border: 1px solid var(--primary);">
         <option value="">-- Chọn loại file --</option>
@@ -186,7 +186,7 @@
     </div>
     <div class="controls">
       <input type="text" id="leaveSearchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
-      <button onclick="applyLeaveSearch()">Tìm kiếm</button>      
+      <button onclick="applyLeaveSearch()">Tìm kiếm</button>
       <select id="leaveRowsPerPage" onchange="updateLeaveRowsPerPage()">
         <option value="5">5 dòng</option>
         <option value="10" selected>10 dòng</option>
@@ -249,7 +249,6 @@
     let rawLeaveData = [];
     let currentLeavePage = 1;
     let leaveRowsPerPage = 10;
-
     function showMessage(msg, type="success", isModal=false) {
       const el = isModal ? document.getElementById("modalMessage") : document.getElementById("messageArea");
       el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
@@ -259,7 +258,6 @@
         el.style.display = "none";
       }, 4000);
     }
-
     function showDashboard() {
       document.getElementById("loginModal").style.display = "none";
       document.getElementById("greeting").style.display = "block";
@@ -267,7 +265,6 @@
       document.getElementById("dataTabs").style.display = "flex";
       switchTab(currentTab);
     }
-
     function hideDashboard() {
       document.getElementById("greeting").style.display = "none";
       document.getElementById("logoutBtn").style.display = "none";
@@ -281,18 +278,23 @@
       document.getElementById("dataBody").innerHTML = "";
       document.getElementById("leaveDataBody").innerHTML = "";
     }
-
     function resetExportOptions() {
       document.getElementById('exportOptionsAttendance').value = "";
       document.getElementById('exportOptionsLeave').value = "";
     }
-
     function switchTab(tab) {
       currentTab = tab;
       document.getElementById("tabAttendance").classList.toggle("active", tab === "attendance");
       document.getElementById("tabLeave").classList.toggle("active", tab === "leave");
       resetExportOptions();
       if (tab === "attendance") {
+        currentFilter = "hôm nay";
+        currentSearch = "";
+        startDate = "";
+        endDate = "";
+        document.getElementById("searchBox").value = "";
+        document.getElementById("startDate").value = "";
+        document.getElementById("endDate").value = "";
         document.getElementById("leaveSection").style.display = "none";
         document.getElementById("filters").style.display = "flex";
         document.getElementById("dateFilter").style.display = "flex";
@@ -302,6 +304,13 @@
         document.getElementById("exportGroupAttendance").style.display = "flex";
         loadData();
       } else {
+        currentLeaveFilter = "hôm nay";
+        currentLeaveSearch = "";
+        leaveStartDate = "";
+        leaveEndDate = "";
+        document.getElementById("leaveSearchBox").value = "";
+        document.getElementById("leaveStartDate").value = "";
+        document.getElementById("leaveEndDate").value = "";
         document.getElementById("filters").style.display = "none";
         document.getElementById("dateFilter").style.display = "none";
         document.getElementById("searchFilter").style.display = "none";
@@ -312,7 +321,6 @@
         loadLeaveData();
       }
     }
-
     async function login() {
       const email = document.getElementById("loginEmail").value.trim();
       const pass = document.getElementById("loginPass").value;
@@ -333,7 +341,6 @@
         showMessage(data.message || "🚫 Sai thông tin", "error", true);
       }
     }
-
     function logout() {
       localStorage.clear();
       document.getElementById("loginEmail").value = "";
@@ -342,10 +349,8 @@
       hideDashboard();
       showMessage("👋 Đã đăng xuất", "success");
     }
-
     document.getElementById("loginBtn").onclick = login;
     document.getElementById("logoutBtn").onclick = logout;
-
     async function loadData() {
       const email = localStorage.getItem("adminEmail");
       if (!email) {
@@ -362,7 +367,6 @@
       currentPage = 1;
       renderTable();
     }
-
     function renderTable() {
       const tbody = document.getElementById("dataBody");
       tbody.innerHTML = "";
@@ -401,7 +405,6 @@
       renderPagination(data.length);
       highlightFilterButton();
     }
-
     async function loadLeaveData() {
       const email = localStorage.getItem("adminEmail");
       if (!email) {
@@ -418,7 +421,6 @@
       currentLeavePage = 1;
       renderLeaveTable();
     }
-
     function renderLeaveTable() {
       const tbody = document.getElementById("leaveDataBody");
       tbody.innerHTML = "";
@@ -449,7 +451,6 @@
       renderLeavePagination(data.length);
       highlightLeaveFilterButton();
     }
-
     function renderPagination(total) {
       const pages = Math.ceil(total / rowsPerPage);
       const pagDiv = document.getElementById("pagination");
@@ -458,7 +459,6 @@
         pagDiv.innerHTML += `<button class="${i===currentPage?'active':''}" onclick="gotoPage(${i})">${i}</button>`;
       }
     }
-
     function renderLeavePagination(total) {
       const pages = Math.ceil(total / leaveRowsPerPage);
       const pagDiv = document.getElementById("leavePagination");
@@ -467,10 +467,8 @@
         pagDiv.innerHTML += `<button class="${i===currentLeavePage?'active':''}" onclick="gotoLeavePage(${i})">${i}</button>`;
       }
     }
-
     function gotoPage(page) { currentPage = page; renderTable(); }
     function gotoLeavePage(page) { currentLeavePage = page; renderLeaveTable(); }
-
     function sortTable(col) {
       if (currentSort.column===col) {
         currentSort.order = currentSort.order==="asc" ? "desc" : (currentSort.order==="desc"?null:"asc");
@@ -483,7 +481,6 @@
         document.querySelector(`#dataTable th[onclick="sortTable('${col}')"]`).classList.add(currentSort.order);
       renderTable();
     }
-
     function sortLeaveTable(col) {
       if (currentLeaveSort.column===col) {
         currentLeaveSort.order = currentLeaveSort.order==="asc" ? "desc" : (currentLeaveSort.order==="desc"?null:"asc");
@@ -496,43 +493,36 @@
         document.querySelector(`#leaveTable th[onclick="sortLeaveTable('${col}')"]`).classList.add(currentLeaveSort.order);
       renderLeaveTable();
     }
-
     function applyFilter(f) {
       currentFilter = f;
       startDate = endDate = "";
       loadData();
     }
-
     function applyLeaveFilter(f) {
       currentLeaveFilter = f;
       leaveStartDate = leaveEndDate = "";
       loadLeaveData();
     }
-
     function applyDateRange() {
       startDate = document.getElementById("startDate").value;
       endDate = document.getElementById("endDate").value;
       currentFilter = "custom";
       loadData();
     }
-
     function applyLeaveDateRange() {
       leaveStartDate = document.getElementById("leaveStartDate").value;
       leaveEndDate = document.getElementById("leaveEndDate").value;
       currentLeaveFilter = "custom";
       loadLeaveData();
     }
-
     function applySearch() {
       currentSearch = document.getElementById("searchBox").value.trim();
       loadData();
     }
-
     function applyLeaveSearch() {
       currentLeaveSearch = document.getElementById("leaveSearchBox").value.trim();
       loadLeaveData();
     }
-
     function handleExportClick() {
       const email = localStorage.getItem("adminEmail");
       let exportOptionsEl;
@@ -543,7 +533,7 @@
       }
       if (currentTab === "attendance") {
         exportOptionsEl = document.getElementById('exportOptionsAttendance');
-      } else if (currentTab === "leave") {
+      } else {
         exportOptionsEl = document.getElementById('exportOptionsLeave');
       }
       const exportType = exportOptionsEl ? exportOptionsEl.value : "";
@@ -574,22 +564,18 @@
         exportOptionsEl.value = "";
       }
     }
-
     function updateRowsPerPage() {
       rowsPerPage = parseInt(document.getElementById("rowsPerPage").value);
       currentPage = 1;
       renderTable();
     }
-
     function updateLeaveRowsPerPage() {
       leaveRowsPerPage = parseInt(document.getElementById("leaveRowsPerPage").value);
       currentLeavePage = 1;
       renderLeaveTable();
     }
-
     function refreshData() { loadData(); }
     function refreshLeaveData() { loadLeaveData(); }
-
     function resetFilter() {
       currentSearch = "";
       startDate = endDate = "";
@@ -600,7 +586,6 @@
       highlightFilterButton();
       loadData();
     }
-
     function resetLeaveFilter() {
       currentLeaveSearch = "";
       leaveStartDate = leaveEndDate = "";
@@ -611,7 +596,6 @@
       highlightLeaveFilterButton();
       loadLeaveData();
     }
-
     function highlightFilterButton() {
       document.querySelectorAll("#filters button").forEach(btn => btn.classList.remove("active"));
       const map = {
@@ -620,7 +604,6 @@
       };
       if (map[currentFilter]) document.getElementById(map[currentFilter]).classList.add("active");
     }
-
     function highlightLeaveFilterButton() {
       document.querySelectorAll("#leaveSection .controls:nth-child(1) button").forEach(btn => btn.classList.remove("active"));
       const map = {
@@ -629,7 +612,6 @@
       };
       if (map[currentLeaveFilter]) document.getElementById(map[currentLeaveFilter]).classList.add("active");
     }
-
     window.onload = () => {
       const email = localStorage.getItem("adminEmail");
       if (email) {
@@ -642,7 +624,6 @@
         document.getElementById("loginModal").style.display = "flex";
       }
     };
-
     // Allow Enter key to trigger login
     document.getElementById("loginPass").addEventListener("keypress", (e) => {
       if (e.key === "Enter") login();
