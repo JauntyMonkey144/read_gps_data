@@ -186,13 +186,13 @@
     </div>
     <div class="controls">
       <input type="text" id="leaveSearchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
+      <button onclick="applyLeaveSearch()">Tìm kiếm</button>      
       <select id="leaveRowsPerPage" onchange="updateLeaveRowsPerPage()">
         <option value="5">5 dòng</option>
         <option value="10" selected>10 dòng</option>
         <option value="20">20 dòng</option>
         <option value="25">25 dòng</option>
       </select>
-      <button onclick="applyLeaveSearch()">Tìm kiếm</button>
       <div class="export-group" id="exportGroupLeave">
         <select id="exportOptionsLeave" style="border: 1px solid var(--primary);">
           <option value="">-- Chọn loại file --</option>
