@@ -210,48 +210,45 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
         return {"$and": conditions}
 
 
-# ---- Build leave query ----
+# ---- Build leave query (UPDATED)----
 def build_leave_query(filter_type, start_date, end_date, search, username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
     conditions = [{"$or": [{"Tasks": {"$regex": regex_leave}}, {"Status": {"$regex": regex_leave}}]}]
 
     date_filter = {}
-    if filter_type == "custom" and start_date and end_date:
-        start_dt_str = start_date
-        end_dt_str = end_date
-        date_filter = {
-            "$or": [
-                {"LeaveDate": {"$gte": start_dt_str, "$lte": end_dt_str}},
-                {"$and": [{"StartDate": {"$lte": end_dt_str}}, {"EndDate": {"$gte": start_dt_str}}]},
-            ]
-        }
-    else:
-        start_dt = None
-        end_dt = None
-        if filter_type == "hôm nay":
-            start_dt = today.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_dt = start_dt
-        elif filter_type == "tuần":
-            start_dt = today - timedelta(days=today.weekday())
-            end_dt = start_dt + timedelta(days=6)
-        elif filter_type == "tháng":
-            start_dt = today.replace(day=1)
-            _, last_day = calendar.monthrange(today.year, today.month)
-            end_dt = today.replace(day=last_day)
-        elif filter_type == "năm":
-            start_dt = today.replace(month=1, day=1)
-            end_dt = today.replace(month=12, day=31)
+    
+    # Hàm để tạo chuỗi thời gian bắt đầu và kết thúc
+    def get_time_range_str(start_dt_obj, end_dt_obj):
+        start_str = start_dt_obj.strftime("%d/%m/%Y %H:%M:%S")
+        end_str = end_dt_obj.strftime("%d/%m/%Y %H:%M:%S")
+        return {"CheckinTime": {"$gte": start_str, "$lte": end_str}}
 
-        if start_dt and end_dt:
-            start_str = start_dt.strftime("%Y-%m-%d")
-            end_str = end_dt.strftime("%Y-%m-%d")
-            date_filter = {
-                "$or": [
-                    {"LeaveDate": {"$gte": start_str, "$lte": end_str}},
-                    {"$and": [{"StartDate": {"$lte": end_str}}, {"EndDate": {"$gte": start_str}}]},
-                ]
-            }
+    if filter_type == "custom" and start_date and end_date:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+        date_filter = get_time_range_str(start_dt, end_dt)
+    
+    elif filter_type == "hôm nay":
+        start_dt = today.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_dt = today.replace(hour=23, minute=59, second=59, microsecond=999)
+        date_filter = get_time_range_str(start_dt, end_dt)
+
+    elif filter_type == "tuần":
+        start_dt = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0)
+        end_dt = (start_dt + timedelta(days=6)).replace(hour=23, minute=59, second=59)
+        date_filter = get_time_range_str(start_dt, end_dt)
+
+    elif filter_type == "tháng":
+        start_dt = today.replace(day=1, hour=0, minute=0, second=0)
+        _, last_day = calendar.monthrange(today.year, today.month)
+        end_dt = today.replace(day=last_day, hour=23, minute=59, second=59)
+        date_filter = get_time_range_str(start_dt, end_dt)
+        
+    elif filter_type == "năm":
+        start_dt = today.replace(month=1, day=1, hour=0, minute=0, second=0)
+        end_dt = today.replace(month=12, day=31, hour=23, minute=59, second=59)
+        date_filter = get_time_range_str(start_dt, end_dt)
 
     if date_filter:
         conditions.append(date_filter)
@@ -304,7 +301,7 @@ def get_formatted_approval_date(approval_date):
         
         formatted_date = parsed_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
     except (ValueError, TypeError):
-        return str(approval_date) # Trả về chuỗi gốc nếu không thể format
+        return str(approval_date)
         
     return formatted_date
 
@@ -481,7 +478,6 @@ def export_leaves_to_excel():
         wb = load_workbook(template_path)
         ws = wb.active
         
-        # Đổi tên tiêu đề cột E thành "Ngày duyệt đơn"
         ws['E1'] = "Ngày duyệt đơn"
 
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
@@ -498,7 +494,6 @@ def export_leaves_to_excel():
             leave_days = calculate_leave_days_from_record(rec)
             ws.cell(row=row, column=4, value=leave_days)
             
-            # Cột 5: Ngày duyệt đơn (SỬA Ở ĐÂY)
             approval_date_str = get_formatted_approval_date(rec.get("ApprovalDate"))
             ws.cell(row=row, column=5, value=approval_date_str)
             
@@ -571,7 +566,7 @@ def export_combined_to_excel():
 
         # ---- Xử lý sheet Nghỉ phép ----
         ws_leaves = wb["Nghỉ phép"]
-        ws_leaves['E1'] = "Ngày duyệt đơn" # Đổi tên tiêu đề
+        ws_leaves['E1'] = "Ngày duyệt đơn"
         start_row_leaves = 2
         for i, rec in enumerate(leave_data, start=0):
             row = start_row_leaves + i
@@ -583,7 +578,6 @@ def export_combined_to_excel():
             leave_days = calculate_leave_days_from_record(rec)
             ws_leaves.cell(row=row, column=4, value=leave_days)
             
-            # Cột 5: Ngày duyệt đơn (SỬA Ở ĐÂY)
             approval_date_str = get_formatted_approval_date(rec.get("ApprovalDate"))
             ws_leaves.cell(row=row, column=5, value=approval_date_str)
             
