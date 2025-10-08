@@ -295,6 +295,44 @@ def build_leave_query(filter_type, start_date, end_date, search, username=None):
     else:
         return {"$and": conditions}
 
+# ---- Helper function để tính số ngày nghỉ ----
+def calculate_leave_days(task_string):
+    if not isinstance(task_string, str):
+        return 1.0  # Mặc định là 1 nếu dữ liệu không phải chuỗi
+
+    task_string_lower = task_string.lower()
+    num_days = 1.0
+
+    # 1. Xác định hệ số nhân theo buổi (sáng/chiều/cả ngày)
+    multiplier = 1.0
+    if 'sáng' in task_string_lower or 'chieu' in task_string_lower or 'chiều' in task_string_lower:
+        multiplier = 0.5
+    
+    # 2. Trích xuất ngày để tính khoảng thời gian nghỉ
+    date_pattern = r'\d{2}/\d{2}/\d{4}'
+    dates_found = re.findall(date_pattern, task_string)
+    
+    # Kiểm tra nếu là nghỉ nhiều ngày (có từ "đến")
+    if 'đến' in task_string_lower and len(dates_found) >= 2:
+        try:
+            start_date_str = dates_found[0]
+            end_date_str = dates_found[1]
+            
+            start_date = datetime.strptime(start_date_str, "%d/%m/%Y")
+            end_date = datetime.strptime(end_date_str, "%d/%m/%Y")
+            
+            # Tính số ngày (bao gồm cả ngày bắt đầu và kết thúc)
+            delta = (end_date - start_date).days + 1
+            if delta > 0:
+                num_days = float(delta)
+        except (ValueError, IndexError) as e:
+            # Nếu không parse được ngày, quay về mặc định
+            print(f"Không thể phân tích ngày từ '{task_string}': {e}")
+            num_days = 1.0
+            
+    # Tính toán cuối cùng
+    total_leave_days = num_days * multiplier
+    return total_leave_days
 
 # ---- API lấy dữ liệu chấm công ----
 @app.route("/api/attendances", methods=["GET"])
@@ -556,7 +594,7 @@ def export_leaves_to_excel():
             top=Side(style="thin", color="000000"), bottom=Side(style="thin", color="000000"),
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        start_row = 2  # Giả sử hàng 1 là tiêu đề trong file mẫu
+        start_row = 2
 
         for i, rec in enumerate(data, start=0):
             row = start_row + i
@@ -570,8 +608,13 @@ def export_leaves_to_excel():
             # Cột 3: Ngày Nghỉ
             ws.cell(row=row, column=3, value=rec.get("CheckinDate", ""))
             
-            # Cột 4: Số ngày nghỉ (Giả định là 1)
-            ws.cell(row=row, column=4, value=1)
+            # Lấy chuỗi task để xử lý
+            tasks = rec.get("Tasks")
+            tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")
+
+            # Cột 4: Số ngày nghỉ (Tính toán tự động)
+            leave_days = calculate_leave_days(tasks_str)
+            ws.cell(row=row, column=4, value=leave_days)
             
             # Cột 5: Ngày tạo đơn
             checkin_time = rec.get("CheckinTime")
@@ -587,8 +630,6 @@ def export_leaves_to_excel():
             ws.cell(row=row, column=5, value=full_datetime_str)
             
             # Cột 6: Lý do
-            tasks = rec.get("Tasks")
-            tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")
             leave_reason = ""
             if ":" in tasks_str:
                 leave_reason = tasks_str.split(":", 1)[1].strip()
@@ -603,7 +644,7 @@ def export_leaves_to_excel():
             if isinstance(approval_date, datetime):
                 approval_date_str = approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S")
             elif isinstance(approval_date, str) and approval_date.strip():
-                 approval_date_str = approval_date # Đã được format từ trước
+                 approval_date_str = approval_date
             
             approval_status = f"Đã duyệt bởi {approved_by} lúc {approval_date_str}" if approved_by and approval_date_str else "Chưa duyệt"
             ws.cell(row=row, column=7, value=approval_status)
@@ -614,7 +655,6 @@ def export_leaves_to_excel():
                 cell.border = border
                 cell.alignment = align_left
         
-        # Tự động điều chỉnh độ rộng cột
         for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -667,7 +707,6 @@ def export_combined_to_excel():
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
 
-        # Lấy dữ liệu điểm danh và nghỉ phép
         attendance_query = build_attendance_query(filter_type, start_date, end_date, search, username=username)
         leave_query = build_leave_query(filter_type, start_date, end_date, search, username=username)
 
@@ -734,7 +773,6 @@ def export_combined_to_excel():
         # ---- Xử lý sheet Nghỉ phép ----
         ws_leaves = wb["Nghỉ phép"] if "Nghỉ phép" in wb.sheetnames else wb.create_sheet("Nghỉ phép")
         
-        # Cập nhật tiêu đề cho sheet Nghỉ phép
         leave_headers = ["Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do", "Trạng thái"]
         for col, header in enumerate(leave_headers, start=1):
             ws_leaves.cell(row=1, column=col, value=header)
@@ -743,15 +781,16 @@ def export_combined_to_excel():
         for i, rec in enumerate(leave_data, start=0):
             row = start_row_leaves + i
             
-            # Cột 1-3
             ws_leaves.cell(row=row, column=1, value=rec.get("EmployeeId"))
             ws_leaves.cell(row=row, column=2, value=rec.get("EmployeeName"))
             ws_leaves.cell(row=row, column=3, value=rec.get("CheckinDate"))
             
-            # Cột 4: Số ngày nghỉ
-            ws_leaves.cell(row=row, column=4, value=1)
+            tasks = rec.get("Tasks")
+            tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")
             
-            # Cột 5: Ngày tạo đơn
+            leave_days = calculate_leave_days(tasks_str)
+            ws_leaves.cell(row=row, column=4, value=leave_days)
+            
             checkin_time = rec.get("CheckinTime")
             full_datetime_str = ""
             if isinstance(checkin_time, datetime):
@@ -760,13 +799,9 @@ def export_combined_to_excel():
                  full_datetime_str = checkin_time
             ws_leaves.cell(row=row, column=5, value=full_datetime_str)
             
-            # Cột 6: Lý do
-            tasks = rec.get("Tasks")
-            tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")
             leave_reason = tasks_str.split(":", 1)[1].strip() if ":" in tasks_str else rec.get("ApproveNote", "")
             ws_leaves.cell(row=row, column=6, value=leave_reason)
 
-            # Cột 7: Trạng thái
             approved_by = rec.get("ApprovedBy", "")
             approval_date = rec.get("ApprovalDate")
             approval_date_str = ""
@@ -777,13 +812,11 @@ def export_combined_to_excel():
             approval_status = f"Đã duyệt bởi {approved_by} lúc {approval_date_str}" if approved_by and approval_date_str else "Chưa duyệt"
             ws_leaves.cell(row=row, column=7, value=approval_status)
 
-            # Áp dụng style
             for col in range(1, 8):
                 cell = ws_leaves.cell(row=row, column=col)
                 cell.border = border
                 cell.alignment = align_left
 
-        # Tự động điều chỉnh độ rộng cột cho cả hai sheet
         for ws in [ws_attendance, ws_leaves]:
             for col in ws.columns:
                 max_length = 0
