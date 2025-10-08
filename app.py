@@ -29,6 +29,7 @@ db = client[DB_NAME]
 
 # Các collection sử dụng
 admins = db["admins"]
+users = db["users"]  # Added users collection
 collection = db["alt_checkins"]
 
 # ---- Trang chủ (đăng nhập chính) ----
@@ -93,21 +94,21 @@ def forgot_password():
         email = request.form.get("email")
         new_password = request.form.get("new_password")
         confirm_password = request.form.get("confirm_password")
-        
+       
         if not email or not new_password or not confirm_password:
             return jsonify({"success": False, "message": "❌ Vui lòng điền đầy đủ thông tin"}), 400
-        
+       
         if new_password != confirm_password:
             return jsonify({"success": False, "message": "❌ Mật khẩu xác nhận không khớp"}), 400
-        
+       
         admin = admins.find_one({"email": email})
         if not admin:
             return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
-        
+       
         # Update password
         hashed_pw = generate_password_hash(new_password)
         admins.update_one({"email": email}, {"$set": {"password": hashed_pw}})
-        
+       
         # Hiển thị thông báo thành công với nút quay về trang chủ
         return """
         <!DOCTYPE html>
@@ -134,7 +135,7 @@ def forgot_password():
         """
 
 # ---- Build attendance query (unchanged) ----
-def build_attendance_query(filter_type, start_date, end_date, search):
+def build_attendance_query(filter_type, start_date, end_date, search, username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
     conditions = []
@@ -172,13 +173,15 @@ def build_attendance_query(filter_type, start_date, end_date, search):
             ]
         }
         conditions.append(search_or)
+    if username:  # Add username filter if provided
+        conditions.append({"EmployeeName": username})
     if len(conditions) == 1:
         return conditions[0]
     else:
         return {"$and": conditions}
 
 # ---- Build leave query (unchanged) ----
-def build_leave_query(filter_type, start_date, end_date, search):
+def build_leave_query(filter_type, start_date, end_date, search, username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
     conditions = []
@@ -247,27 +250,36 @@ def build_leave_query(filter_type, start_date, end_date, search):
             ]
         }
         conditions.append(search_or)
+    if username:  # Add username filter if provided
+        conditions.append({"EmployeeName": username})
     if len(conditions) == 1:
         return conditions[0]
     else:
         return {"$and": conditions}
 
-# ---- API lấy dữ liệu chấm công (unchanged) ----
+# ---- API lấy dữ liệu chấm công (updated) ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
         email = request.args.get("email")
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
-        admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
-        if not admin:
-            return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
+        
+        # Check if email exists in users collection
+        user = users.find_one({"email": email}, {"_id": 0, "username": 1})
+        if not user:
+            return jsonify({"error": "🚫 Email không tồn tại trong danh sách người dùng"}), 403
+        
+        username = user["username"]  # Get username from users collection
+        
         filter_type = request.args.get("filter", "hôm nay").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
-        query = build_attendance_query(filter_type, start_date, end_date, search)
+        
+        query = build_attendance_query(filter_type, start_date, end_date, search, username=username)
         data = list(collection.find(query, {"_id": 0}))
+        
         for item in data:
             ghi_chu_parts = []
             if item.get('ProjectId'):
@@ -278,27 +290,34 @@ def get_attendances():
             if item.get('OtherNote'):
                 ghi_chu_parts.append(f"Note: {item['OtherNote']}")
             item['GhiChu'] = '; '.join(ghi_chu_parts) if ghi_chu_parts else ''
-        print(f"DEBUG: Fetched {len(data)} records for email {email} with filter {filter_type}")
+        
+        print(f"DEBUG: Fetched {len(data)} records for email {email} (username: {username}) with filter {filter_type}")
         return jsonify(data)
     except Exception as e:
         print(f"❌ Error in get_attendances: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ---- API lấy dữ liệu nghỉ phép (unchanged) ----
+# ---- API lấy dữ liệu nghỉ phép (updated) ----
 @app.route("/api/leaves", methods=["GET"])
 def get_leaves():
     try:
         email = request.args.get("email")
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
-        admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
-        if not admin:
-            return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
+        
+        # Check if email exists in users collection
+        user = users.find_one({"email": email}, {"_id": 0, "username": 1})
+        if not user:
+            return jsonify({"error": "🚫 Email không tồn tại trong danh sách người dùng"}), 403
+        
+        username = user["username"]  # Get username from users collection
+        
         filter_type = request.args.get("filter", "tất cả").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
-        query = build_leave_query(filter_type, start_date, end_date, search)
+        
+        query = build_leave_query(filter_type, start_date, end_date, search, username=username)
         data = list(collection.find(query, {
             "_id": 0,
             "EmployeeId": 1,
@@ -311,6 +330,7 @@ def get_leaves():
             "ApprovedBy": 1,
             "ApproveNote": 1
         }))
+        
         for item in data:
             approval_date = item.get("ApprovalDate")
             if approval_date:
@@ -326,30 +346,37 @@ def get_leaves():
                 item["ApprovalDate"] = None
             item["ApprovedBy"] = item.get("ApprovedBy", "")
             item["ApproveNote"] = item.get("ApproveNote", "")
-        print(f"DEBUG: Fetched {len(data)} leave records for email {email} with filter {filter_type}")
+        
+        print(f"DEBUG: Fetched {len(data)} leave records for email {email} (username: {username}) with filter {filter_type}")
         return jsonify(data)
     except Exception as e:
         print(f"❌ Error in get_leaves: {e}")
         return jsonify({"error": str(e)}), 500
-        
-# ---- API xuất Excel (validate email từ admins) ----
+
+# ---- API xuất Excel (updated) ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
         email = request.args.get("email")
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
-        # ✅ Kiểm tra quyền admin
-        admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
-        if not admin:
-            return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
+        
+        # Check if email exists in users collection
+        user = users.find_one({"email": email}, {"_id": 0, "username": 1})
+        if not user:
+            return jsonify({"error": "🚫 Email không tồn tại trong danh sách người dùng"}), 403
+        
+        username = user["username"]  # Get username from users collection
+        
         # ---- Tham số lọc ----
         filter_type = request.args.get("filter", "hôm nay").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
+        
         # ---- Tạo query ----
-        query = build_attendance_query(filter_type, start_date, end_date, search)
+        query = build_attendance_query(filter_type, start_date, end_date, search, username=username)
+        
         # ---- Lấy dữ liệu ----
         data = list(db.alt_checkins.find(query, {
             "_id": 0,
@@ -366,6 +393,7 @@ def export_to_excel():
             "Latitude": 1,
             "Longitude": 1
         }))
+        
         # ---- Nhóm theo nhân viên + ngày ----
         grouped = {}
         for d in data:
@@ -377,6 +405,7 @@ def export_to_excel():
             )
             key = (emp_id, emp_name, date)
             grouped.setdefault(key, []).append(d)
+        
         # ---- Load template Excel ----
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
@@ -388,6 +417,7 @@ def export_to_excel():
             bottom=Side(style="thin", color="000000"),
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        
         # ---- Điền dữ liệu ----
         start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
@@ -417,8 +447,8 @@ def export_to_excel():
                 if "nghỉ phép" in tasks_str.lower():
                     if ":" in tasks_str:
                         split_task = tasks_str.split(":", 1)
-                        tasks_str = split_task[0].strip()       # → "Nghỉ phép"
-                        leave_reason = split_task[1].strip()    # → Lý do
+                        tasks_str = split_task[0].strip() # → "Nghỉ phép"
+                        leave_reason = split_task[1].strip() # → Lý do
                     else:
                         tasks_str = tasks_str.strip()
                 status = rec.get("Status", "")
@@ -460,6 +490,7 @@ def export_to_excel():
                 for col in range(1, 14)
             )
             ws.row_dimensions[row].height = max_lines * 20
+        
         # ---- Auto-fit column width ----
         for col in ws.columns:
             max_length = 0
@@ -469,6 +500,7 @@ def export_to_excel():
                     length = len(str(cell.value))
                     max_length = max(max_length, length)
             ws.column_dimensions[col_letter].width = max_length + 2
+        
         # ---- Xuất file ----
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
         if search:
@@ -477,14 +509,11 @@ def export_to_excel():
             filename = f"Danh sách chấm công_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
             filename = f"Danh sách chấm công từ {start_date} đến {end_date}_{today_str}.xlsx"
-        elif filter_type == "custom" and start_date and end_date:
-            filename = f"Danh sách đơn nghỉ phép_{today_str}.xlsx"
         else:
             filename = f"Danh sách chấm công_{today_str}.xlsx"
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-
         return send_file(
             output,
             as_attachment=True,
@@ -494,22 +523,28 @@ def export_to_excel():
     except Exception as e:
         print("❌ Lỗi export:", e)
         return jsonify({"error": str(e)}), 500
-        
-# ---- API xuất Excel cho nghỉ phép (unchanged) ----
+
+# ---- API xuất Excel cho nghỉ phép (updated) ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
     try:
         email = request.args.get("email")
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
-        admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
-        if not admin:
-            return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
+        
+        # Check if email exists in users collection
+        user = users.find_one({"email": email}, {"_id": 0, "username": 1})
+        if not user:
+            return jsonify({"error": "🚫 Email không tồn tại trong danh sách người dùng"}), 403
+        
+        username = user["username"]  # Get username from users collection
+        
         filter_type = request.args.get("filter", "tất cả").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
-        query = build_leave_query(filter_type, start_date, end_date, search)
+        
+        query = build_leave_query(filter_type, start_date, end_date, search, username=username)
         data = list(collection.find(query, {
             "_id": 0,
             "EmployeeId": 1,
@@ -522,6 +557,7 @@ def export_leaves_to_excel():
             "ApprovedBy": 1,
             "ApproveNote": 1
         }))
+        
         grouped = {}
         for d in data:
             emp_id = d.get("EmployeeId", "")
@@ -529,6 +565,7 @@ def export_leaves_to_excel():
             date = d.get("CheckinDate", "")
             key = (emp_id, emp_name, date)
             grouped.setdefault(key, []).append(d)
+        
         template_path = "templates/Copy of Form nghỉ phép.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
@@ -539,6 +576,7 @@ def export_leaves_to_excel():
             bottom=Side(style="thin", color="000000"),
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        
         start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items(), start=0):
             row = start_row + i
@@ -589,6 +627,7 @@ def export_leaves_to_excel():
                 for col in range(1, 14)
             )
             ws.row_dimensions[row].height = max_lines * 20
+        
         for col in ws.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -597,12 +636,14 @@ def export_leaves_to_excel():
                     length = len(str(cell.value).split("\n")[0])
                     max_length = max(max_length, length)
             ws.column_dimensions[col_letter].width = min(max_length + 2, 70)
+        
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
         filename = f"Danh sách nghỉ phép_{today_str}.xlsx"
         if search:
             filename = f"Danh sách nghỉ phép theo tìm kiếm_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
             filename = f"Danh sách nghỉ phép từ {start_date} đến {end_date}_{today_str}.xlsx"
+        
         output = BytesIO()
         wb.save(output)
         output.seek(0)
@@ -616,22 +657,29 @@ def export_leaves_to_excel():
         print("❌ Lỗi export leaves:", e)
         return jsonify({"error": str(e)}), 500
 
-# ---- API xuất Excel kết hợp chấm công và nghỉ phép (unchanged) ----
+# ---- API xuất Excel kết hợp chấm công và nghỉ phép (updated) ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
         email = request.args.get("email")
         if not email:
             return jsonify({"error": "❌ Thiếu email"}), 400
-        admin = admins.find_one({"email": email}, {"_id": 0, "username": 1})
-        if not admin:
-            return jsonify({"error": "🚫 Email không hợp lệ (không có quyền truy cập)"}), 403
+        
+        # Check if email exists in users collection
+        user = users.find_one({"email": email}, {"_id": 0, "username": 1})
+        if not user:
+            return jsonify({"error": "🚫 Email không tồn tại trong danh sách người dùng"}), 403
+        
+        username = user["username"]  # Get username from users collection
+        
         filter_type = request.args.get("filter", "hôm nay").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
-        attendance_query = build_attendance_query(filter_type, start_date, end_date, search)
-        leave_query = build_leave_query(filter_type, start_date, end_date, search)
+        
+        attendance_query = build_attendance_query(filter_type, start_date, end_date, search, username=username)
+        leave_query = build_leave_query(filter_type, start_date, end_date, search, username=username)
+        
         attendance_data = list(collection.find(attendance_query, {
             "_id": 0,
             "EmployeeId": 1, "EmployeeName": 1, "ProjectId": 1, "Tasks": 1,
@@ -643,28 +691,34 @@ def export_combined_to_excel():
             "EmployeeId": 1, "EmployeeName": 1, "CheckinDate": 1, "CheckinTime": 1,
             "Tasks": 1, "Status": 1, "ApprovedBy": 1, "ApproveNote": 1, "ApprovalDate": 1
         }))
+        
         attendance_grouped = {}
         for d in attendance_data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate", ""))
             attendance_grouped.setdefault(key, []).append(d)
+        
         leave_grouped = {}
         for d in leave_data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate", ""))
             leave_grouped.setdefault(key, []).append(d)
+        
         template_path = "templates/Form kết hợp.xlsx"
         wb = load_workbook(template_path)
         ws_attendance = wb["Điểm danh"] if "Điểm danh" in wb.sheetnames else wb.create_sheet("Điểm danh")
         ws_leaves = wb["Nghỉ phép"] if "Nghỉ phép" in wb.sheetnames else wb.create_sheet("Nghỉ phép")
+        
         headers = ["Mã NV", "Tên NV", "Ngày", "Check 1", "Check 2", "Check 3", "Check 4", "Check 5",
                    "Check 6", "Check 7", "Check 8", "Check 9", "Check 10"]
         for col, header in enumerate(headers, start=1):
             ws_attendance.cell(row=1, column=col, value=header)
             ws_leaves.cell(row=1, column=col, value=header)
+        
         border = Border(
             left=Side(style="thin", color="000000"), right=Side(style="thin", color="000000"),
             top=Side(style="thin", color="000000"), bottom=Side(style="thin", color="000000"),
         )
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        
         start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(attendance_grouped.items(), start=0):
             row = start_row + i
@@ -705,6 +759,7 @@ def export_combined_to_excel():
                 for col in range(1, 14)
             )
             ws_attendance.row_dimensions[row].height = max_lines * 20
+        
         for col in ws_attendance.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -713,6 +768,7 @@ def export_combined_to_excel():
                     length = len(str(cell.value).split("\n")[0])
                     max_length = max(max_length, length)
             ws_attendance.column_dimensions[col_letter].width = min(max_length + 2, 70)
+        
         start_row = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(leave_grouped.items(), start=0):
             row = start_row + i
@@ -763,6 +819,7 @@ def export_combined_to_excel():
                 for col in range(1, 14)
             )
             ws_leaves.row_dimensions[row].height = max_lines * 20
+        
         for col in ws_leaves.columns:
             max_length = 0
             col_letter = col[0].column_letter
@@ -771,12 +828,14 @@ def export_combined_to_excel():
                     length = len(str(cell.value).split("\n")[0])
                     max_length = max(max_length, length)
             ws_leaves.column_dimensions[col_letter].width = min(max_length + 2, 70)
+        
         today_str = datetime.now(VN_TZ).strftime("%d-%m-%Y")
         filename = f"Danh sách chấm công và nghỉ phép_{today_str}.xlsx"
         if search:
             filename = f"Danh sách chấm công và nghỉ phép theo tìm kiếm_{today_str}.xlsx"
         elif filter_type == "custom" and start_date and end_date:
             filename = f"Danh sách chấm công và nghỉ phép từ {start_date} đến {end_date}_{today_str}.xlsx"
+        
         output = BytesIO()
         wb.save(output)
         output.seek(0)
