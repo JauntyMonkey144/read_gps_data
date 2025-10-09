@@ -478,7 +478,7 @@ def export_leaves_to_excel():
         wb = load_workbook(template_path)
         ws = wb.active
         
-        ws['E1'] = "Ngày duyệt đơn"
+        ws['E1'] = "Ngày tạo đơn"
 
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
@@ -566,7 +566,7 @@ def export_combined_to_excel():
 
         # ---- Xử lý sheet Nghỉ phép ----
         ws_leaves = wb["Nghỉ phép"]
-        ws_leaves['E1'] = "Ngày duyệt đơn"
+        ws_leaves['E1'] = "Ngày tạo đơn"
         start_row_leaves = 2
         for i, rec in enumerate(leave_data, start=0):
             row = start_row_leaves + i
