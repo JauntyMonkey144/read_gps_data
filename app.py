@@ -76,35 +76,8 @@ def login():
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     if request.method == "GET":
-        return """
-        <!DOCTYPE html>
-        <html lang="vi">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Đặt lại mật khẩu</title>
-            <style>
-                body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
-                .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px; }
-                button { background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-                button:hover { background: #218838; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h2>🔒 Đặt lại mật khẩu</h2>
-                <form method="POST">
-                    <input type="email" name="email" placeholder="Email" required>
-                    <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
-                    <input type="password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
-                    <button type="submit">Cập nhật mật khẩu</button>
-                    <a href="/">Quay về trang chủ</a>
-                </form>
-            </div>
-        </body>
-        </html>
-        """
+        return render_template('forgot_password.html')
+
     if request.method == "POST":
         email = request.form.get("email")
         new_password = request.form.get("new_password")
@@ -129,29 +102,7 @@ def forgot_password():
         else:
             users.update_one({"email": email}, {"$set": {"password": hashed_pw}})
 
-        return """
-        <!DOCTYPE html>
-        <html lang="vi">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Thay đổi mật khẩu thành công</title>
-            <style>
-                body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
-                .container { max-width: 400px; margin: 100px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                .success { color: #28a745; text-align: center; font-size: 18px; margin-bottom: 20px; }
-                button { background: #28a745; color: white; padding: 12px; width: 100%; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-                button:hover { background: #218838; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="success">✅ Thay đổi mật khẩu thành công</div>
-                <a href="/"><button>Quay về trang chủ</button></a>
-            </div>
-        </body>
-        </html>
-        """
+        return render_template("reset_success.html")
 
 
 # ---- Build attendance query ----
@@ -210,7 +161,7 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
         return {"$and": conditions}
 
 
-# ---- Build leave query (UPDATED)----
+# ---- Build leave query (lọc theo CheckinTime)----
 def build_leave_query(filter_type, start_date, end_date, search, username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -218,7 +169,6 @@ def build_leave_query(filter_type, start_date, end_date, search, username=None):
 
     date_filter = {}
     
-    # Hàm để tạo chuỗi thời gian bắt đầu và kết thúc
     def get_time_range_str(start_dt_obj, end_dt_obj):
         start_str = start_dt_obj.strftime("%d/%m/%Y %H:%M:%S")
         end_str = end_dt_obj.strftime("%d/%m/%Y %H:%M:%S")
@@ -455,7 +405,7 @@ def export_to_excel():
         return jsonify({"error": str(e)}), 500
 
 
-# ---- API xuất Excel cho nghỉ phép ----
+# ---- API xuất Excel cho nghỉ phép (UPDATED) ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
     try:
@@ -478,8 +428,11 @@ def export_leaves_to_excel():
         wb = load_workbook(template_path)
         ws = wb.active
         
+        # Chèn cột mới và cập nhật tiêu đề
+        ws.insert_cols(6) # Chèn 1 cột vào vị trí F (index 6)
         ws['E1'] = "Ngày tạo đơn"
-
+        ws['F1'] = "Ngày duyệt đơn"
+        
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
         start_row = 2
@@ -494,16 +447,20 @@ def export_leaves_to_excel():
             leave_days = calculate_leave_days_from_record(rec)
             ws.cell(row=row, column=4, value=leave_days)
             
+            # Cột 5: Ngày tạo đơn
+            ws.cell(row=row, column=5, value=rec.get("CheckinTime", ""))
+            
+            # Cột 6: Ngày duyệt đơn (CỘT MỚI)
             approval_date_str = get_formatted_approval_date(rec.get("ApprovalDate"))
-            ws.cell(row=row, column=5, value=approval_date_str)
+            ws.cell(row=row, column=6, value=approval_date_str)
             
             tasks = rec.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
-            ws.cell(row=row, column=6, value=tasks_str)
+            ws.cell(row=row, column=7, value=tasks_str)
 
-            ws.cell(row=row, column=7, value=rec.get("Status", "Chưa duyệt"))
+            ws.cell(row=row, column=8, value=rec.get("Status", "Chưa duyệt"))
 
-            for col_idx in range(1, 8):
+            for col_idx in range(1, 9): # Cập nhật số cột thành 8
                 ws.cell(row=row, column=col_idx).border = border
                 ws.cell(row=row, column=col_idx).alignment = align_left
         
@@ -519,7 +476,7 @@ def export_leaves_to_excel():
         return jsonify({"error": str(e)}), 500
 
 
-# ---- API xuất Excel kết hợp ----
+# ---- API xuất Excel kết hợp (UPDATED) ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
@@ -556,17 +513,33 @@ def export_combined_to_excel():
         start_row_att = 2
         for i, ((emp_id, emp_name, date), records) in enumerate(attendance_grouped.items()):
             row = start_row_att + i
-            ws_attendance.cell(row=row, column=1, value=emp_id).border = border
-            ws_attendance.cell(row=row, column=2, value=emp_name).border = border
-            ws_attendance.cell(row=row, column=3, value=date).border = border
+            ws_attendance.cell(row=row, column=1, value=emp_id)
+            ws_attendance.cell(row=row, column=2, value=emp_name)
+            ws_attendance.cell(row=row, column=3, value=date)
 
             for j, rec in enumerate(records[:10], start=1):
-                # Logic điền dữ liệu chấm công
-                pass
+                checkin_time = rec.get("CheckinTime")
+                time_str = ""
+                if isinstance(checkin_time, datetime):
+                    time_str = checkin_time.astimezone(VN_TZ).strftime("%H:%M:%S")
+                elif isinstance(checkin_time, str):
+                    try:
+                        time_str = datetime.strptime(checkin_time, "%d/%m/%Y %H:%M:%S").strftime("%H:%M:%S")
+                    except ValueError:
+                        time_str = checkin_time
+                parts = [part for part in [time_str, rec.get("ProjectId"), ", ".join(rec.get("Tasks",[])) if isinstance(rec.get("Tasks"), list) else rec.get("Tasks"), rec.get("Status"), rec.get("OtherNote"), rec.get("Address")] if part]
+                ws_attendance.cell(row=row, column=3 + j, value="; ".join(map(str, parts)))
+
+            for col in range(1, 14):
+                ws_attendance.cell(row=row, column=col).border = border
+                ws_attendance.cell(row=row, column=col).alignment = align_left
 
         # ---- Xử lý sheet Nghỉ phép ----
         ws_leaves = wb["Nghỉ phép"]
+        ws_leaves.insert_cols(6) # Chèn cột mới
         ws_leaves['E1'] = "Ngày tạo đơn"
+        ws_leaves['F1'] = "Ngày duyệt đơn"
+        
         start_row_leaves = 2
         for i, rec in enumerate(leave_data, start=0):
             row = start_row_leaves + i
@@ -578,16 +551,18 @@ def export_combined_to_excel():
             leave_days = calculate_leave_days_from_record(rec)
             ws_leaves.cell(row=row, column=4, value=leave_days)
             
+            ws_leaves.cell(row=row, column=5, value=rec.get("CheckinTime", ""))
+            
             approval_date_str = get_formatted_approval_date(rec.get("ApprovalDate"))
-            ws_leaves.cell(row=row, column=5, value=approval_date_str)
+            ws_leaves.cell(row=row, column=6, value=approval_date_str)
             
             tasks = rec.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
-            ws_leaves.cell(row=row, column=6, value=tasks_str)
+            ws_leaves.cell(row=row, column=7, value=tasks_str)
             
-            ws_leaves.cell(row=row, column=7, value=rec.get("Status", "Chưa duyệt"))
+            ws_leaves.cell(row=row, column=8, value=rec.get("Status", "Chưa duyệt"))
 
-            for col in range(1, 8):
+            for col in range(1, 9): # Cập nhật số cột thành 8
                 ws_leaves.cell(row=row, column=col).border = border
                 ws_leaves.cell(row=row, column=col).alignment = align_left
 
