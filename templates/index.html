@@ -202,7 +202,7 @@
         <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button>
       </div>
       <button onclick="refreshLeaveData()">🔄 Làm mới</button>
-      <button onclick="resetLeaveFilter()">↻ Reset</button>
+      <button onclick="resetLeaveFilter()">↻ Reset</button> 
     </div>
     <div id="leaveTableContainer" class="table-container">
       <table id="leaveTable">
@@ -212,9 +212,11 @@
             <th onclick="sortLeaveTable('EmployeeName')">Tên nhân viên</th>
             <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
             <th onclick="sortLeaveTable('CreationTime')">Ngày tạo đơn</th>
-            <th onclick="sortLeaveTable('ApprovalDate')">Ngày duyệt/Từ chối</th>
             <th onclick="sortLeaveTable('Tasks')">Lý do</th>
-            <th onclick="sortLeaveTable('Status')">Trạng thái</th>
+            <th onclick="sortLeaveTable('ApprovalDate1')">Ngày duyệt/Từ chối Lần 1</th>            
+            <th onclick="sortLeaveTable('Status1')">Trạng thái Lần 1</th>
+            <th onclick="sortLeaveTable('ApprovalDate2')">Ngày duyệt/Từ chối Lần 2</th>            
+            <th onclick="sortLeaveTable('Status2')">Trạng thái Lần 2</th>          
           </tr>
         </thead>
         <tbody id="leaveDataBody"></tbody>
@@ -531,9 +533,11 @@
             <td>${r.EmployeeName||""}</td>
             <td>${r.CheckinDate||""}</td>
             <td>${r.CreationTime||""}</td>
-            <td>${r.ApprovalDate||""}</td>
-            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
-            <td>${r.Status||""}</td>
+            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>            
+            <td>${r.ApprovalDate1||""}</td>
+            <td>${r.Status1||""}</td>
+            <td>${r.ApprovalDate2||""}</td>
+            <td>${r.Status2||""}</td>            
           </tr>
         `;
       });
