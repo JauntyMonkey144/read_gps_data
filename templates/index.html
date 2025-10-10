@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -40,7 +39,7 @@
       padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
     }
     table { width: 100%; border-collapse: collapse; background: white; box-shadow: var(--shadow); }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap;}
     th { background: var(--primary); color: white; cursor: pointer; user-select: none; }
     th.asc::after { content: " ↑"; font-size: 12px; }
     th.desc::after { content: " ↓"; font-size: 12px; }
@@ -156,14 +155,16 @@
           <th onclick="sortTable('EmployeeId')">Mã NV</th>
           <th onclick="sortTable('EmployeeName')">Tên nhân viên</th>
           <th onclick="sortTable('CheckinDate')">Ngày</th>
-          <th onclick="sortTable('CheckinTime')">Giờ Check-in</th>
+          <th onclick="sortTable('CheckinTime')">Giờ</th>
+          <th onclick="sortTable('CheckType')">Loại Điểm Danh</th>
           <th onclick="sortTable('ProjectId')">Mã dự án</th>
           <th onclick="sortTable('Tasks')">Công việc</th>
-          <th onclick="sortTable('OtherNote')">Công việc khác</th>
           <th>Ảnh</th>
           <th>Địa chỉ</th>
           <th>Vị trí</th>
-          <th onclick="sortTable('Status')">Trạng thái</th>
+          <th onclick="sortTable('DailyHours')">Tổng Giờ/Ngày</th>
+          <th onclick="sortTable('MonthlyHours')">Tổng Giờ/Tháng</th>
+          <th onclick="sortTable('CheckinNote')">Ghi chú</th>
         </tr>
       </thead>
       <tbody id="dataBody"></tbody>
@@ -237,14 +238,15 @@
     let currentTab = "attendance";
     let currentFilter = "hôm nay";
     let currentSearch = "";
-    let currentSort = { column: null, order: null };
+    let currentSort = { column: 'CheckinTime', order: 'desc' };
     let startDate = "", endDate = "";
     let rawData = [];
+    let displayData = []; // Data sau khi đã tính toán
     let currentPage = 1;
     let rowsPerPage = 10;
     let currentLeaveFilter = "hôm nay";
     let currentLeaveSearch = "";
-    let currentLeaveSort = { column: null, order: null };
+    let currentLeaveSort = { column: 'CheckinTime', order: 'desc' };
     let leaveStartDate = "", leaveEndDate = "";
     let rawLeaveData = [];
     let currentLeavePage = 1;
@@ -288,37 +290,21 @@
       document.getElementById("tabLeave").classList.toggle("active", tab === "leave");
       resetExportOptions();
       if (tab === "attendance") {
-        currentFilter = "hôm nay";
-        currentSearch = "";
-        startDate = "";
-        endDate = "";
-        document.getElementById("searchBox").value = "";
-        document.getElementById("startDate").value = "";
-        document.getElementById("endDate").value = "";
         document.getElementById("leaveSection").style.display = "none";
         document.getElementById("filters").style.display = "flex";
         document.getElementById("dateFilter").style.display = "flex";
         document.getElementById("searchFilter").style.display = "flex";
         document.getElementById("tableContainer").style.display = "block";
         document.getElementById("pagination").style.display = "block";
-        document.getElementById("exportGroupAttendance").style.display = "flex";
-        loadData();
+        if (!rawData.length) loadData(); else renderTable();
       } else {
-        currentLeaveFilter = "hôm nay";
-        currentLeaveSearch = "";
-        leaveStartDate = "";
-        leaveEndDate = "";
-        document.getElementById("leaveSearchBox").value = "";
-        document.getElementById("leaveStartDate").value = "";
-        document.getElementById("leaveEndDate").value = "";
         document.getElementById("filters").style.display = "none";
         document.getElementById("dateFilter").style.display = "none";
         document.getElementById("searchFilter").style.display = "none";
         document.getElementById("tableContainer").style.display = "none";
         document.getElementById("pagination").style.display = "none";
         document.getElementById("leaveSection").style.display = "block";
-        document.getElementById("exportGroupAttendance").style.display = "none";
-        loadLeaveData();
+        if (!rawLeaveData.length) loadLeaveData(); else renderLeaveTable();
       }
     }
     async function login() {
@@ -351,6 +337,100 @@
     }
     document.getElementById("loginBtn").onclick = login;
     document.getElementById("logoutBtn").onclick = logout;
+    
+    // --- NEW: Function to calculate work hours ---
+    function processDataWithHours(data) {
+        if (!data || data.length === 0) return [];
+
+        function parseTime(timeStr) {
+            if (!timeStr) return null;
+            const [datePart, timePart] = timeStr.split(' ');
+            if (!datePart || !timePart) return null;
+            const [day, month, year] = datePart.split('/');
+            const [hours, minutes, seconds] = timePart.split(':');
+            try {
+                return new Date(year, month - 1, day, hours, minutes, seconds);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        const employeesData = data.reduce((acc, record) => {
+            acc[record.EmployeeId] = acc[record.EmployeeId] || [];
+            acc[record.EmployeeId].push(record);
+            return acc;
+        }, {});
+
+        const augmentedData = [];
+        for (const empId in employeesData) {
+            const records = employeesData[empId];
+            const monthsData = records.reduce((acc, record) => {
+                const date = record.CheckinDate;
+                if (!date) return acc;
+                const monthKey = date.substring(0, 7);
+                acc[monthKey] = acc[monthKey] || [];
+                acc[monthKey].push(record);
+                return acc;
+            }, {});
+
+            for (const monthKey in monthsData) {
+                let monthlyTotalSeconds = 0;
+                const monthRecords = monthsData[monthKey];
+                const daysData = monthRecords.reduce((acc, record) => {
+                    acc[record.CheckinDate] = acc[record.CheckinDate] || [];
+                    acc[record.CheckinDate].push(record);
+                    return acc;
+                }, {});
+
+                const sortedDays = Object.keys(daysData).sort();
+                const dailyHoursMap = {};
+
+                for (const day of sortedDays) {
+                    let firstCheckin = null, lastCheckout = null;
+                    daysData[day].forEach(rec => {
+                        const recTime = parseTime(rec.CheckinTime);
+                        if (!recTime) return;
+                        if (rec.CheckType === 'checkin' && (!firstCheckin || recTime < firstCheckin)) {
+                            firstCheckin = recTime;
+                        } else if (rec.CheckType === 'checkout' && (!lastCheckout || recTime > lastCheckout)) {
+                            lastCheckout = recTime;
+                        }
+                    });
+
+                    let dailySeconds = 0;
+                    if (firstCheckin && lastCheckout && lastCheckout > firstCheckin) {
+                        dailySeconds = (lastCheckout - firstCheckin) / 1000;
+                    }
+                    monthlyTotalSeconds += dailySeconds;
+                    
+                    const dailyH = Math.floor(dailySeconds / 3600);
+                    const dailyM = Math.floor((dailySeconds % 3600) / 60);
+                    const monthlyH = Math.floor(monthlyTotalSeconds / 3600);
+                    const monthlyM = Math.floor((monthlyTotalSeconds % 3600) / 60);
+
+                    dailyHoursMap[day] = {
+                        daily: `${dailyH}h ${dailyM}m`,
+                        monthly: `${monthlyH}h ${monthlyM}m`,
+                        _dailySeconds: dailySeconds,
+                        _monthlySeconds: monthlyTotalSeconds,
+                    };
+                }
+
+                monthRecords.forEach(rec => {
+                    const hours = dailyHoursMap[rec.CheckinDate];
+                    augmentedData.push({
+                        ...rec,
+                        DailyHours: hours ? hours.daily : '0h 0m',
+                        MonthlyHours: hours ? hours.monthly : 'N/A',
+                        _dailySeconds: hours ? hours._dailySeconds : 0,
+                        _monthlySeconds: hours ? hours._monthlySeconds : 0
+                    });
+                });
+            }
+        }
+        return augmentedData;
+    }
+
     async function loadData() {
       const email = localStorage.getItem("adminEmail");
       if (!email) {
@@ -364,19 +444,29 @@
       const data = await res.json();
       if (!res.ok) return showMessage(data.error || "❌ Lỗi tải dữ liệu", "error");
       rawData = data;
+      displayData = processDataWithHours(rawData); // Process data
       currentPage = 1;
       renderTable();
     }
     function renderTable() {
       const tbody = document.getElementById("dataBody");
       tbody.innerHTML = "";
-      let data = [...rawData];
+      let data = [...displayData]; // Use processed data
       if (currentSort.column && currentSort.order) {
         data.sort((a,b) => {
-          let A = a[currentSort.column]||"", B = b[currentSort.column]||"";
-          if (A<B) return currentSort.order==="asc" ? -1 : 1;
-          if (A>B) return currentSort.order==="asc" ? 1 : -1;
-          return 0;
+            let col = currentSort.column;
+            if (col === 'DailyHours') col = '_dailySeconds';
+            if (col === 'MonthlyHours') col = '_monthlySeconds';
+
+            let A = a[col] ?? (typeof a[col] === 'number' ? 0 : "");
+            let B = b[col] ?? (typeof b[col] === 'number' ? 0 : "");
+
+            if (typeof A === 'string') A = A.toLowerCase();
+            if (typeof B === 'string') B = B.toLowerCase();
+
+            if (A < B) return currentSort.order === "asc" ? -1 : 1;
+            if (A > B) return currentSort.order === "asc" ? 1 : -1;
+            return 0;
         });
       }
       const startIdx = (currentPage-1)*rowsPerPage;
@@ -386,19 +476,22 @@
         const mapLink = (r.Latitude && r.Longitude)
           ? `<a href="https://maps.google.com/?q=${r.Latitude},${r.Longitude}" target="_blank" class="map-link">Xem</a>`
           : "";
+        const checkTypeFormatted = r.CheckType === 'checkin' ? 'Check In' : (r.CheckType === 'checkout' ? 'Check Out' : (r.CheckType || ""));
         tbody.innerHTML += `
           <tr>
             <td>${r.EmployeeId||""}</td>
             <td>${r.EmployeeName||""}</td>
             <td>${r.CheckinDate||""}</td>
             <td>${r.CheckinTime||""}</td>
+            <td>${checkTypeFormatted}</td>
             <td>${r.ProjectId||""}</td>
             <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
-            <td>${r.OtherNote||""}</td>
             <td>${img}</td>
             <td>${r.Address||""}</td>
             <td>${mapLink}</td>
-            <td>${r.Status||""}</td>
+            <td>${r.DailyHours||"0h 0m"}</td>
+            <td>${r.MonthlyHours||"0h 0m"}</td>
+            <td>${r.CheckinNote||""}</td>
           </tr>
         `;
       });
@@ -496,11 +589,15 @@
     function applyFilter(f) {
       currentFilter = f;
       startDate = endDate = "";
+      document.getElementById("startDate").value = "";
+      document.getElementById("endDate").value = "";
       loadData();
     }
     function applyLeaveFilter(f) {
       currentLeaveFilter = f;
       leaveStartDate = leaveEndDate = "";
+      document.getElementById("leaveStartDate").value = "";
+      document.getElementById("leaveEndDate").value = "";
       loadLeaveData();
     }
     function applyDateRange() {
@@ -624,7 +721,6 @@
         document.getElementById("loginModal").style.display = "flex";
       }
     };
-    // Allow Enter key to trigger login
     document.getElementById("loginPass").addEventListener("keypress", (e) => {
       if (e.key === "Enter") login();
     });
