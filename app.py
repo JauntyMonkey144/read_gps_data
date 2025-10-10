@@ -213,8 +213,36 @@ def get_attendances():
                 if date_str: daily_groups.setdefault(date_str, []).append(rec)
             
             for date_str, day_records in daily_groups.items():
-                checkins = sorted([r['Timestamp'] for r in day_records if r.get('CheckType') == 'checkin' and r.get('Timestamp')])
-                checkouts = sorted([r['Timestamp'] for r in day_records if r.get('CheckType') == 'checkout' and r.get('Timestamp')])
+                checkins = []
+                for r in day_records:
+                    if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
+                        try:
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else:
+                                continue
+                            checkins.append(timestamp)
+                        except (ValueError, TypeError):
+                            continue
+                checkins = sorted(checkins)
+
+                checkouts = []
+                for r in day_records:
+                    if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
+                        try:
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else:
+                                continue
+                            checkouts.append(timestamp)
+                        except (ValueError, TypeError):
+                            continue
+                checkouts = sorted(checkouts)
+
                 daily_seconds = 0
                 if checkins and checkouts and checkouts[-1] > checkins[0]:
                     daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
@@ -238,13 +266,22 @@ def get_attendances():
             emp_id, date_str = item.get("EmployeeId"), item.get("CheckinDate")
             daily_sec = daily_hours_map.get((emp_id, date_str), 0)
             h, rem = divmod(daily_sec, 3600); m, _ = divmod(rem, 60)
-            item['DailyHours'], item['_dailySeconds'] = f"{int(h)}h {int(m)}m", daily_sec
+            item['DailyHours'], item['_dailySeconds'] = (f"{int(h)}h {int(m)}m" if daily_sec > 0 else ""), daily_sec
             monthly_sec = monthly_hours_map.get((emp_id, date_str), 0)
             h, rem = divmod(monthly_sec, 3600); m, _ = divmod(rem, 60)
-            item['MonthlyHours'], item['_monthlySeconds'] = f"{int(h)}h {int(m)}m", monthly_sec
+            item['MonthlyHours'], item['_monthlySeconds'] = (f"{int(h)}h {int(m)}m" if monthly_sec > 0 else ""), monthly_sec
 
             if item.get('Timestamp'):
-                item['CheckinTime'] = item['Timestamp'].astimezone(VN_TZ).strftime('%H:%M:%S')
+                try:
+                    if isinstance(item['Timestamp'], str):
+                        timestamp = datetime.strptime(item['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                    elif isinstance(item['Timestamp'], datetime):
+                        timestamp = item['Timestamp']
+                    else:
+                        timestamp = None
+                    item['CheckinTime'] = timestamp.astimezone(VN_TZ).strftime('%H:%M:%S') if timestamp else ""
+                except (ValueError, TypeError):
+                    item['CheckinTime'] = ""
 
         return jsonify(all_relevant_data)
     except Exception as e:
@@ -661,4 +698,5 @@ def export_combined_to_excel():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
+
     app.run(host="0.0.0.0", port=5000, debug=True)
