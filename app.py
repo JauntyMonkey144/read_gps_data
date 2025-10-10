@@ -93,7 +93,7 @@ def forgot_password():
             return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
 
         hashed_pw = generate_password_hash(new_password)
-        collection_to_update = admins if "role" in account and account["role"] == "admin" else users
+        collection_to_update = admins if "username" in account else users
         collection_to_update.update_one({"email": email}, {"$set": {"password": hashed_pw}})
 
         return """
@@ -102,6 +102,7 @@ def forgot_password():
         </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công</div>
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
 
+
 # ---- Build attendance query ----
 def build_attendance_query(filter_type, start_date, end_date, search, username=None):
     today = datetime.now(VN_TZ)
@@ -109,19 +110,19 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
     date_filter = {}
 
     if filter_type == "custom" and start_date and end_date:
-        date_filter = {"CheckinDate": {"$gte": start_date, "$lte": end_date}}
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=VN_TZ)
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
+        date_filter = {"Timestamp": {"$gte": start_dt, "$lte": end_dt}}
     elif filter_type == "hôm nay":
-        date_filter = {"CheckinDate": today.strftime("%Y-%m-%d")}
+        date_filter = {"CheckinDate": today.strftime("%d/%m/%Y")}
     elif filter_type == "tuần":
-        start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
-        end = (today + timedelta(days=6 - today.weekday())).strftime("%Y-%m-%d")
-        date_filter = {"CheckinDate": {"$gte": start, "$lte": end}}
+        start_dt = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0)
+        end_dt = (start_dt + timedelta(days=6)).replace(hour=23, minute=59, second=59)
+        date_filter = {"Timestamp": {"$gte": start_dt, "$lte": end_dt}}
     elif filter_type == "tháng":
-        start = today.replace(day=1).strftime("%Y-%m-%d")
-        end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).strftime("%Y-%m-%d")
-        date_filter = {"CheckinDate": {"$gte": start, "$lte": end}}
+        date_filter = {"CheckinDate": {"$regex": f"/{today.month:02d}/{today.year}$"}}
     elif filter_type == "năm":
-        date_filter = {"CheckinDate": {"$regex": f"^{today.year}"}}
+        date_filter = {"CheckinDate": {"$regex": f"/{today.year}$"}}
 
     if date_filter: conditions.append(date_filter)
     if search:
@@ -131,7 +132,8 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
         conditions.append({"EmployeeName": username})
     return {"$and": conditions}
 
-# ---- Build leave query (sửa để lọc theo CreationTime) ----
+
+# ---- Build leave query (lọc theo Timestamp)----
 def build_leave_query(filter_type, start_date_str, end_date_str, search, username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -141,11 +143,10 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, usernam
     if filter_type == "custom" and start_date_str and end_date_str:
         start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=VN_TZ)
         end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
-        date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
+        date_filter = {"Timestamp": {"$gte": start_dt, "$lte": end_dt}}
     else:
         if filter_type == "hôm nay":
-            start_dt = today.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_dt = today.replace(hour=23, minute=59, second=59, microsecond=999)
+            start_dt, end_dt = today.replace(hour=0, minute=0, second=0), today.replace(hour=23, minute=59, second=59)
         elif filter_type == "tuần":
             start_dt = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0)
             end_dt = (start_dt + timedelta(days=6)).replace(hour=23, minute=59, second=59)
@@ -157,7 +158,7 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, usernam
             start_dt = today.replace(month=1, day=1, hour=0, minute=0, second=0)
             end_dt = today.replace(month=12, day=31, hour=23, minute=59, second=59)
         if filter_type != "tất cả":
-            date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
+            date_filter = {"Timestamp": {"$gte": start_dt, "$lte": end_dt}}
     
     if date_filter: conditions.append(date_filter)
     if search:
@@ -167,7 +168,8 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, usernam
         conditions.append({"EmployeeName": username})
     return {"$and": conditions}
 
-# ---- Helper functions cho tính giờ và format ngày ----
+
+# ---- Helper functions ----
 def calculate_leave_days_from_record(record):
     if 'StartDate' in record and 'EndDate' in record:
         try: return float((datetime.strptime(record['EndDate'], "%Y-%m-%d") - datetime.strptime(record['StartDate'], "%Y-%m-%d")).days + 1)
@@ -177,10 +179,10 @@ def calculate_leave_days_from_record(record):
 
 def get_formatted_approval_date(approval_date):
     if not approval_date: return ""
-    try: return approval_date.astimezone(VN_TZ).strftime("%d-%m-%Y %H:%M:%S") if isinstance(approval_date, datetime) else str(approval_date)
+    try: return approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S") if isinstance(approval_date, datetime) else str(approval_date)
     except: return str(approval_date)
 
-# ---- API lấy dữ liệu chấm công với tính toán giờ làm ----
+# ---- API lấy dữ liệu chấm công ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
     try:
@@ -198,10 +200,7 @@ def get_attendances():
         
         all_relevant_data = list(collection.find(query, {"_id": 0}))
 
-        # Tính toán giờ làm
-        daily_hours_map = {}
-        monthly_hours_map = {}
-        
+        daily_hours_map, monthly_hours_map = {}, {}
         emp_data = {}
         for rec in all_relevant_data:
             emp_id = rec.get("EmployeeId")
@@ -214,8 +213,8 @@ def get_attendances():
                 if date_str: daily_groups.setdefault(date_str, []).append(rec)
             
             for date_str, day_records in daily_groups.items():
-                checkins = sorted([r['CreationTime'] for r in day_records if r.get('CheckType') == 'checkin' and r.get('CreationTime')])
-                checkouts = sorted([r['CreationTime'] for r in day_records if r.get('CheckType') == 'checkout' and r.get('CreationTime')])
+                checkins = sorted([r['Timestamp'] for r in day_records if r.get('CheckType') == 'checkin' and r.get('Timestamp')])
+                checkouts = sorted([r['Timestamp'] for r in day_records if r.get('CheckType') == 'checkout' and r.get('Timestamp')])
                 daily_seconds = 0
                 if checkins and checkouts and checkouts[-1] > checkins[0]:
                     daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
@@ -224,40 +223,28 @@ def get_attendances():
             monthly_groups = {}
             for (map_emp_id, map_date_str), daily_seconds in daily_hours_map.items():
                 if map_emp_id == emp_id:
-                    month_key = map_date_str[:7]
+                    try: month_key = datetime.strptime(map_date_str, "%d/%m/%Y").strftime("%Y-%m")
+                    except: continue
                     monthly_groups.setdefault(month_key, []).append((map_date_str, daily_seconds))
             
             for month, days in monthly_groups.items():
-                sorted_days = sorted(days, key=lambda x: x[0])
+                sorted_days = sorted(days, key=lambda x: datetime.strptime(x[0], "%d/%m/%Y"))
                 running_total = 0
                 for date_str, daily_seconds in sorted_days:
                     running_total += daily_seconds
                     monthly_hours_map[(emp_id, date_str)] = running_total
         
-        # Gắn dữ liệu giờ làm và format lại ngày/giờ
         for item in all_relevant_data:
             emp_id, date_str = item.get("EmployeeId"), item.get("CheckinDate")
-            
             daily_sec = daily_hours_map.get((emp_id, date_str), 0)
             h, rem = divmod(daily_sec, 3600); m, _ = divmod(rem, 60)
-            item['DailyHours'] = f"{int(h)}h {int(m)}m"
-            item['_dailySeconds'] = daily_sec
-
+            item['DailyHours'], item['_dailySeconds'] = f"{int(h)}h {int(m)}m", daily_sec
             monthly_sec = monthly_hours_map.get((emp_id, date_str), 0)
             h, rem = divmod(monthly_sec, 3600); m, _ = divmod(rem, 60)
-            item['MonthlyHours'] = f"{int(h)}h {int(m)}m"
-            item['_monthlySeconds'] = monthly_sec
+            item['MonthlyHours'], item['_monthlySeconds'] = f"{int(h)}h {int(m)}m", monthly_sec
 
-            # Format lại CreationTime thành CheckinTime (HH:MM:SS) cho frontend
-            if item.get('CreationTime'):
-                item['CreationTime'] = item['CreationTime'].astimezone(VN_TZ).strftime('%H:%M:%S')
-            
-            # Format lại CheckinDate (DD-MM-YYYY) cho frontend
-            if item.get('CheckinDate'):
-                try: 
-                    item['CheckinDate'] = datetime.strptime(item['CheckinDate'], '%Y-%m-%d').strftime('%d-%m-%Y')
-                except ValueError: 
-                    pass
+            if item.get('Timestamp'):
+                item['CheckinTime'] = item['Timestamp'].astimezone(VN_TZ).strftime('%H:%M:%S')
 
         return jsonify(all_relevant_data)
     except Exception as e:
@@ -283,15 +270,22 @@ def get_leaves():
 
         for item in data:
             item["ApprovalDate"] = get_formatted_approval_date(item.get("ApprovalDate"))
-            if item.get('CreationTime'):
-                item['CheckinTime'] = item['CreationTime'].astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
-
+            if item.get('Timestamp'):
+                item['CheckinTime'] = item['Timestamp'].astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+            
+            if item.get('StartDate') and item.get('EndDate'):
+                start = datetime.strptime(item['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                end = datetime.strptime(item['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                item['CheckinDate'] = f"Từ {start} đến {end}"
+            elif item.get('LeaveDate'):
+                leave_date = datetime.strptime(item['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                item['CheckinDate'] = f"{leave_date} ({item.get('Session', '')})"
         return jsonify(data)
     except Exception as e:
         print(f"❌ Lỗi tại get_leaves: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ---- API xuất Excel Chấm công (LOGIC MỚI)----
+# ---- API xuất Excel Chấm công ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -322,24 +316,17 @@ def export_to_excel():
 
         for i, ((emp_id, emp_name, date_str), records) in enumerate(grouped.items()):
             row = start_row + i
-            try: formatted_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d-%m-%Y")
-            except: formatted_date = date_str
-            
             ws.cell(row=row, column=1, value=emp_id)
             ws.cell(row=row, column=2, value=emp_name)
-            ws.cell(row=row, column=3, value=formatted_date)
+            ws.cell(row=row, column=3, value=date_str) # Giữ nguyên format DD/MM/YYYY
             
-            checkin_counter = 0
-            checkin_start_col = 4
-            checkout_col = 13
-            sorted_records = sorted(records, key=lambda x: x.get('CreationTime', datetime.min))
+            checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
+            sorted_records = sorted(records, key=lambda x: x.get('Timestamp', datetime.min))
 
             for rec in sorted_records:
-                time_str = rec['CreationTime'].astimezone(VN_TZ).strftime("%H:%M:%S") if rec.get('CreationTime') else ""
-                tasks = rec.get("Tasks", [])
-                tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks)
-                
-                cell_value = f"{time_str}; {rec.get('ProjectId','')}; {tasks_str}; {rec.get('Address','')}; {rec.get('CheckinNote','')}"
+                time_str = rec['Timestamp'].astimezone(VN_TZ).strftime("%H:%M:%S") if rec.get('Timestamp') else ""
+                tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
+                cell_value = f"{time_str}; ID:{rec.get('ProjectId','')}; CV:{tasks_str}; Addr:{rec.get('Address','')}; Note:{rec.get('CheckinNote','')}"
                 
                 if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
                     ws.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
@@ -348,9 +335,8 @@ def export_to_excel():
                     ws.cell(row=row, column=checkout_col, value=cell_value)
 
             for col in range(1, 14):
-                cell = ws.cell(row=row, column=col)
-                cell.border = border
-                cell.alignment = align_left
+                ws.cell(row=row, column=col).border = border
+                ws.cell(row=row, column=col).alignment = align_left
 
         filename = f"Danh sách chấm công_{request.args.get('filter')}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
         output = BytesIO()
@@ -360,6 +346,7 @@ def export_to_excel():
     except Exception as e:
         print(f"❌ Lỗi export: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 # ---- API xuất Excel cho nghỉ phép ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
@@ -387,15 +374,24 @@ def export_leaves_to_excel():
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
         for i, rec in enumerate(data, start=2):
+            display_date = rec.get("CheckinDate", "")
+            if rec.get('StartDate') and rec.get('EndDate'):
+                start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                end = datetime.strptime(rec['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                display_date = f"Từ {start} đến {end}"
+            elif rec.get('LeaveDate'):
+                leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                display_date = f"{leave_date} ({rec.get('Session', '')})"
+
             ws.cell(row=i, column=1, value=rec.get("EmployeeId", ""))
             ws.cell(row=i, column=2, value=rec.get("EmployeeName", ""))
-            ws.cell(row=i, column=3, value=rec.get("CheckinDate", ""))
+            ws.cell(row=i, column=3, value=display_date)
             ws.cell(row=i, column=4, value=calculate_leave_days_from_record(rec))
-            ws.cell(row=i, column=5, value=rec.get("CreationTime").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S') if rec.get("CreationTime") else "")
+            ws.cell(row=i, column=5, value=rec.get("Timestamp").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S') if rec.get("Timestamp") else "")
             
             tasks = rec.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
-            ws.cell(row=i, column=6, value=tasks_str)
+            ws.cell(row=i, column=6, value=rec.get("Reason") or tasks_str)
             ws.cell(row=i, column=7, value=rec.get("Status", "Chưa duyệt"))
             ws.cell(row=i, column=8, value=get_formatted_approval_date(rec.get("ApprovalDate")))
             
@@ -449,19 +445,17 @@ def export_combined_to_excel():
         start_row_att = 2
         for i, ((emp_id, emp_name, date_str), records) in enumerate(attendance_grouped.items()):
             row = start_row_att + i
-            try: formatted_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d-%m-%Y")
-            except: formatted_date = date_str
             ws_attendance.cell(row=row, column=1, value=emp_id)
             ws_attendance.cell(row=row, column=2, value=emp_name)
-            ws_attendance.cell(row=row, column=3, value=formatted_date)
+            ws_attendance.cell(row=row, column=3, value=date_str)
 
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
-            sorted_records = sorted(records, key=lambda x: x.get('CreationTime', datetime.min))
+            sorted_records = sorted(records, key=lambda x: x.get('Timestamp', datetime.min))
             
             for rec in sorted_records:
-                time_str = rec['CreationTime'].astimezone(VN_TZ).strftime("%H:%M:%S") if rec.get('CreationTime') else ""
+                time_str = rec['Timestamp'].astimezone(VN_TZ).strftime("%H:%M:%S") if rec.get('Timestamp') else ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
-                cell_value = f"{time_str}; {rec.get('ProjectId','')}; {tasks_str}; {rec.get('Address','')}; {rec.get('CheckinNote','')}"
+                cell_value = f"{time_str}; ID:{rec.get('ProjectId','')}; CV:{tasks_str}; Addr:{rec.get('Address','')}; Note:{rec.get('CheckinNote','')}"
 
                 if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
                     ws_attendance.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
@@ -478,11 +472,20 @@ def export_combined_to_excel():
         ws_leaves['E1'], ws_leaves['F1'], ws_leaves['G1'], ws_leaves['H1'] = "Ngày tạo đơn", "Lý do", "Trạng thái", "Ngày duyệt đơn"
         
         for i, rec in enumerate(leave_data, start=2):
+            display_date = rec.get("CheckinDate", "")
+            if rec.get('StartDate') and rec.get('EndDate'):
+                start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                end = datetime.strptime(rec['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                display_date = f"Từ {start} đến {end}"
+            elif rec.get('LeaveDate'):
+                leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                display_date = f"{leave_date} ({rec.get('Session', '')})"
+
             ws_leaves.cell(row=i, column=1, value=rec.get("EmployeeId"))
             ws_leaves.cell(row=i, column=2, value=rec.get("EmployeeName"))
-            ws_leaves.cell(row=i, column=3, value=rec.get("DisplayDate") or rec.get("CheckinDate"))
+            ws_leaves.cell(row=i, column=3, value=display_date)
             ws_leaves.cell(row=i, column=4, value=calculate_leave_days_from_record(rec))
-            ws_leaves.cell(row=i, column=5, value=rec.get("CreationTime").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S') if rec.get("CreationTime") else "")
+            ws_leaves.cell(row=i, column=5, value=rec.get("Timestamp").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S') if rec.get("Timestamp") else "")
             tasks = rec.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
             ws_leaves.cell(row=i, column=6, value=rec.get("Reason") or tasks_str)
