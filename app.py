@@ -312,12 +312,17 @@ def export_to_excel():
                 for rec in grouped[key]:
                     if date_str: daily_groups.setdefault(date_str, []).append(rec)
                 
-                # Parse Timestamp from string to datetime
+                # Handle Timestamp (string or datetime)
                 checkins = []
                 for r in daily_groups.get(date_str, []):
                     if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
                         try:
-                            timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else:
+                                continue
                             checkins.append(timestamp)
                         except (ValueError, TypeError):
                             continue
@@ -327,7 +332,12 @@ def export_to_excel():
                 for r in daily_groups.get(date_str, []):
                     if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
                         try:
-                            timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else:
+                                continue
                             checkouts.append(timestamp)
                         except (ValueError, TypeError):
                             continue
@@ -375,12 +385,21 @@ def export_to_excel():
             ws.cell(row=row, column=15, value=monthly_hours)  # Assuming column 15 for MonthlyHours
             
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
-            sorted_records = sorted(records, key=lambda x: datetime.strptime(x.get('Timestamp', '1970-01-01 00:00:00'), "%Y-%m-%d %H:%M:%S") if x.get('Timestamp') else datetime.min)
+            sorted_records = sorted(records, key=lambda x: (
+                datetime.strptime(x['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                if isinstance(x.get('Timestamp'), str) and x.get('Timestamp')
+                else x['Timestamp']
+                if isinstance(x.get('Timestamp'), datetime)
+                else datetime.min
+            ))
             for rec in sorted_records:
                 time_str = ""
                 if rec.get('Timestamp'):
                     try:
-                        time_str = datetime.strptime(rec['Timestamp'], "%Y-%m-%d %H:%M:%S").astimezone(VN_TZ).strftime("%H:%M:%S")
+                        if isinstance(rec['Timestamp'], str):
+                            time_str = datetime.strptime(rec['Timestamp'], "%Y-%m-%d %H:%M:%S").astimezone(VN_TZ).strftime("%H:%M:%S")
+                        elif isinstance(rec['Timestamp'], datetime):
+                            time_str = rec['Timestamp'].astimezone(VN_TZ).strftime("%H:%M:%S")
                     except (ValueError, TypeError):
                         time_str = ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
@@ -489,12 +508,17 @@ def export_combined_to_excel():
                 daily_groups = {}
                 daily_groups.setdefault(date_str, []).append(d)
                 
-                # Parse Timestamp from string to datetime
+                # Handle Timestamp (string or datetime)
                 checkins = []
                 for r in daily_groups.get(date_str, []):
                     if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
                         try:
-                            timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else:
+                                continue
                             checkins.append(timestamp)
                         except (ValueError, TypeError):
                             continue
@@ -504,7 +528,12 @@ def export_combined_to_excel():
                 for r in daily_groups.get(date_str, []):
                     if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
                         try:
-                            timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else:
+                                continue
                             checkouts.append(timestamp)
                         except (ValueError, TypeError):
                             continue
@@ -558,13 +587,22 @@ def export_combined_to_excel():
             ws_attendance.cell(row=row, column=15, value=monthly_hours)  # Assuming column 15 for MonthlyHours
             
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
-            sorted_records = sorted(records, key=lambda x: datetime.strptime(x.get('Timestamp', '1970-01-01 00:00:00'), "%Y-%m-%d %H:%M:%S") if x.get('Timestamp') else datetime.min)
+            sorted_records = sorted(records, key=lambda x: (
+                datetime.strptime(x['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                if isinstance(x.get('Timestamp'), str) and x.get('Timestamp')
+                else x['Timestamp']
+                if isinstance(x.get('Timestamp'), datetime)
+                else datetime.min
+            ))
             
             for rec in sorted_records:
                 time_str = ""
                 if rec.get('Timestamp'):
                     try:
-                        time_str = datetime.strptime(rec['Timestamp'], "%Y-%m-%d %H:%M:%S").astimezone(VN_TZ).strftime("%H:%M:%S")
+                        if isinstance(rec['Timestamp'], str):
+                            time_str = datetime.strptime(rec['Timestamp'], "%Y-%m-%d %H:%M:%S").astimezone(VN_TZ).strftime("%H:%M:%S")
+                        elif isinstance(rec['Timestamp'], datetime):
+                            time_str = rec['Timestamp'].astimezone(VN_TZ).strftime("%H:%M:%S")
                     except (ValueError, TypeError):
                         time_str = ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
@@ -594,7 +632,17 @@ def export_combined_to_excel():
             ws_leaves.cell(row=i, column=2, value=rec.get("EmployeeName"))
             ws_leaves.cell(row=i, column=3, value=display_date)
             ws_leaves.cell(row=i, column=4, value=calculate_leave_days_from_record(rec))
-            ws_leaves.cell(row=i, column=5, value=rec.get("Timestamp").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S') if rec.get("Timestamp") else "")
+            # Handle Timestamp for leave data
+            timestamp_str = ""
+            if rec.get("Timestamp"):
+                try:
+                    if isinstance(rec['Timestamp'], str):
+                        timestamp_str = datetime.strptime(rec['Timestamp'], "%Y-%m-%d %H:%M:%S").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+                    elif isinstance(rec['Timestamp'], datetime):
+                        timestamp_str = rec['Timestamp'].astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+                except (ValueError, TypeError):
+                    timestamp_str = ""
+            ws_leaves.cell(row=i, column=5, value=timestamp_str)
             tasks = rec.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
             ws_leaves.cell(row=i, column=6, value=rec.get("Reason") or tasks_str)
