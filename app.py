@@ -131,7 +131,7 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
         conditions.append({"EmployeeName": username})
     return {"$and": conditions}
 
-# ---- Build leave query (lọc theo CreationTime)----
+# ---- Build leave query (sửa để lọc theo CreationTime) ----
 def build_leave_query(filter_type, start_date_str, end_date_str, search, username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -248,11 +248,16 @@ def get_attendances():
             item['MonthlyHours'] = f"{int(h)}h {int(m)}m"
             item['_monthlySeconds'] = monthly_sec
 
+            # Format lại CreationTime thành CheckinTime (HH:MM:SS) cho frontend
             if item.get('CreationTime'):
                 item['CheckinTime'] = item['CreationTime'].astimezone(VN_TZ).strftime('%H:%M:%S')
+            
+            # Format lại CheckinDate (DD-MM-YYYY) cho frontend
             if item.get('CheckinDate'):
-                try: item['CheckinDate'] = datetime.strptime(item['CheckinDate'], '%Y-%m-%d').strftime('%d-%m-%Y')
-                except ValueError: pass
+                try: 
+                    item['CheckinDate'] = datetime.strptime(item['CheckinDate'], '%Y-%m-%d').strftime('%d-%m-%Y')
+                except ValueError: 
+                    pass
 
         return jsonify(all_relevant_data)
     except Exception as e:
@@ -334,7 +339,7 @@ def export_to_excel():
                 tasks = rec.get("Tasks", [])
                 tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks)
                 
-                cell_value = f"{time_str}; ID:{rec.get('ProjectId','')}; CV:{tasks_str}; Addr:{rec.get('Address','')}; Note:{rec.get('CheckinNote','')}"
+                cell_value = f"{time_str}; {rec.get('ProjectId','')}; {tasks_str}; {rec.get('Address','')}; {rec.get('CheckinNote','')}"
                 
                 if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
                     ws.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
@@ -456,7 +461,7 @@ def export_combined_to_excel():
             for rec in sorted_records:
                 time_str = rec['CreationTime'].astimezone(VN_TZ).strftime("%H:%M:%S") if rec.get('CreationTime') else ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
-                cell_value = f"{time_str}; ID:{rec.get('ProjectId','')}; CV:{tasks_str}; Addr:{rec.get('Address','')}; Note:{rec.get('CheckinNote','')}"
+                cell_value = f"{time_str}; {rec.get('ProjectId','')}; {tasks_str}; {rec.get('Address','')}; {rec.get('CheckinNote','')}"
 
                 if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
                     ws_attendance.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
