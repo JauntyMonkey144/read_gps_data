@@ -250,7 +250,7 @@ def get_attendances():
 
             # Format lại CreationTime thành CheckinTime (HH:MM:SS) cho frontend
             if item.get('CreationTime'):
-                item['CheckinTime'] = item['CreationTime'].astimezone(VN_TZ).strftime('%H:%M:%S')
+                item['CreationTime'] = item['CreationTime'].astimezone(VN_TZ).strftime('%H:%M:%S')
             
             # Format lại CheckinDate (DD-MM-YYYY) cho frontend
             if item.get('CheckinDate'):
