@@ -155,7 +155,7 @@
           <th onclick="sortTable('EmployeeId')">Mã NV</th>
           <th onclick="sortTable('EmployeeName')">Tên nhân viên</th>
           <th onclick="sortTable('CheckinDate')">Ngày</th>
-          <th onclick="sortTable('CheckinTime')">Giờ</th>
+          <th onclick="sortTable('CreationTime')">Giờ</th>
           <th onclick="sortTable('CheckType')">Loại Điểm Danh</th>
           <th onclick="sortTable('ProjectId')">Mã dự án</th>
           <th onclick="sortTable('Tasks')">Công việc</th>
@@ -213,7 +213,7 @@
             <th onclick="sortLeaveTable('EmployeeId')">Mã NV</th>
             <th onclick="sortLeaveTable('EmployeeName')">Tên nhân viên</th>
             <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
-            <th onclick="sortLeaveTable('CheckinTime')">Ngày tạo đơn</th>
+            <th onclick="sortLeaveTable('CreationTime')">Ngày tạo đơn</th>
             <th onclick="sortLeaveTable('ApprovalDate')">Ngày duyệt/Từ chối</th>
             <th onclick="sortLeaveTable('Tasks')">Lý do</th>
             <th onclick="sortLeaveTable('Status')">Trạng thái</th>
@@ -238,7 +238,7 @@
     let currentTab = "attendance";
     let currentFilter = "hôm nay";
     let currentSearch = "";
-    let currentSort = { column: 'CheckinTime', order: 'desc' };
+    let currentSort = { column: 'CreationTime', order: 'desc' };
     let startDate = "", endDate = "";
     let rawData = [];
     let displayData = []; // Data sau khi đã tính toán
@@ -246,7 +246,7 @@
     let rowsPerPage = 10;
     let currentLeaveFilter = "hôm nay";
     let currentLeaveSearch = "";
-    let currentLeaveSort = { column: 'CheckinTime', order: 'desc' };
+    let currentLeaveSort = { column: 'CreationTime', order: 'desc' };
     let leaveStartDate = "", leaveEndDate = "";
     let rawLeaveData = [];
     let currentLeavePage = 1;
@@ -388,7 +388,7 @@
                 for (const day of sortedDays) {
                     let firstCheckin = null, lastCheckout = null;
                     daysData[day].forEach(rec => {
-                        const recTime = parseTime(rec.CheckinTime);
+                        const recTime = parseTime(rec.CreationTime);
                         if (!recTime) return;
                         if (rec.CheckType === 'checkin' && (!firstCheckin || recTime < firstCheckin)) {
                             firstCheckin = recTime;
@@ -482,7 +482,7 @@
             <td>${r.EmployeeId||""}</td>
             <td>${r.EmployeeName||""}</td>
             <td>${r.CheckinDate||""}</td>
-            <td>${r.CheckinTime||""}</td>
+            <td>${r.CreationTime||""}</td>
             <td>${checkTypeFormatted}</td>
             <td>${r.ProjectId||""}</td>
             <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
@@ -534,7 +534,7 @@
             <td>${r.EmployeeId||""}</td>
             <td>${r.EmployeeName||""}</td>
             <td>${r.CheckinDate||""}</td>
-            <td>${r.CheckinTime||""}</td>
+            <td>${r.CreationTime||""}</td>
             <td>${r.ApprovalDate||""}</td>
             <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
             <td>${r.Status||""}</td>
