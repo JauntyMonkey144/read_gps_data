@@ -308,13 +308,31 @@ def export_to_excel():
             emp_id = d.get("EmployeeId")
             date_str = d.get("CheckinDate")
             if emp_id and date_str:
-                grouped.setdefault(key, []).append(d)
                 daily_groups = {}
                 for rec in grouped[key]:
                     if date_str: daily_groups.setdefault(date_str, []).append(rec)
                 
-                checkins = sorted([r['CreationTime'] for r in daily_groups.get(date_str, []) if r.get('CheckType') == 'checkin' and r.get('CreationTime')])
-                checkouts = sorted([r['CreationTime'] for r in daily_groups.get(date_str, []) if r.get('CheckType') == 'checkout' and r.get('CreationTime')])
+                # Parse Timestamp from string to datetime
+                checkins = []
+                for r in daily_groups.get(date_str, []):
+                    if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
+                        try:
+                            timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            checkins.append(timestamp)
+                        except (ValueError, TypeError):
+                            continue
+                checkins = sorted(checkins)
+                
+                checkouts = []
+                for r in daily_groups.get(date_str, []):
+                    if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
+                        try:
+                            timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            checkouts.append(timestamp)
+                        except (ValueError, TypeError):
+                            continue
+                checkouts = sorted(checkouts)
+                
                 daily_seconds = 0
                 if checkins and checkouts and checkouts[-1] > checkins[0]:
                     daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
@@ -357,9 +375,14 @@ def export_to_excel():
             ws.cell(row=row, column=15, value=monthly_hours)  # Assuming column 15 for MonthlyHours
             
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
-            sorted_records = sorted(records, key=lambda x: x.get('CreationTime', datetime.min))
+            sorted_records = sorted(records, key=lambda x: datetime.strptime(x.get('Timestamp', '1970-01-01 00:00:00'), "%Y-%m-%d %H:%M:%S") if x.get('Timestamp') else datetime.min)
             for rec in sorted_records:
-                time_str = rec['CreationTime'].astimezone(VN_TZ).strftime("%H:%M:%S") if rec.get('CreationTime') else ""
+                time_str = ""
+                if rec.get('Timestamp'):
+                    try:
+                        time_str = datetime.strptime(rec['Timestamp'], "%Y-%m-%d %H:%M:%S").astimezone(VN_TZ).strftime("%H:%M:%S")
+                    except (ValueError, TypeError):
+                        time_str = ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
                 cell_value = f"{time_str}; {rec.get('ProjectId','')}; {tasks_str}; {rec.get('Address','')}; {rec.get('CheckinNote','')}"
                 
@@ -379,7 +402,6 @@ def export_to_excel():
     except Exception as e:
         print(f"❌ Lỗi export: {e}")
         return jsonify({"error": str(e)}), 500
-
 
 # ---- API xuất Excel cho nghỉ phép ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
@@ -467,8 +489,27 @@ def export_combined_to_excel():
                 daily_groups = {}
                 daily_groups.setdefault(date_str, []).append(d)
                 
-                checkins = sorted([r['CreationTime'] for r in daily_groups.get(date_str, []) if r.get('CheckType') == 'checkin' and r.get('CreationTime')])
-                checkouts = sorted([r['CreationTime'] for r in daily_groups.get(date_str, []) if r.get('CheckType') == 'checkout' and r.get('CreationTime')])
+                # Parse Timestamp from string to datetime
+                checkins = []
+                for r in daily_groups.get(date_str, []):
+                    if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
+                        try:
+                            timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            checkins.append(timestamp)
+                        except (ValueError, TypeError):
+                            continue
+                checkins = sorted(checkins)
+                
+                checkouts = []
+                for r in daily_groups.get(date_str, []):
+                    if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
+                        try:
+                            timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            checkouts.append(timestamp)
+                        except (ValueError, TypeError):
+                            continue
+                checkouts = sorted(checkouts)
+                
                 daily_seconds = 0
                 if checkins and checkouts and checkouts[-1] > checkins[0]:
                     daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
@@ -517,10 +558,15 @@ def export_combined_to_excel():
             ws_attendance.cell(row=row, column=15, value=monthly_hours)  # Assuming column 15 for MonthlyHours
             
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
-            sorted_records = sorted(records, key=lambda x: x.get('CreationTime', datetime.min))
+            sorted_records = sorted(records, key=lambda x: datetime.strptime(x.get('Timestamp', '1970-01-01 00:00:00'), "%Y-%m-%d %H:%M:%S") if x.get('Timestamp') else datetime.min)
             
             for rec in sorted_records:
-                time_str = rec['CreationTime'].astimezone(VN_TZ).strftime("%H:%M:%S") if rec.get('CreationTime') else ""
+                time_str = ""
+                if rec.get('Timestamp'):
+                    try:
+                        time_str = datetime.strptime(rec['Timestamp'], "%Y-%m-%d %H:%M:%S").astimezone(VN_TZ).strftime("%H:%M:%S")
+                    except (ValueError, TypeError):
+                        time_str = ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
                 cell_value = f"{time_str}; {rec.get('ProjectId','')}; {tasks_str}; {rec.get('Address','')}; {rec.get('CheckinNote','')}"
                 if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
