@@ -1,109 +1,124 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dữ liệu Chấm công & Nghỉ phép</title>
-  <style>
-    :root {
-      --bg: #f4f6f9;
-      --card: #fff;
-      --primary: #007bff;
-      --success: #28a745;
-      --danger: #dc3545;
-      --muted: #6c757d;
-      --shadow: 0 3px 12px rgba(0,0,0,0.08);
-    }
-    body {
-      font-family: "Segoe UI", Arial, sans-serif;
-      background: var(--bg);
-      margin: 0;
-      padding: 20px;
-      position: relative;
-    }
-    h1 { text-align: center; color: var(--primary); }
-    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
-    button {
-      background: var(--primary);
-      color: white;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: 0.2s;
-    }
-    button:hover { opacity: 0.9; }
-    button.active { background: var(--success); }
-    select, input[type="text"], input[type="email"], input[type="password"], input[type="date"] {
-      padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
-    }
-    table { width: 100%; border-collapse: collapse; background: white; box-shadow: var(--shadow); }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap;}
-    th { background: var(--primary); color: white; cursor: pointer; user-select: none; }
-    th.asc::after { content: " ↑"; font-size: 12px; }
-    th.desc::after { content: " ↓"; font-size: 12px; }
-    tr:nth-child(even) { background: #f8f9fa; }
-    .pagination { text-align: center; margin-top: 15px; }
-    .pagination button {
-      background: white; border: 1px solid #ccc; color: var(--primary);
-      margin: 2px; border-radius: 4px; padding: 5px 10px;
-    }
-    .pagination button.active { background: var(--primary); color: white; }
-    img.checkin-photo { height: 60px; width: auto; border-radius: 6px; object-fit: cover; }
-    .msg { margin: 10px 0; padding: 8px 10px; border-radius: 6px; }
-    .msg.error { background: #ffe6e6; color: var(--danger); }
-    .msg.success { background: #e8fbe8; color: var(--success); }
-    a.map-link { color: var(--primary); text-decoration: none; font-weight: 500; }
-    a.map-link:hover { text-decoration: underline; }
-    #greeting, #dataTabs, #filters, #dateFilter, #searchFilter, #tableContainer, #pagination, #logoutBtn { display: none; }
-    #greeting { text-align: center; margin: 10px 0; font-size: 18px; color: var(--primary); font-weight: bold; }
-    #dataTabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; }
-    #dataTabs button { padding: 8px 16px; font-size: 15px; min-width: 120px; }
-    #leaveSection { display: none; }
-    #leaveTableContainer table th:first-child { min-width: 100px; }
-    .export-group { display: flex; gap: 5px; align-items: center; }
-    /* Modal Styles */
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
-      z-index: 1000;
-      justify-content: center;
-      align-items: center;
-    }
-    .modal-content {
-      background: var(--card);
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: var(--shadow);
-      width: 90%;
-      max-width: 400px;
-      text-align: center;
-    }
-    .modal-content h2 { margin: 0 0 15px; color: var(--primary); }
-    .modal-content input {
-      width: calc(100% - 16px);
-      margin-bottom: 10px;
-    }
-    .modal-content button {
-      width: 100%;
-      padding: 10px;
-      margin: 10px 0 5px;
-    }
-    .modal-content a {
-      color: var(--muted);
-      font-size: 13px;
-      text-decoration: none;
-      display: inline-block;
-      margin-top: 10px;
-    }
-    .modal-content a:hover { text-decoration: underline; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dữ liệu Chấm công & Nghỉ phép</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #fff;
+      --primary: #007bff;
+      --success: #28a745;
+      --danger: #dc3545;
+      --muted: #6c757d;
+      --shadow: 0 3px 12px rgba(0,0,0,0.08);
+    }
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: var(--bg);
+      margin: 0;
+      padding: 20px;
+      position: relative;
+    }
+    h1 { text-align: center; color: var(--primary); }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
+    button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: 0.2s;
+    }
+    button:hover { opacity: 0.9; }
+    button.active { background: var(--success); }
+    select, input[type="text"], input[type="email"], input[type="password"], input[type="date"] {
+      padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
+    }
+    
+    /* STYLES MỚI CHO RESPONSIVE TABLE CONTAINER */
+    .table-container-responsive {
+      width: 100%;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    
+    table { 
+      width: 100%; 
+      min-width: 1200px; /* Đảm bảo bảng có chiều rộng tối thiểu */
+      border-collapse: collapse; 
+      background: white; 
+      box-shadow: var(--shadow); 
+    }
+    
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap;}
+    th { background: var(--primary); color: white; cursor: pointer; user-select: none; }
+    th.asc::after { content: " ↑"; font-size: 12px; }
+    th.desc::after { content: " ↓"; font-size: 12px; }
+    tr:nth-child(even) { background: #f8f9fa; }
+    .pagination { text-align: center; margin-top: 15px; }
+    .pagination button {
+      background: white; border: 1px solid #ccc; color: var(--primary);
+      margin: 2px; border-radius: 4px; padding: 5px 10px;
+    }
+    .pagination button.active { background: var(--primary); color: white; }
+    img.checkin-photo { height: 60px; width: auto; border-radius: 6px; object-fit: cover; }
+    .msg { margin: 10px 0; padding: 8px 10px; border-radius: 6px; }
+    .msg.error { background: #ffe6e6; color: var(--danger); }
+    .msg.success { background: #e8fbe8; color: var(--success); }
+    a.map-link { color: var(--primary); text-decoration: none; font-weight: 500; }
+    a.map-link:hover { text-decoration: underline; }
+    #greeting, #dataTabs, #filters, #dateFilter, #searchFilter, #tableContainer, #pagination, #logoutBtn { display: none; }
+    #greeting { text-align: center; margin: 10px 0; font-size: 18px; color: var(--primary); font-weight: bold; }
+    #dataTabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; }
+    #dataTabs button { padding: 8px 16px; font-size: 15px; min-width: 120px; }
+    #leaveSection { display: none; }
+    #leaveTableContainer table th:first-child { min-width: 100px; }
+    .export-group { display: flex; gap: 5px; align-items: center; }
+    /* Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background: var(--card);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      width: 90%;
+      max-width: 400px;
+      text-align: center;
+    }
+    .modal-content h2 { margin: 0 0 15px; color: var(--primary); }
+    .modal-content input {
+      width: calc(100% - 16px);
+      margin-bottom: 10px;
+    }
+    .modal-content button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0 5px;
+    }
+    .modal-content a {
+      color: var(--muted);
+      font-size: 13px;
+      text-decoration: none;
+      display: inline-block;
+      margin-top: 10px;
+    }
+    .modal-content a:hover { text-decoration: underline; }
+  </style>
 </head>
 <body>
   <h1>📍Dữ liệu Chấm công & Nghỉ phép</h1>
