@@ -131,7 +131,7 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
         conditions.append({"EmployeeName": username})
     return {"$and": conditions}
 
-# ---- Build leave query (sửa để lọc theo CreationTime) ----
+# ---- Build leave query (lọc theo CreationTime)----
 def build_leave_query(filter_type, start_date_str, end_date_str, search, username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -177,7 +177,7 @@ def calculate_leave_days_from_record(record):
 
 def get_formatted_approval_date(approval_date):
     if not approval_date: return ""
-    try: return approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S") if isinstance(approval_date, datetime) else str(approval_date)
+    try: return approval_date.astimezone(VN_TZ).strftime("%d-%m-%Y %H:%M:%S") if isinstance(approval_date, datetime) else str(approval_date)
     except: return str(approval_date)
 
 # ---- API lấy dữ liệu chấm công với tính toán giờ làm ----
@@ -196,44 +196,36 @@ def get_attendances():
             request.args.get("search", "").strip(), username=username
         )
         
-        # Lấy tất cả dữ liệu liên quan để tính toán
         all_relevant_data = list(collection.find(query, {"_id": 0}))
 
         # Tính toán giờ làm
         daily_hours_map = {}
         monthly_hours_map = {}
         
-        # Nhóm theo nhân viên
         emp_data = {}
         for rec in all_relevant_data:
             emp_id = rec.get("EmployeeId")
-            if emp_id:
-                emp_data.setdefault(emp_id, []).append(rec)
+            if emp_id: emp_data.setdefault(emp_id, []).append(rec)
         
         for emp_id, records in emp_data.items():
-            # Nhóm theo ngày
             daily_groups = {}
             for rec in records:
                 date_str = rec.get("CheckinDate")
-                if date_str:
-                    daily_groups.setdefault(date_str, []).append(rec)
+                if date_str: daily_groups.setdefault(date_str, []).append(rec)
             
-            # Tính giờ làm mỗi ngày
             for date_str, day_records in daily_groups.items():
                 checkins = sorted([r['CreationTime'] for r in day_records if r.get('CheckType') == 'checkin' and r.get('CreationTime')])
                 checkouts = sorted([r['CreationTime'] for r in day_records if r.get('CheckType') == 'checkout' and r.get('CreationTime')])
-                
                 daily_seconds = 0
                 if checkins and checkouts and checkouts[-1] > checkins[0]:
                     daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
                 daily_hours_map[(emp_id, date_str)] = daily_seconds
 
-            # Tính tổng giờ làm tháng
             monthly_groups = {}
-            for date_str, daily_seconds in daily_hours_map.items():
-                if date_str[0] == emp_id:
-                    month_key = date_str[1][:7]
-                    monthly_groups.setdefault(month_key, []).append((date_str[1], daily_seconds))
+            for (map_emp_id, map_date_str), daily_seconds in daily_hours_map.items():
+                if map_emp_id == emp_id:
+                    month_key = map_date_str[:7]
+                    monthly_groups.setdefault(month_key, []).append((map_date_str, daily_seconds))
             
             for month, days in monthly_groups.items():
                 sorted_days = sorted(days, key=lambda x: x[0])
@@ -242,31 +234,30 @@ def get_attendances():
                     running_total += daily_seconds
                     monthly_hours_map[(emp_id, date_str)] = running_total
         
-        # Gắn dữ liệu giờ làm vào kết quả
+        # Gắn dữ liệu giờ làm và format lại ngày/giờ
         for item in all_relevant_data:
             emp_id, date_str = item.get("EmployeeId"), item.get("CheckinDate")
             
             daily_sec = daily_hours_map.get((emp_id, date_str), 0)
-            h, rem = divmod(daily_sec, 3600)
-            m, _ = divmod(rem, 60)
+            h, rem = divmod(daily_sec, 3600); m, _ = divmod(rem, 60)
             item['DailyHours'] = f"{int(h)}h {int(m)}m"
             item['_dailySeconds'] = daily_sec
 
             monthly_sec = monthly_hours_map.get((emp_id, date_str), 0)
-            h, rem = divmod(monthly_sec, 3600)
-            m, _ = divmod(rem, 60)
+            h, rem = divmod(monthly_sec, 3600); m, _ = divmod(rem, 60)
             item['MonthlyHours'] = f"{int(h)}h {int(m)}m"
             item['_monthlySeconds'] = monthly_sec
 
-            # Format lại CreationTime thành CheckinTime cho frontend
             if item.get('CreationTime'):
-                item['CheckinTime'] = item['CreationTime'].astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+                item['CheckinTime'] = item['CreationTime'].astimezone(VN_TZ).strftime('%H:%M:%S')
+            if item.get('CheckinDate'):
+                try: item['CheckinDate'] = datetime.strptime(item['CheckinDate'], '%Y-%m-%d').strftime('%d-%m-%Y')
+                except ValueError: pass
 
         return jsonify(all_relevant_data)
     except Exception as e:
         print(f"❌ Lỗi tại get_attendances: {e}")
         return jsonify({"error": str(e)}), 500
-
 
 # ---- API lấy dữ liệu nghỉ phép ----
 @app.route("/api/leaves", methods=["GET"])
@@ -283,7 +274,6 @@ def get_leaves():
             request.args.get("startDate"), request.args.get("endDate"),
             request.args.get("search", "").strip(), username=username
         )
-        
         data = list(collection.find(query, {"_id": 0}))
 
         for item in data:
@@ -295,7 +285,6 @@ def get_leaves():
     except Exception as e:
         print(f"❌ Lỗi tại get_leaves: {e}")
         return jsonify({"error": str(e)}), 500
-
 
 # ---- API xuất Excel Chấm công (LOGIC MỚI)----
 @app.route("/api/export-excel", methods=["GET"])
@@ -322,22 +311,22 @@ def export_to_excel():
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
-
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
         start_row = 2
 
-        for i, ((emp_id, emp_name, date), records) in enumerate(grouped.items()):
+        for i, ((emp_id, emp_name, date_str), records) in enumerate(grouped.items()):
             row = start_row + i
+            try: formatted_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d-%m-%Y")
+            except: formatted_date = date_str
+            
             ws.cell(row=row, column=1, value=emp_id)
             ws.cell(row=row, column=2, value=emp_name)
-            ws.cell(row=row, column=3, value=date)
+            ws.cell(row=row, column=3, value=formatted_date)
             
             checkin_counter = 0
-            # Giả định cột Check 1 là cột 4 (D), Check Out là cột 13 (M)
             checkin_start_col = 4
             checkout_col = 13
-
             sorted_records = sorted(records, key=lambda x: x.get('CreationTime', datetime.min))
 
             for rec in sorted_records:
@@ -347,10 +336,9 @@ def export_to_excel():
                 
                 cell_value = f"{time_str}; ID:{rec.get('ProjectId','')}; CV:{tasks_str}; Addr:{rec.get('Address','')}; Note:{rec.get('CheckinNote','')}"
                 
-                if rec.get('CheckType') == 'checkin':
-                    if checkin_counter < 9:
-                        ws.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
-                        checkin_counter += 1
+                if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
+                    ws.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
+                    checkin_counter += 1
                 elif rec.get('CheckType') == 'checkout':
                     ws.cell(row=row, column=checkout_col, value=cell_value)
 
@@ -368,29 +356,68 @@ def export_to_excel():
         print(f"❌ Lỗi export: {e}")
         return jsonify({"error": str(e)}), 500
 
-
 # ---- API xuất Excel cho nghỉ phép ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
-    # Giữ nguyên logic cũ vì không có yêu cầu thay đổi
     try:
-        # ... logic code cũ ...
-        pass
+        email = request.args.get("email")
+        if not email: return jsonify({"error": "❌ Thiếu email"}), 400
+
+        admin = admins.find_one({"email": email})
+        username = None if admin else users.find_one({"email": email})["username"]
+        if not admin and not username: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+
+        query = build_leave_query(
+            request.args.get("filter", "tất cả").lower(),
+            request.args.get("startDate"), request.args.get("endDate"),
+            request.args.get("search", "").strip(), username=username
+        )
+        data = list(collection.find(query, {"_id": 0}))
+
+        template_path = "templates/Copy of Form nghỉ phép.xlsx"
+        wb = load_workbook(template_path)
+        ws = wb.active
+        ws['E1'], ws['F1'], ws['G1'], ws['H1'] = "Ngày tạo đơn", "Lý do", "Trạng thái", "Ngày duyệt đơn"
+        border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+        for i, rec in enumerate(data, start=2):
+            ws.cell(row=i, column=1, value=rec.get("EmployeeId", ""))
+            ws.cell(row=i, column=2, value=rec.get("EmployeeName", ""))
+            ws.cell(row=i, column=3, value=rec.get("CheckinDate", ""))
+            ws.cell(row=i, column=4, value=calculate_leave_days_from_record(rec))
+            ws.cell(row=i, column=5, value=rec.get("CreationTime").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S') if rec.get("CreationTime") else "")
+            
+            tasks = rec.get("Tasks", [])
+            tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
+            ws.cell(row=i, column=6, value=tasks_str)
+            ws.cell(row=i, column=7, value=rec.get("Status", "Chưa duyệt"))
+            ws.cell(row=i, column=8, value=get_formatted_approval_date(rec.get("ApprovalDate")))
+            
+            for col_idx in range(1, 9):
+                ws.cell(row=i, column=col_idx).border = border
+                ws.cell(row=i, column=col_idx).alignment = align_left
+        
+        filename = f"Danh sách nghỉ phép_{request.args.get('filter')}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return send_file(output, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
         print(f"❌ Lỗi export leaves: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-# ---- API xuất Excel kết hợp (cập nhật phần Điểm danh) ----
+# ---- API xuất Excel kết hợp ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
         email = request.args.get("email")
+        if not email: return jsonify({"error": "❌ Thiếu email"}), 400
+
         admin = admins.find_one({"email": email})
-        user = users.find_one({"email": email})
-        if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
-        username = None if admin else user["username"]
-        
+        username = None if admin else users.find_one({"email": email})["username"]
+        if not admin and not username: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+
         filter_type = request.args.get("filter", "hôm nay").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
@@ -407,7 +434,7 @@ def export_combined_to_excel():
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-        # ---- Xử lý sheet Điểm danh (LOGIC MỚI) ----
+        # ---- Xử lý sheet Điểm danh ----
         ws_attendance = wb["Điểm danh"]
         attendance_grouped = {}
         for d in attendance_data:
@@ -415,27 +442,25 @@ def export_combined_to_excel():
             attendance_grouped.setdefault(key, []).append(d)
         
         start_row_att = 2
-        for i, ((emp_id, emp_name, date), records) in enumerate(attendance_grouped.items()):
+        for i, ((emp_id, emp_name, date_str), records) in enumerate(attendance_grouped.items()):
             row = start_row_att + i
+            try: formatted_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d-%m-%Y")
+            except: formatted_date = date_str
             ws_attendance.cell(row=row, column=1, value=emp_id)
             ws_attendance.cell(row=row, column=2, value=emp_name)
-            ws_attendance.cell(row=row, column=3, value=date)
+            ws_attendance.cell(row=row, column=3, value=formatted_date)
 
-            checkin_counter = 0
-            checkin_start_col = 4
-            checkout_col = 13
+            checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
             sorted_records = sorted(records, key=lambda x: x.get('CreationTime', datetime.min))
             
             for rec in sorted_records:
                 time_str = rec['CreationTime'].astimezone(VN_TZ).strftime("%H:%M:%S") if rec.get('CreationTime') else ""
-                tasks = rec.get("Tasks", [])
-                tasks_str = ", ".join(tasks) if isinstance(tasks, list) else str(tasks)
+                tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
                 cell_value = f"{time_str}; ID:{rec.get('ProjectId','')}; CV:{tasks_str}; Addr:{rec.get('Address','')}; Note:{rec.get('CheckinNote','')}"
 
-                if rec.get('CheckType') == 'checkin':
-                    if checkin_counter < 9:
-                        ws_attendance.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
-                        checkin_counter += 1
+                if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
+                    ws_attendance.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
+                    checkin_counter += 1
                 elif rec.get('CheckType') == 'checkout':
                     ws_attendance.cell(row=row, column=checkout_col, value=cell_value)
 
@@ -443,28 +468,24 @@ def export_combined_to_excel():
                 ws_attendance.cell(row=row, column=col).border = border
                 ws_attendance.cell(row=row, column=col).alignment = align_left
 
-        # ---- Xử lý sheet Nghỉ phép (LOGIC CŨ) ----
+        # ---- Xử lý sheet Nghỉ phép ----
         ws_leaves = wb["Nghỉ phép"]
-        start_row_leaves = 2
-        for i, rec in enumerate(leave_data, start=0):
-            row = start_row_leaves + i
-            ws_leaves.cell(row=row, column=1, value=rec.get("EmployeeId"))
-            ws_leaves.cell(row=row, column=2, value=rec.get("EmployeeName"))
-            ws_leaves.cell(row=row, column=3, value=rec.get("DisplayDate") or rec.get("CheckinDate")) # Use DisplayDate
-            ws_leaves.cell(row=row, column=4, value=calculate_leave_days_from_record(rec))
-            ws_leaves.cell(row=row, column=5, value=rec.get("CreationTime").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S') if rec.get("CreationTime") else "")
-            
-            reason = rec.get("Reason", "")
+        ws_leaves['E1'], ws_leaves['F1'], ws_leaves['G1'], ws_leaves['H1'] = "Ngày tạo đơn", "Lý do", "Trạng thái", "Ngày duyệt đơn"
+        
+        for i, rec in enumerate(leave_data, start=2):
+            ws_leaves.cell(row=i, column=1, value=rec.get("EmployeeId"))
+            ws_leaves.cell(row=i, column=2, value=rec.get("EmployeeName"))
+            ws_leaves.cell(row=i, column=3, value=rec.get("DisplayDate") or rec.get("CheckinDate"))
+            ws_leaves.cell(row=i, column=4, value=calculate_leave_days_from_record(rec))
+            ws_leaves.cell(row=i, column=5, value=rec.get("CreationTime").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S') if rec.get("CreationTime") else "")
             tasks = rec.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
-            ws_leaves.cell(row=row, column=6, value=reason or tasks_str)
-            
-            ws_leaves.cell(row=row, column=7, value=rec.get("Status", "Chưa duyệt"))
-            ws_leaves.cell(row=row, column=8, value=get_formatted_approval_date(rec.get("ApprovalDate")))
-
+            ws_leaves.cell(row=i, column=6, value=rec.get("Reason") or tasks_str)
+            ws_leaves.cell(row=i, column=7, value=rec.get("Status", "Chưa duyệt"))
+            ws_leaves.cell(row=i, column=8, value=get_formatted_approval_date(rec.get("ApprovalDate")))
             for col in range(1, 9):
-                ws_leaves.cell(row=row, column=col).border = border
-                ws_leaves.cell(row=row, column=col).alignment = align_left
+                ws_leaves.cell(row=i, column=col).border = border
+                ws_leaves.cell(row=i, column=col).alignment = align_left
 
         filename = f"Báo cáo tổng hợp_{filter_type}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
         output = BytesIO()
