@@ -519,7 +519,8 @@ def export_leaves_to_excel():
             ws.cell(row=i, column=1, value=rec.get("EmployeeId", ""))
             ws.cell(row=i, column=2, value=rec.get("EmployeeName", ""))
             ws.cell(row=i, column=3, value=display_date)
-            ws.cell(row=i, column=4, value=calculate_leave_days_from_record(rec))
+            leave_days = calculate_leave_days_from_record(rec)
+            ws.cell(row=i, column=4, value=leave_days if isinstance(leave_days, (int, float)) else 0.0)
             # Sử dụng CreationTime cho Ngày tạo đơn
             timestamp_str = ""
             if rec.get("CreationTime"):
@@ -704,7 +705,8 @@ def export_combined_to_excel():
             ws_leaves.cell(row=i, column=1, value=rec.get("EmployeeId"))
             ws_leaves.cell(row=i, column=2, value=rec.get("EmployeeName"))
             ws_leaves.cell(row=i, column=3, value=display_date)
-            ws_leaves.cell(row=i, column=4, value=calculate_leave_days_from_record(rec))
+            leave_days = calculate_leave_days_from_record(rec)
+            ws_leaves.cell(row=i, column=4, value=leave_days if isinstance(leave_days, (int, float)) else 0.0)
             # Sử dụng CreationTime cho Ngày tạo đơn
             timestamp_str = ""
             if rec.get("CreationTime"):
