@@ -60,6 +60,38 @@ def login():
         })
     return jsonify({"success": False, "message": "🚫 Email hoặc mật khẩu không đúng!"}), 401
 
+# ---- Reset mật khẩu ----
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "GET":
+        return """
+        <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Đặt lại mật khẩu</title>
+        <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}input{width:100%;padding:10px;margin:10px 0;box-sizing:border-box;border:1px solid #ddd;border-radius:4px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
+        </head><body><div class="container"><h2>🔒 Đặt lại mật khẩu</h2><form method="POST">
+        <input type="email" name="email" placeholder="Email" required>
+        <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
+        <input type="password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
+        <button type="submit">Cập nhật mật khẩu</button><a href="/">Quay về trang chủ</a></form></div></body></html>"""
+    if request.method == "POST":
+        email = request.form.get("email")
+        new_password = request.form.get("new_password")
+        confirm_password = request.form.get("confirm_password")
+        if not all([email, new_password, confirm_password]):
+            return jsonify({"success": False, "message": "❌ Vui lòng điền đầy đủ thông tin"}), 400
+        if new_password != confirm_password:
+            return jsonify({"success": False, "message": "❌ Mật khẩu xác nhận không khớp"}), 400
+        account = admins.find_one({"email": email}) or users.find_one({"email": email})
+        if not account:
+            return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+        hashed_pw = generate_password_hash(new_password)
+        collection_to_update = admins if "username" in account else users
+        collection_to_update.update_one({"email": email}, {"$set": {"password": hashed_pw}})
+        return """
+        <!DOCTYPE html><html lang="vi"><head><title>Thay đổi mật khẩu thành công</title>
+        <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
+        </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công</div>
+        <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
+        
 # ---- Build attendance query ----
 def build_attendance_query(filter_type, start_date, end_date, search, username=None):
     today = datetime.now(VN_TZ)
@@ -604,4 +636,5 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
