@@ -202,7 +202,7 @@
         <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button>
       </div>
       <button onclick="refreshLeaveData()">🔄 Làm mới</button>
-      <button onclick="resetLeaveFilter()">↻ Reset</button> 
+      <button onclick="resetLeaveFilter()">↻ Reset</button>
     </div>
     <div id="leaveTableContainer" class="table-container">
       <table id="leaveTable">
@@ -211,12 +211,13 @@
             <th onclick="sortLeaveTable('EmployeeId')">Mã NV</th>
             <th onclick="sortLeaveTable('EmployeeName')">Tên nhân viên</th>
             <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
-            <th onclick="sortLeaveTable('CreationTime')">Ngày tạo đơn</th>
+            <th onclick="sortLeaveTable('CheckinTime')">Ngày tạo đơn</th>
             <th onclick="sortLeaveTable('Tasks')">Lý do</th>
-            <th onclick="sortLeaveTable('ApprovalDate1')">Ngày duyệt/Từ chối Lần 1</th>            
-            <th onclick="sortLeaveTable('Status1')">Trạng thái Lần 1</th>
-            <th onclick="sortLeaveTable('ApprovalDate2')">Ngày duyệt/Từ chối Lần 2</th>            
-            <th onclick="sortLeaveTable('Status2')">Trạng thái Lần 2</th>          
+            <th onclick="sortLeaveTable('ApprovalDate1')">Ngày Duyệt/Từ chối 1</th>
+            <th onclick="sortLeaveTable('Status1')">Trạng thái 1</th>
+            <th onclick="sortLeaveTable('ApprovalDate2')">Ngày Duyệt/Từ chối 2</th>
+            <th onclick="sortLeaveTable('Status2')">Trạng thái 2</th>
+            <th onclick="sortLeaveTable('Note')">Note</th>
           </tr>
         </thead>
         <tbody id="leaveDataBody"></tbody>
@@ -246,7 +247,7 @@
     let rowsPerPage = 10;
     let currentLeaveFilter = "hôm nay";
     let currentLeaveSearch = "";
-    let currentLeaveSort = { column: 'CreationTime', order: 'desc' };
+    let currentLeaveSort = { column: 'CheckinTime', order: 'desc' };
     let leaveStartDate = "", leaveEndDate = "";
     let rawLeaveData = [];
     let currentLeavePage = 1;
@@ -337,11 +338,10 @@
     }
     document.getElementById("loginBtn").onclick = login;
     document.getElementById("logoutBtn").onclick = logout;
-    
+   
     // --- NEW: Function to calculate work hours ---
     function processDataWithHours(data) {
         if (!data || data.length === 0) return [];
-
         function parseTime(timeStr) {
             if (!timeStr) return null;
             const [datePart, timePart] = timeStr.split(' ');
@@ -354,13 +354,11 @@
                 return null;
             }
         }
-
         const employeesData = data.reduce((acc, record) => {
             acc[record.EmployeeId] = acc[record.EmployeeId] || [];
             acc[record.EmployeeId].push(record);
             return acc;
         }, {});
-
         const augmentedData = [];
         for (const empId in employeesData) {
             const records = employeesData[empId];
@@ -372,7 +370,6 @@
                 acc[monthKey].push(record);
                 return acc;
             }, {});
-
             for (const monthKey in monthsData) {
                 let monthlyTotalSeconds = 0;
                 const monthRecords = monthsData[monthKey];
@@ -381,10 +378,8 @@
                     acc[record.CheckinDate].push(record);
                     return acc;
                 }, {});
-
                 const sortedDays = Object.keys(daysData).sort();
                 const dailyHoursMap = {};
-
                 for (const day of sortedDays) {
                     let firstCheckin = null, lastCheckout = null;
                     daysData[day].forEach(rec => {
@@ -396,18 +391,16 @@
                             lastCheckout = recTime;
                         }
                     });
-
                     let dailySeconds = 0;
                     if (firstCheckin && lastCheckout && lastCheckout > firstCheckin) {
                         dailySeconds = (lastCheckout - firstCheckin) / 1000;
                     }
                     monthlyTotalSeconds += dailySeconds;
-                    
+                   
                     const dailyH = Math.floor(dailySeconds / 3600);
                     const dailyM = Math.floor((dailySeconds % 3600) / 60);
                     const monthlyH = Math.floor(monthlyTotalSeconds / 3600);
                     const monthlyM = Math.floor((monthlyTotalSeconds % 3600) / 60);
-
                     dailyHoursMap[day] = {
                         daily: `${dailyH}h ${dailyM}m`,
                         monthly: `${monthlyH}h ${monthlyM}m`,
@@ -415,7 +408,6 @@
                         _monthlySeconds: monthlyTotalSeconds,
                     };
                 }
-
                 monthRecords.forEach(rec => {
                     const hours = dailyHoursMap[rec.CheckinDate];
                     augmentedData.push({
@@ -430,7 +422,6 @@
         }
         return augmentedData;
     }
-
     async function loadData() {
       const email = localStorage.getItem("adminEmail");
       if (!email) {
@@ -457,13 +448,10 @@
             let col = currentSort.column;
             if (col === 'DailyHours') col = '_dailySeconds';
             if (col === 'MonthlyHours') col = '_monthlySeconds';
-
             let A = a[col] ?? (typeof a[col] === 'number' ? 0 : "");
             let B = b[col] ?? (typeof b[col] === 'number' ? 0 : "");
-
             if (typeof A === 'string') A = A.toLowerCase();
             if (typeof B === 'string') B = B.toLowerCase();
-
             if (A < B) return currentSort.order === "asc" ? -1 : 1;
             if (A > B) return currentSort.order === "asc" ? 1 : -1;
             return 0;
@@ -482,7 +470,7 @@
             <td>${r.EmployeeId||""}</td>
             <td>${r.EmployeeName||""}</td>
             <td>${r.CheckinDate||""}</td>
-            <td>${r.CreationTime||""}</td>
+            <td>${r.CheckinTime||""}</td>
             <td>${checkTypeFormatted}</td>
             <td>${r.ProjectId||""}</td>
             <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
@@ -532,12 +520,13 @@
             <td>${r.EmployeeId||""}</td>
             <td>${r.EmployeeName||""}</td>
             <td>${r.CheckinDate||""}</td>
-            <td>${r.CreationTime||""}</td>
-            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>            
+            <td>${r.CheckinTime||""}</td>
+            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
             <td>${r.ApprovalDate1||""}</td>
             <td>${r.Status1||""}</td>
             <td>${r.ApprovalDate2||""}</td>
-            <td>${r.Status2||""}</td>            
+            <td>${r.Status2||""}</td>
+            <td>${r.Note||""}</td>
           </tr>
         `;
       });
