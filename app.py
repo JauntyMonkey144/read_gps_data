@@ -119,7 +119,7 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
         conditions.append({"EmployeeName": username})
     return {"$and": conditions}
 
-# ---- Build leave query (lọc theo Timestamp)----
+# ---- Build leave query (lọc theo CreationTime)----
 def build_leave_query(filter_type, start_date_str, end_date_str, search, username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -143,7 +143,7 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, usernam
             start_dt = today.replace(month=1, day=1, hour=0, minute=0, second=0)
             end_dt = today.replace(month=12, day=31, hour=23, minute=59, second=59)
         if filter_type != "tất cả":
-            date_filter = {"Timestamp": {"$gte": start_dt, "$lte": end_dt}}
+            date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
    
     if date_filter: conditions.append(date_filter)
     if search:
@@ -254,7 +254,7 @@ def get_attendances():
                     if isinstance(item['Timestamp'], str):
                         timestamp = datetime.strptime(item['Timestamp'], "%Y-%m-%d %H:%M:%S")
                     elif isinstance(item['Timestamp'], datetime):
-                        timestamp = item['Timestamp']
+                        timestamp = r['Timestamp']
                     else:
                         timestamp = None
                     item['CheckinTime'] = timestamp.astimezone(VN_TZ).strftime('%H:%M:%S') if timestamp else ""
@@ -280,6 +280,8 @@ def get_leaves():
             request.args.get("search", "").strip(), username=username
         )
         data = list(collection.find(query, {"_id": 0}))
+        if not data:
+            return jsonify([])  # Trả về mảng rỗng nếu không có dữ liệu
         for item in data:
             item["ApprovalDate1"] = get_formatted_approval_date(item.get("ApprovalDate1"))
             item["ApprovalDate2"] = get_formatted_approval_date(item.get("ApprovalDate2"))
@@ -714,4 +716,3 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-
