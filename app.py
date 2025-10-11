@@ -155,10 +155,30 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, usernam
 
 # ---- Helper functions ----
 def calculate_leave_days_from_record(record):
+    display_date = record.get("DisplayDate", "")
+    if display_date:
+        if "(Cả ngày)" in display_date:
+            return 1.0
+        if "(Sáng)" in display_date or "(Chiều)" in display_date:
+            return 0.5
+        if "Từ" in display_date and "đến" in display_date:
+            try:
+                # Extract dates from format "Từ DD/MM/YYYY đến DD/MM/YYYY"
+                date_parts = re.findall(r"\d{2}/\d{2}/\d{4}", display_date)
+                if len(date_parts) == 2:
+                    start_date = datetime.strptime(date_parts[0], "%d/%m/%Y")
+                    end_date = datetime.strptime(date_parts[1], "%d/%m/%Y")
+                    return float((end_date - start_date).days + 1)
+            except:
+                pass
+    # Fallback logic if DisplayDate is not available or invalid
     if 'StartDate' in record and 'EndDate' in record:
-        try: return float((datetime.strptime(record['EndDate'], "%Y-%m-%d") - datetime.strptime(record['StartDate'], "%Y-%m-%d")).days + 1)
-        except: return 1.0
-    if 'LeaveDate' in record: return 0.5 if record.get('Session','').lower() in ['sáng', 'chiều'] else 1.0
+        try:
+            return float((datetime.strptime(record['EndDate'], "%Y-%m-%d") - datetime.strptime(record['StartDate'], "%Y-%m-%d")).days + 1)
+        except:
+            return 1.0
+    if 'LeaveDate' in record:
+        return 0.5 if record.get('Session', '').lower() in ['sáng', 'chiều'] else 1.0
     return 1.0
 
 def get_formatted_approval_date(approval_date):
@@ -254,7 +274,7 @@ def get_attendances():
                     if isinstance(item['Timestamp'], str):
                         timestamp = datetime.strptime(item['Timestamp'], "%Y-%m-%d %H:%M:%S")
                     elif isinstance(item['Timestamp'], datetime):
-                        timestamp = r['Timestamp']
+                        timestamp = item['Timestamp']
                     else:
                         timestamp = None
                     item['CheckinTime'] = timestamp.astimezone(VN_TZ).strftime('%H:%M:%S') if timestamp else ""
