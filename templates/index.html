@@ -38,29 +38,9 @@
     select, input[type="text"], input[type="email"], input[type="password"], input[type="date"] {
       padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
     }
-    table { 
-      width: 100%; 
-      border-collapse: collapse; 
-      background: white; 
-      box-shadow: var(--shadow); 
-      table-layout: fixed; 
-    }
-    th, td { 
-      border: 1px solid #ddd; 
-      padding: 8px; 
-      text-align: left; 
-      white-space: normal; 
-      word-wrap: break-word; 
-      overflow: hidden; 
-      text-overflow: ellipsis; 
-    }
-    th { 
-      background: var(--primary); 
-      color: white; 
-      cursor: pointer; 
-      user-select: none; 
-      max-width: 150px; 
-    }
+    table { width: 100%; border-collapse: collapse; background: white; box-shadow: var(--shadow); }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap;}
+    th { background: var(--primary); color: white; cursor: pointer; user-select: none; }
     th.asc::after { content: " ↑"; font-size: 12px; }
     th.desc::after { content: " ↓"; font-size: 12px; }
     tr:nth-child(even) { background: #f8f9fa; }
@@ -83,6 +63,8 @@
     #leaveSection { display: none; }
     #leaveTableContainer table th:first-child { min-width: 100px; }
     .export-group { display: flex; gap: 5px; align-items: center; }
+    /* Add horizontal scrolling for tables */
+    .table-scroll { overflow-x: auto; }
     /* Modal Styles */
     .modal {
       display: none;
@@ -168,21 +150,21 @@
     <button onclick="refreshData()">🔄 Làm mới</button>
     <button onclick="resetFilter()">↻ Reset</button>
   </div>
-  <div id="tableContainer" class="table-container">
+  <div id="tableContainer" class="table-container table-scroll">
     <table id="dataTable">
       <thead>
         <tr>
-          <th onclick="sortTable('EmployeeId')" style="max-width: 80px;">Mã NV</th>
-          <th onclick="sortTable('EmployeeName')" style="max-width: 120px;">Tên nhân viên</th>
-          <th onclick="sortTable('CheckinDate')" style="max-width: 100px;">Ngày Chấm công</th>
-          <th onclick="sortTable('CreationTime')" style="max-width: 100px;">Giờ Chấm công</th>
-          <th onclick="sortTable('CheckType')" style="max-width: 80px;">Loại Chấm công</th>
-          <th onclick="sortTable('ProjectId')" style="max-width: 80px;">Mã dự án</th>
-          <th onclick="sortTable('Tasks')" style="max-width: 150px;">Công việc</th>
-          <th style="max-width: 80px;">Ảnh</th>
-          <th style="max-width: 150px;">Địa chỉ</th>
-          <th style="max-width: 80px;">Vị trí</th>
-          <th onclick="sortTable('CheckinNote')" style="max-width: 150px;">Ghi chú</th>
+          <th onclick="sortTable('EmployeeId')">Mã NV</th>
+          <th onclick="sortTable('EmployeeName')">Tên nhân viên</th>
+          <th onclick="sortTable('CheckinDate')">Ngày Chấm công</th>
+          <th onclick="sortTable('CreationTime')">Giờ Chấm công</th>
+          <th onclick="sortTable('CheckType')">Loại Chấm công</th>
+          <th onclick="sortTable('ProjectId')">Mã dự án</th>
+          <th onclick="sortTable('Tasks')">Công việc</th>
+          <th>Ảnh</th>
+          <th>Địa chỉ</th>
+          <th>Vị trí</th>
+          <th onclick="sortTable('CheckinNote')">Ghi chú</th>
         </tr>
       </thead>
       <tbody id="dataBody"></tbody>
@@ -224,20 +206,20 @@
       <button onclick="refreshLeaveData()">🔄 Làm mới</button>
       <button onclick="resetLeaveFilter()">↻ Reset</button>
     </div>
-    <div id="leaveTableContainer" class="table-container">
+    <div id="leaveTableContainer" class="table-container table-scroll">
       <table id="leaveTable">
         <thead>
           <tr>
-            <th onclick="sortLeaveTable('EmployeeId')" style="max-width: 80px;">Mã NV</th>
-            <th onclick="sortLeaveTable('EmployeeName')" style="max-width: 120px;">Tên nhân viên</th>
-            <th onclick="sortLeaveTable('CheckinDate')" style="max-width: 100px;">Ngày nghỉ</th>
-            <th onclick="sortLeaveTable('CheckinTime')" style="max-width: 100px;">Ngày tạo đơn</th>
-            <th onclick="sortLeaveTable('Tasks')" style="max-width: 150px;">Lý do</th>
-            <th onclick="sortLeaveTable('ApprovalDate1')" style="max-width: 120px;">Ngày Duyệt/Từ chối 1</th>
-            <th onclick="sortLeaveTable('Status1')" style="max-width: 100px;">Trạng thái 1</th>
-            <th onclick="sortLeaveTable('ApprovalDate2')" style="max-width: 120px;">Ngày Duyệt/Từ chối 2</th>
-            <th onclick="sortLeaveTable('Status2')" style="max-width: 100px;">Trạng thái 2</th>
-            <th onclick="sortLeaveTable('Note')" style="max-width: 150px;">Note</th>
+            <th onclick="sortLeaveTable('EmployeeId')">Mã NV</th>
+            <th onclick="sortLeaveTable('EmployeeName')">Tên nhân viên</th>
+            <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
+            <th onclick="sortLeaveTable('CheckinTime')">Ngày tạo đơn</th>
+            <th onclick="sortLeaveTable('Tasks')">Lý do</th>
+            <th onclick="sortLeaveTable('ApprovalDate1')">Ngày Duyệt/Từ chối 1</th>
+            <th onclick="sortLeaveTable('Status1')">Trạng thái 1</th>
+            <th onclick="sortLeaveTable('ApprovalDate2')">Ngày Duyệt/Từ chối 2</th>
+            <th onclick="sortLeaveTable('Status2')">Trạng thái 2</th>
+            <th onclick="sortLeaveTable('Note')">Note</th>
           </tr>
         </thead>
         <tbody id="leaveDataBody"></tbody>
@@ -487,17 +469,17 @@
         const checkTypeFormatted = r.CheckType === 'checkin' ? 'Check In' : (r.CheckType === 'checkout' ? 'Check Out' : (r.CheckType || ""));
         tbody.innerHTML += `
           <tr>
-            <td style="max-width: 80px; overflow: hidden; text-overflow: ellipsis;">${r.EmployeeId||""}</td>
-            <td style="max-width: 120px; overflow: hidden; text-overflow: ellipsis;">${r.EmployeeName||""}</td>
-            <td style="max-width: 100px; overflow: hidden; text-overflow: ellipsis;">${r.CheckinDate||""}</td>
-            <td style="max-width: 100px; overflow: hidden; text-overflow: ellipsis;">${r.CheckinTime||""}</td>
-            <td style="max-width: 80px; overflow: hidden; text-overflow: ellipsis;">${checkTypeFormatted}</td>
-            <td style="max-width: 80px; overflow: hidden; text-overflow: ellipsis;">${r.ProjectId||""}</td>
-            <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;">${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
-            <td style="max-width: 80px;">${img}</td>
-            <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;">${r.Address||""}</td>
-            <td style="max-width: 80px;">${mapLink}</td>
-            <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;">${r.CheckinNote||""}</td>
+            <td>${r.EmployeeId||""}</td>
+            <td>${r.EmployeeName||""}</td>
+            <td>${r.CheckinDate||""}</td>
+            <td>${r.CheckinTime||""}</td>
+            <td>${checkTypeFormatted}</td>
+            <td>${r.ProjectId||""}</td>
+            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
+            <td>${img}</td>
+            <td>${r.Address||""}</td>
+            <td>${mapLink}</td>
+            <td>${r.CheckinNote||""}</td>
           </tr>
         `;
       });
@@ -537,16 +519,16 @@
       pageData.forEach(r => {
         tbody.innerHTML += `
           <tr>
-            <td style="max-width: 80px; overflow: hidden; text-overflow: ellipsis;">${r.EmployeeId||""}</td>
-            <td style="max-width: 120px; overflow: hidden; text-overflow: ellipsis;">${r.EmployeeName||""}</td>
-            <td style="max-width: 100px; overflow: hidden; text-overflow: ellipsis;">${r.CheckinDate||""}</td>
-            <td style="max-width: 100px; overflow: hidden; text-overflow: ellipsis;">${r.CheckinTime||""}</td>
-            <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;">${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
-            <td style="max-width: 120px; overflow: hidden; text-overflow: ellipsis;">${r.ApprovalDate1||""}</td>
-            <td style="max-width: 100px; overflow: hidden; text-overflow: ellipsis;">${r.Status1||""}</td>
-            <td style="max-width: 120px; overflow: hidden; text-overflow: ellipsis;">${r.ApprovalDate2||""}</td>
-            <td style="max-width: 100px; overflow: hidden; text-overflow: ellipsis;">${r.Status2||""}</td>
-            <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;">${r.Note||""}</td>
+            <td>${r.EmployeeId||""}</td>
+            <td>${r.EmployeeName||""}</td>
+            <td>${r.CheckinDate||""}</td>
+            <td>${r.CheckinTime||""}</td>
+            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
+            <td>${r.ApprovalDate1||""}</td>
+            <td>${r.Status1||""}</td>
+            <td>${r.ApprovalDate2||""}</td>
+            <td>${r.Status2||""}</td>
+            <td>${r.Note||""}</td>
           </tr>
         `;
       });
