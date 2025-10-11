@@ -155,7 +155,7 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, usernam
 
 # ---- Helper functions ----
 def calculate_leave_days_from_record(record):
-    display_date = record.get("DisplayDate", "")
+    display_date = record.get("DisplayDate", "").strip()
     if display_date:
         if "(Cả ngày)" in display_date:
             return 1.0
@@ -686,7 +686,7 @@ def export_combined_to_excel():
                 ws_attendance.cell(row=row, column=col).alignment = align_left
         # ---- Xử lý sheet Nghỉ phép ----
         ws_leaves = wb["Nghỉ phép"]
-        ws_leaves['A1'], ws_leaves['B1'], ws_leaves['C1'], ws_leaves['D1'], ws_leaves['E1'], ws_leaves['F1'], ws_leaves['G1'], ws_leaves['H1'], ws_leaves['I1'], ws_leaves['J1'], ws_leaves['K1'] = (
+        ws_leaves['A1'], ws_leaves['B1'], ws_leaves['C1'], ws_leaves['D1'], ws_leaves['E1'], ws['F1'], ws['G1'], ws['H1'], ws['I1'], ws['J1'], ws['K1'] = (
             "Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
             "Ngày Duyệt/Từ chối 1", "Trạng thái 1", "Ngày Duyệt/Từ chối 2", "Trạng thái 2", "Note"
         )
