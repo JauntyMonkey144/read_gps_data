@@ -249,6 +249,13 @@ def get_attendances():
                 if checkins and checkouts and checkouts[-1] > checkins[0]:
                     daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
                 daily_hours_map[(emp_id, date_str)] = daily_seconds
+                # Update all records for this employee and date with DailyHours and _dailySeconds
+                h, rem = divmod(daily_seconds, 3600); m, _ = divmod(rem, 60)
+                daily_hours = f"{int(h)}h {int(m)}m" if daily_seconds > 0 else ""
+                collection.update_many(
+                    {"EmployeeId": emp_id, "CheckinDate": date_str, "CheckType": {"$in": ["checkin", "checkout"]}},
+                    {"$set": {"DailyHours": daily_hours, "_dailySeconds": daily_seconds}}
+                )
             monthly_groups = {}
             for (map_emp_id, map_date_str), daily_seconds in daily_hours_map.items():
                 if map_emp_id == emp_id:
@@ -262,6 +269,13 @@ def get_attendances():
                 for date_str, daily_seconds in sorted_days:
                     running_total += daily_seconds
                     monthly_hours_map[(emp_id, date_str)] = running_total
+                    # Update all records for this employee and date with MonthlyHours and _monthlySeconds
+                    h, rem = divmod(running_total, 3600); m, _ = divmod(rem, 60)
+                    monthly_hours = f"{int(h)}h {int(m)}m" if running_total > 0 else ""
+                    collection.update_many(
+                        {"EmployeeId": emp_id, "CheckinDate": date_str, "CheckType": {"$in": ["checkin", "checkout"]}},
+                        {"$set": {"MonthlyHours": monthly_hours, "_monthlySeconds": running_total}}
+                    )
        
         for item in all_relevant_data:
             emp_id, date_str = item.get("EmployeeId"), item.get("CheckinDate")
@@ -361,66 +375,9 @@ def export_to_excel():
         )
         data = list(collection.find(query, {"_id": 0}))
         grouped = {}
-        daily_hours_map, monthly_hours_map = {}, {}
         for d in data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate"))
             grouped.setdefault(key, []).append(d)
-            emp_id = d.get("EmployeeId")
-            date_str = d.get("CheckinDate")
-            if emp_id and date_str:
-                daily_groups = {}
-                for rec in grouped[key]:
-                    if date_str: daily_groups.setdefault(date_str, []).append(rec)
-               
-                # Handle Timestamp (string or datetime)
-                checkins = []
-                for r in daily_groups.get(date_str, []):
-                    if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
-                        try:
-                            if isinstance(r['Timestamp'], str):
-                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
-                            elif isinstance(r['Timestamp'], datetime):
-                                timestamp = r['Timestamp']
-                            else:
-                                continue
-                            checkins.append(timestamp)
-                        except (ValueError, TypeError):
-                            continue
-                checkins = sorted(checkins)
-               
-                checkouts = []
-                for r in daily_groups.get(date_str, []):
-                    if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
-                        try:
-                            if isinstance(r['Timestamp'], str):
-                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
-                            elif isinstance(r['Timestamp'], datetime):
-                                timestamp = r['Timestamp']
-                            else:
-                                continue
-                            checkouts.append(timestamp)
-                        except (ValueError, TypeError):
-                            continue
-                checkouts = sorted(checkouts)
-               
-                daily_seconds = 0
-                if checkins and checkouts and checkouts[-1] > checkins[0]:
-                    daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
-                daily_hours_map[(emp_id, date_str)] = daily_seconds
-               
-                try:
-                    month_key = datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m")
-                except:
-                    continue
-                monthly_groups = {}
-                monthly_groups.setdefault(month_key, []).append((date_str, daily_seconds))
-               
-                for month, days in monthly_groups.items():
-                    sorted_days = sorted(days, key=lambda x: datetime.strptime(x[0], "%d/%m/%Y"))
-                    running_total = 0
-                    for date_str, daily_seconds in sorted_days:
-                        running_total += daily_seconds
-                        monthly_hours_map[(emp_id, date_str)] = running_total
         template_path = "templates/Copy of Form chấm công.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
@@ -433,14 +390,10 @@ def export_to_excel():
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date_str) # Giữ nguyên format DD/MM/YYYY
            
-            daily_sec = daily_hours_map.get((emp_id, date_str), 0)
-            h, rem = divmod(daily_sec, 3600); m, _ = divmod(rem, 60)
-            daily_hours = f"{int(h)}h {int(m)}m" if daily_sec > 0 else "0h 0m"
+            # Retrieve stored DailyHours and MonthlyHours
+            daily_hours = records[0].get("DailyHours", "0h 0m")
+            monthly_hours = records[0].get("MonthlyHours", "0h 0m")
             ws.cell(row=row, column=14, value=daily_hours) # Assuming column 14 for DailyHours
-           
-            monthly_sec = monthly_hours_map.get((emp_id, date_str), 0)
-            h, rem = divmod(monthly_sec, 3600); m, _ = divmod(rem, 60)
-            monthly_hours = f"{int(h)}h {int(m)}m" if monthly_sec > 0 else "0h 0m"
             ws.cell(row=row, column=15, value=monthly_hours) # Assuming column 15 for MonthlyHours
            
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
@@ -571,63 +524,6 @@ def export_combined_to_excel():
         attendance_data = list(collection.find(attendance_query, {"_id": 0}))
         leave_data = list(collection.find(leave_query, {"_id": 0}))
        
-        daily_hours_map, monthly_hours_map = {}, {}
-        for d in attendance_data:
-            emp_id = d.get("EmployeeId")
-            date_str = d.get("CheckinDate")
-            if emp_id and date_str:
-                daily_groups = {}
-                daily_groups.setdefault(date_str, []).append(d)
-               
-                # Handle Timestamp (string or datetime)
-                checkins = []
-                for r in daily_groups.get(date_str, []):
-                    if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
-                        try:
-                            if isinstance(r['Timestamp'], str):
-                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
-                            elif isinstance(r['Timestamp'], datetime):
-                                timestamp = r['Timestamp']
-                            else:
-                                continue
-                            checkins.append(timestamp)
-                        except (ValueError, TypeError):
-                            continue
-                checkins = sorted(checkins)
-               
-                checkouts = []
-                for r in daily_groups.get(date_str, []):
-                    if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
-                        try:
-                            if isinstance(r['Timestamp'], str):
-                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
-                            elif isinstance(r['Timestamp'], datetime):
-                                timestamp = r['Timestamp']
-                            else:
-                                continue
-                            checkouts.append(timestamp)
-                        except (ValueError, TypeError):
-                            continue
-                checkouts = sorted(checkouts)
-               
-                daily_seconds = 0
-                if checkins and checkouts and checkouts[-1] > checkins[0]:
-                    daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
-                daily_hours_map[(emp_id, date_str)] = daily_seconds
-               
-                try:
-                    month_key = datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m")
-                except:
-                    continue
-                monthly_groups = {}
-                monthly_groups.setdefault(month_key, []).append((date_str, daily_seconds))
-               
-                for month, days in monthly_groups.items():
-                    sorted_days = sorted(days, key=lambda x: datetime.strptime(x[0], "%d/%m/%Y"))
-                    running_total = 0
-                    for date_str, daily_seconds in sorted_days:
-                        running_total += daily_seconds
-                        monthly_hours_map[(emp_id, date_str)] = running_total
         template_path = "templates/Form kết hợp.xlsx"
         wb = load_workbook(template_path)
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
@@ -646,14 +542,10 @@ def export_combined_to_excel():
             ws_attendance.cell(row=row, column=2, value=emp_name)
             ws_attendance.cell(row=row, column=3, value=date_str)
            
-            daily_sec = daily_hours_map.get((emp_id, date_str), 0)
-            h, rem = divmod(daily_sec, 3600); m, _ = divmod(rem, 60)
-            daily_hours = f"{int(h)}h {int(m)}m" if daily_sec > 0 else "0h 0m"
+            # Retrieve stored DailyHours and MonthlyHours
+            daily_hours = records[0].get("DailyHours", "0h 0m")
+            monthly_hours = records[0].get("MonthlyHours", "0h 0m")
             ws_attendance.cell(row=row, column=14, value=daily_hours) # Assuming column 14 for DailyHours
-           
-            monthly_sec = monthly_hours_map.get((emp_id, date_str), 0)
-            h, rem = divmod(monthly_sec, 3600); m, _ = divmod(rem, 60)
-            monthly_hours = f"{int(h)}h {int(m)}m" if monthly_sec > 0 else "0h 0m"
             ws_attendance.cell(row=row, column=15, value=monthly_hours) # Assuming column 15 for MonthlyHours
            
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
