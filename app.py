@@ -128,7 +128,7 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, usernam
     if filter_type == "custom" and start_date_str and end_date_str:
         start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=VN_TZ)
         end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
-        date_filter = {"Timestamp": {"$gte": start_dt, "$lte": end_dt}}
+        date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
     else:
         if filter_type == "hôm nay":
             start_dt, end_dt = today.replace(hour=0, minute=0, second=0), today.replace(hour=23, minute=59, second=59)
@@ -714,3 +714,4 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
