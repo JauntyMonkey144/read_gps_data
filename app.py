@@ -163,19 +163,21 @@ def calculate_leave_days_from_record(record):
             return 0.5
         if "Từ" in display_date and "đến" in display_date:
             try:
-                # Extract dates from format "Từ DD/MM/YYYY đến DD/MM/YYYY"
-                date_parts = re.findall(r"\d{2}/\d{2}/\d{4}", display_date)
+                # Hỗ trợ cả định dạng YYYY-MM-DD và DD/MM/YYYY
+                date_parts = re.findall(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}", display_date)
                 if len(date_parts) == 2:
-                    start_date = datetime.strptime(date_parts[0], "%d/%m/%Y")
-                    end_date = datetime.strptime(date_parts[1], "%d/%m/%Y")
+                    start_date = datetime.strptime(date_parts[0], "%Y-%m-%d" if "-" in date_parts[0] else "%d/%m/%Y")
+                    end_date = datetime.strptime(date_parts[1], "%Y-%m-%d" if "-" in date_parts[1] else "%d/%m/%Y")
                     return float((end_date - start_date).days + 1)
-            except:
+            except (ValueError, TypeError):
                 pass
     # Fallback logic if DisplayDate is not available or invalid
     if 'StartDate' in record and 'EndDate' in record:
         try:
-            return float((datetime.strptime(record['EndDate'], "%Y-%m-%d") - datetime.strptime(record['StartDate'], "%Y-%m-%d")).days + 1)
-        except:
+            start_date = datetime.strptime(record['StartDate'], "%Y-%m-%d")
+            end_date = datetime.strptime(record['EndDate'], "%Y-%m-%d")
+            return float((end_date - start_date).days + 1)
+        except (ValueError, TypeError):
             return 1.0
     if 'LeaveDate' in record:
         return 0.5 if record.get('Session', '').lower() in ['sáng', 'chiều'] else 1.0
