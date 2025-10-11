@@ -285,17 +285,37 @@ def get_leaves():
             item["ApprovalDate2"] = get_formatted_approval_date(item.get("ApprovalDate2"))
             item["Status1"] = item.get("Status1", "")
             item["Status2"] = item.get("Status2", "")
-            item["Note"] = item.get("LeaveNote", "")  # Giả sử Note là LeaveNote
-            if item.get('Timestamp'):
-                item['CheckinTime'] = item['Timestamp'].astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
-           
-            if item.get('StartDate') and item.get('EndDate'):
+            item["Note"] = item.get("LeaveNote", "")
+            # Sử dụng CreationTime thay vì Timestamp
+            if item.get('CreationTime'):
+                try:
+                    if isinstance(item['CreationTime'], str):
+                        timestamp = datetime.strptime(item['CreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+                    elif isinstance(item['CreationTime'], datetime):
+                        timestamp = item['CreationTime']
+                    else:
+                        timestamp = None
+                    item['CheckinTime'] = timestamp.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S') if timestamp else ""
+                except (ValueError, TypeError):
+                    item['CheckinTime'] = ""
+            else:
+                item['CheckinTime'] = ""
+            # Ưu tiên sử dụng DisplayDate, nếu không có thì tính từ StartDate/EndDate hoặc LeaveDate
+            if item.get('DisplayDate'):
+                item['CheckinDate'] = item['DisplayDate']
+            elif item.get('StartDate') and item.get('EndDate'):
                 start = datetime.strptime(item['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                 end = datetime.strptime(item['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                 item['CheckinDate'] = f"Từ {start} đến {end}"
             elif item.get('LeaveDate'):
                 leave_date = datetime.strptime(item['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                 item['CheckinDate'] = f"{leave_date} ({item.get('Session', '')})"
+            else:
+                item['CheckinDate'] = ""
+            # Ưu tiên Reason cho Lý do, nếu không có thì lấy Tasks
+            tasks = item.get("Tasks", [])
+            tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
+            item['Tasks'] = item.get("Reason") or tasks_str
         return jsonify(data)
     except Exception as e:
         print(f"❌ Lỗi tại get_leaves: {e}")
@@ -463,19 +483,30 @@ def export_leaves_to_excel():
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
         for i, rec in enumerate(data, start=2):
-            display_date = rec.get("CheckinDate", "")
-            if rec.get('StartDate') and rec.get('EndDate'):
+            # Ưu tiên DisplayDate, nếu không có thì tính từ StartDate/EndDate hoặc LeaveDate
+            display_date = rec.get("DisplayDate", "")
+            if not display_date and rec.get('StartDate') and rec.get('EndDate'):
                 start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                 end = datetime.strptime(rec['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                 display_date = f"Từ {start} đến {end}"
-            elif rec.get('LeaveDate'):
+            elif not display_date and rec.get('LeaveDate'):
                 leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                 display_date = f"{leave_date} ({rec.get('Session', '')})"
             ws.cell(row=i, column=1, value=rec.get("EmployeeId", ""))
             ws.cell(row=i, column=2, value=rec.get("EmployeeName", ""))
             ws.cell(row=i, column=3, value=display_date)
             ws.cell(row=i, column=4, value=calculate_leave_days_from_record(rec))
-            ws.cell(row=i, column=5, value=rec.get("Timestamp").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S') if rec.get("Timestamp") else "")
+            # Sử dụng CreationTime cho Ngày tạo đơn
+            timestamp_str = ""
+            if rec.get("CreationTime"):
+                try:
+                    if isinstance(rec['CreationTime'], str):
+                        timestamp_str = datetime.strptime(rec['CreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+                    elif isinstance(rec['CreationTime'], datetime):
+                        timestamp_str = rec['CreationTime'].astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+                except (ValueError, TypeError):
+                    timestamp_str = ""
+            ws.cell(row=i, column=5, value=timestamp_str)
             tasks = rec.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
             ws.cell(row=i, column=6, value=rec.get("Reason") or tasks_str)
@@ -637,26 +668,27 @@ def export_combined_to_excel():
         )
        
         for i, rec in enumerate(leave_data, start=2):
-            display_date = rec.get("CheckinDate", "")
-            if rec.get('StartDate') and rec.get('EndDate'):
+            # Ưu tiên DisplayDate, nếu không có thì tính từ StartDate/EndDate hoặc LeaveDate
+            display_date = rec.get("DisplayDate", "")
+            if not display_date and rec.get('StartDate') and rec.get('EndDate'):
                 start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                 end = datetime.strptime(rec['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                 display_date = f"Từ {start} đến {end}"
-            elif rec.get('LeaveDate'):
+            elif not display_date and rec.get('LeaveDate'):
                 leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                 display_date = f"{leave_date} ({rec.get('Session', '')})"
             ws_leaves.cell(row=i, column=1, value=rec.get("EmployeeId"))
             ws_leaves.cell(row=i, column=2, value=rec.get("EmployeeName"))
             ws_leaves.cell(row=i, column=3, value=display_date)
             ws_leaves.cell(row=i, column=4, value=calculate_leave_days_from_record(rec))
-            # Handle Timestamp for leave data
+            # Sử dụng CreationTime cho Ngày tạo đơn
             timestamp_str = ""
-            if rec.get("Timestamp"):
+            if rec.get("CreationTime"):
                 try:
-                    if isinstance(rec['Timestamp'], str):
-                        timestamp_str = datetime.strptime(rec['Timestamp'], "%Y-%m-%d %H:%M:%S").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
-                    elif isinstance(rec['Timestamp'], datetime):
-                        timestamp_str = rec['Timestamp'].astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+                    if isinstance(rec['CreationTime'], str):
+                        timestamp_str = datetime.strptime(rec['CreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+                    elif isinstance(rec['CreationTime'], datetime):
+                        timestamp_str = rec['CreationTime'].astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
                 except (ValueError, TypeError):
                     timestamp_str = ""
             ws_leaves.cell(row=i, column=5, value=timestamp_str)
