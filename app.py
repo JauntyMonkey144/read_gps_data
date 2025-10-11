@@ -415,7 +415,9 @@ def export_to_excel():
                     except (ValueError, TypeError):
                         time_str = ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
-                cell_value = f"{time_str}; {rec.get('ProjectId','')}; {tasks_str}; {rec.get('Address','')}; {rec.get('CheckinNote','')}"
+                # Build cell_value by including only non-empty fields
+                fields = [time_str, rec.get('ProjectId', ''), tasks_str, rec.get('Address', ''), rec.get('CheckinNote', '')]
+                cell_value = "; ".join(field for field in fields if field)
                
                 if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
                     ws.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
@@ -568,7 +570,9 @@ def export_combined_to_excel():
                     except (ValueError, TypeError):
                         time_str = ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
-                cell_value = f"{time_str}; {rec.get('ProjectId','')}; {tasks_str}; {rec.get('Address','')}; {rec.get('CheckinNote','')}"
+                # Build cell_value by including only non-empty fields
+                fields = [time_str, rec.get('ProjectId', ''), tasks_str, rec.get('Address', ''), rec.get('CheckinNote', '')]
+                cell_value = "; ".join(field for field in fields if field)
                 if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
                     ws_attendance.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
                     checkin_counter += 1
