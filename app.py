@@ -9,6 +9,10 @@ import calendar
 from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
+import secrets
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
@@ -23,6 +27,12 @@ MONGO_URI = os.getenv(
 )
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 
+# ---- Email Config ----
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "your_email@gmail.com")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "your_app_password")
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+
 # ---- Kết nối MongoDB ----
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
@@ -31,6 +41,7 @@ db = client[DB_NAME]
 admins = db["admins"]
 users = db["users"]
 collection = db["alt_checkins"]
+reset_tokens = db["reset_tokens"]  # New collection for password reset tokens
 
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
@@ -60,18 +71,115 @@ def login():
         })
     return jsonify({"success": False, "message": "🚫 Email hoặc mật khẩu không đúng!"}), 401
 
-# ---- Reset mật khẩu ----
+# ---- Gửi email reset mật khẩu ----
+@app.route("/request-reset-password", methods=["POST"])
+def request_reset_password():
+    email = request.form.get("email")
+    if not email:
+        return jsonify({"success": False, "message": "❌ Vui lòng nhập email"}), 400
+
+    account = admins.find_one({"email": email}) or users.find_one({"email": email})
+    if not account:
+        return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+
+    # Generate reset token
+    token = secrets.token_urlsafe(32)
+    expiration = datetime.now(VN_TZ) + timedelta(hours=1)  # Token valid for 1 hour
+    reset_tokens.insert_one({
+        "email": email,
+        "token": token,
+        "expiration": expiration
+    })
+
+    # Send email
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_ADDRESS
+        msg['To'] = email
+        msg['Subject'] = "Yêu cầu đặt lại mật khẩu"
+        
+        reset_link = url_for("reset_password", token=token, _external=True)
+        body = f"""
+        Xin chào,
+
+        Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết sau để đặt lại mật khẩu của bạn:
+        {reset_link}
+
+        Liên kết này sẽ hết hạn sau 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
+
+        Trân trọng,
+        Đội ngũ hỗ trợ
+        """
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            server.send_message(msg)
+
+        return jsonify({"success": True, "message": "✅ Email đặt lại mật khẩu đã được gửi!"})
+    except Exception as e:
+        print(f"❌ Lỗi gửi email: {e}")
+        return jsonify({"success": False, "message": "❌ Lỗi khi gửi email, vui lòng thử lại sau"}), 500
+
+# ---- Trang reset mật khẩu với token ----
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    if request.method == "GET":
+        token_data = reset_tokens.find_one({"token": token})
+        if not token_data or token_data["expiration"] < datetime.now(VN_TZ):
+            return """
+            <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+            <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+            </head><body><div class="container"><p>🚫 Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn!</p>
+            <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
+
+        return """
+        <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Đặt lại mật khẩu</title>
+        <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}input{width:100%;padding:10px;margin:10px 0;box-sizing:border-box;border:1px solid #ddd;border-radius:4px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
+        </head><body><div class="container"><h2>🔒 Đặt lại mật khẩu</h2><form method="POST">
+        <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
+        <input type="password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
+        <button type="submit">Cập nhật mật khẩu</button></form></div></body></html>"""
+
+    if request.method == "POST":
+        token_data = reset_tokens.find_one({"token": token})
+        if not token_data or token_data["expiration"] < datetime.now(VN_TZ):
+            return jsonify({"success": False, "message": "❌ Liên kết không hợp lệ hoặc đã hết hạn"}), 400
+
+        new_password = request.form.get("new_password")
+        confirm_password = request.form.get("confirm_password")
+        if not new_password or not confirm_password:
+            return jsonify({"success": False, "message": "❌ Vui lòng điền đầy đủ thông tin"}), 400
+        if new_password != confirm_password:
+            return jsonify({"success": False, "message": "❌ Mật khẩu xác nhận không khớp"}), 400
+
+        email = token_data["email"]
+        account = admins.find_one({"email": email}) or users.find_one({"email": email})
+        if not account:
+            return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+
+        hashed_pw = generate_password_hash(new_password)
+        collection_to_update = admins if "username" in account else users
+        collection_to_update.update_one({"email": email}, {"$set": {"password": hashed_pw}})
+        reset_tokens.delete_one({"token": token})  # Remove used token
+
+        return """
+        <!DOCTYPE html><html lang="vi"><head><title>Thay đổi mật khẩu thành công</title>
+        <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
+        </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công</div>
+        <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
+
+# ---- Reset mật khẩu (giữ nguyên chức năng cũ) ----
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
     if request.method == "GET":
         return """
         <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Đặt lại mật khẩu</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}input{width:100%;padding:10px;margin:10px 0;box-sizing:border-box;border:1px solid #ddd;border-radius:4px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
-        </head><body><div class="container"><h2>🔒 Đặt lại mật khẩu</h2><form method="POST">
+        </head><body><div class="container"><h2>🔒 Đặt lại mật khẩu</h2><form method="POST" action="/request-reset-password">
         <input type="email" name="email" placeholder="Email" required>
-        <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
-        <input type="password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
-        <button type="submit">Cập nhật mật khẩu</button><a href="/">Quay về trang chủ</a></form></div></body></html>"""
+        <button type="submit">Gửi liên kết đặt lại</button><a href="/">Quay về trang chủ</a></form></div></body></html>"""
     if request.method == "POST":
         email = request.form.get("email")
         new_password = request.form.get("new_password")
@@ -636,5 +744,3 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-
-
