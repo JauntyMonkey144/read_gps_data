@@ -248,29 +248,23 @@ def forgot_password():
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
         
 # ---- Build leave query (lọc theo dateType)----
-def build_leave_query(filter_type, start_date_str, end_date_str, search, date_type="CheckinDate", username=None):
+def build_leave_query(filter_type, start_date_str, end_date_str, search, date_type="CheckinTime", username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
     conditions = [{"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}]
-    date_field = date_type  # Use date_type parameter directly
     date_filter = {}
 
     if filter_type == "custom" and start_date_str and end_date_str:
         try:
             start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=VN_TZ)
             end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
-            if date_field == "CheckinDate":
-                # For CheckinDate, we need to handle DisplayDate, StartDate/EndDate, or LeaveDate
-                conditions.append({
-                    "$or": [
-                        {"StartDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
-                        {"EndDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
-                        {"LeaveDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
-                        {"DisplayDate": {"$regex": f"(?:(?:{start_dt.strftime('%d/%m/%Y')}|{start_dt.strftime('%Y-%m-%d')}).*(?:{end_dt.strftime('%d/%m/%Y')}|{end_dt.strftime('%Y-%m-%d')}))|(?:{start_dt.strftime('%d/%m/%Y')}|{end_dt.strftime('%d/%m/%Y')}|{start_dt.strftime('%Y-%m-%d')}|{end_dt.strftime('%Y-%m-%d')})"}}
-                    ]
-                })
-            else:
-                date_filter = {date_field: {"$gte": start_dt, "$lte": end_dt}}
+            
+            if date_type == "CheckinTime":
+                date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
+            elif date_type == "ApprovalDate1":
+                date_filter = {"ApprovalDate1": {"$gte": start_dt, "$lte": end_dt}}
+            elif date_type == "ApprovalDate2":
+                date_filter = {"ApprovalDate2": {"$gte": start_dt, "$lte": end_dt}}
         except ValueError:
             pass
     else:
@@ -286,26 +280,25 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, date_ty
         elif filter_type == "năm":
             start_dt = today.replace(month=1, day=1, hour=0, minute=0, second=0)
             end_dt = today.replace(month=12, day=31, hour=23, minute=59, second=59)
-        if filter_type != "tất cả":
-            if date_field == "CheckinDate":
-                conditions.append({
-                    "$or": [
-                        {"StartDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
-                        {"EndDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
-                        {"LeaveDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
-                        {"DisplayDate": {"$regex": f"(?:(?:{start_dt.strftime('%d/%m/%Y')}|{start_dt.strftime('%Y-%m-%d')}).*(?:{end_dt.strftime('%d/%m/%Y')}|{end_dt.strftime('%Y-%m-%d')}))|(?:{start_dt.strftime('%d/%m/%Y')}|{end_dt.strftime('%d/%m/%Y')}|{start_dt.strftime('%Y-%m-%d')}|{end_dt.strftime('%Y-%m-%d')})"}}
-                    ]
-                })
-            else:
-                date_filter = {date_field: {"$gte": start_dt, "$lte": end_dt}}
+        else:
+            return {"$and": conditions}  # Không thêm date filter cho "tất cả"
+        
+        if date_type == "CheckinTime":
+            date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
+        elif date_type == "ApprovalDate1":
+            date_filter = {"ApprovalDate1": {"$gte": start_dt, "$lte": end_dt}}
+        elif date_type == "ApprovalDate2":
+            date_filter = {"ApprovalDate2": {"$gte": start_dt, "$lte": end_dt}}
 
     if date_filter:
         conditions.append(date_filter)
+    
     if search:
         regex = re.compile(search, re.IGNORECASE)
         conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
     if username:
         conditions.append({"EmployeeName": username})
+    
     return {"$and": conditions}
 
 # ---- Build attendance query ----
@@ -824,3 +817,4 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
