@@ -28,8 +28,8 @@ MONGO_URI = os.getenv(
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 
 # ---- Email Config ----
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "your_email@gmail.com")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "your_app_password")
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "banhbaobeo2205@gmail.com")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "vynqvvvmbcigpdvy")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
@@ -788,5 +788,6 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
 
