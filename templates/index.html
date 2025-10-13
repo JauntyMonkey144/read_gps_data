@@ -178,7 +178,6 @@
       <button onclick="applyLeaveFilter('năm')" id="leave-btn-nam">Năm</button>
       <button onclick="applyLeaveFilter('tất cả')" id="leave-btn-tatca">Tất cả</button>
       <select id="leaveDateTypeFilter" onchange="applyLeaveDateTypeFilter()">
-        <option value="CheckinDate">Ngày nghỉ</option>
         <option value="CheckinTime">Ngày tạo đơn</option>
         <option value="ApprovalDate1">Ngày duyệt/từ chối lần đầu</option>
         <option value="ApprovalDate2">Ngày duyệt/từ chối lần cuối</option>
@@ -255,7 +254,7 @@
     let currentLeaveSearch = "";
     let currentLeaveSort = { column: 'CheckinTime', order: 'desc' };
     let leaveStartDate = "", leaveEndDate = "";
-    let leaveDateType = "CheckinDate";
+    let leaveDateType = "CheckinTime";
     let rawLeaveData = [];
     let currentLeavePage = 1;
     let leaveRowsPerPage = 10;
@@ -684,11 +683,11 @@
       currentLeaveSearch = "";
       leaveStartDate = leaveEndDate = "";
       currentLeaveFilter = "hôm nay";
-      leaveDateType = "CheckinDate";
+      leaveDateType = "CheckinTime"; // Thay đổi default
       document.getElementById("leaveSearchBox").value = "";
       document.getElementById("leaveStartDate").value = "";
       document.getElementById("leaveEndDate").value = "";
-      document.getElementById("leaveDateTypeFilter").value = "CheckinDate";
+      document.getElementById("leaveDateTypeFilter").value = "CheckinTime"; // Thay đổi default
       highlightLeaveFilterButton();
       loadLeaveData();
     }
