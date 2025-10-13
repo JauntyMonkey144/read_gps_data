@@ -63,9 +63,7 @@
     #leaveSection { display: none; }
     #leaveTableContainer table th:first-child { min-width: 100px; }
     .export-group { display: flex; gap: 5px; align-items: center; }
-    /* Add horizontal scrolling for tables */
     .table-scroll { overflow-x: auto; }
-    /* Modal Styles */
     .modal {
       display: none;
       position: fixed;
@@ -179,6 +177,12 @@
       <button onclick="applyLeaveFilter('tháng')" id="leave-btn-thang">Tháng</button>
       <button onclick="applyLeaveFilter('năm')" id="leave-btn-nam">Năm</button>
       <button onclick="applyLeaveFilter('tất cả')" id="leave-btn-tatca">Tất cả</button>
+      <select id="leaveDateTypeFilter" onchange="applyLeaveDateTypeFilter()">
+        <option value="CheckinDate">Ngày nghỉ</option>
+        <option value="CheckinTime">Ngày tạo đơn</option>
+        <option value="ApprovalDate1">Ngày duyệt/từ chối lần đầu</option>
+        <option value="ApprovalDate2">Ngày duyệt/từ chối lần cuối</option>
+      </select>
     </div>
     <div class="controls">
       <label><b>Từ ngày:</b></label><input type="date" id="leaveStartDate" />
@@ -244,13 +248,14 @@
     let currentSort = { column: 'CreationTime', order: 'desc' };
     let startDate = "", endDate = "";
     let rawData = [];
-    let displayData = []; // Data sau khi đã tính toán
+    let displayData = [];
     let currentPage = 1;
     let rowsPerPage = 10;
     let currentLeaveFilter = "hôm nay";
     let currentLeaveSearch = "";
     let currentLeaveSort = { column: 'CheckinTime', order: 'desc' };
     let leaveStartDate = "", leaveEndDate = "";
+    let leaveDateType = "CheckinDate";
     let rawLeaveData = [];
     let currentLeavePage = 1;
     let leaveRowsPerPage = 10;
@@ -340,8 +345,6 @@
     }
     document.getElementById("loginBtn").onclick = login;
     document.getElementById("logoutBtn").onclick = logout;
-   
-    // --- NEW: Function to calculate work hours ---
     function processDataWithHours(data) {
         if (!data || data.length === 0) return [];
         function parseTime(timeStr) {
@@ -398,7 +401,6 @@
                         dailySeconds = (lastCheckout - firstCheckin) / 1000;
                     }
                     monthlyTotalSeconds += dailySeconds;
-                   
                     const dailyH = Math.floor(dailySeconds / 3600);
                     const dailyM = Math.floor((dailySeconds % 3600) / 60);
                     const monthlyH = Math.floor(monthlyTotalSeconds / 3600);
@@ -437,14 +439,14 @@
       const data = await res.json();
       if (!res.ok) return showMessage(data.error || "❌ Lỗi tải dữ liệu", "error");
       rawData = data;
-      displayData = processDataWithHours(rawData); // Process data
+      displayData = processDataWithHours(rawData);
       currentPage = 1;
       renderTable();
     }
     function renderTable() {
       const tbody = document.getElementById("dataBody");
       tbody.innerHTML = "";
-      let data = [...displayData]; // Use processed data
+      let data = [...displayData];
       if (currentSort.column && currentSort.order) {
         data.sort((a,b) => {
             let col = currentSort.column;
@@ -492,7 +494,7 @@
         document.getElementById("loginModal").style.display = "flex";
         return showMessage("🚫 Chưa đăng nhập!", "error");
       }
-      let url = `/api/leaves?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}`;
+      let url = `/api/leaves?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}&dateType=${encodeURIComponent(leaveDateType)}`;
       if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
       if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
       const res = await fetch(url);
@@ -591,6 +593,10 @@
       document.getElementById("leaveEndDate").value = "";
       loadLeaveData();
     }
+    function applyLeaveDateTypeFilter() {
+      leaveDateType = document.getElementById("leaveDateTypeFilter").value;
+      loadLeaveData();
+    }
     function applyDateRange() {
       startDate = document.getElementById("startDate").value;
       endDate = document.getElementById("endDate").value;
@@ -634,7 +640,7 @@
         if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
         if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
       } else if (exportType === "leave") {
-        url = `/api/export-leaves-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}`;
+        url = `/api/export-leaves-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}&dateType=${encodeURIComponent(leaveDateType)}`;
         if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
         if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
       } else if (exportType === "combined") {
@@ -678,9 +684,11 @@
       currentLeaveSearch = "";
       leaveStartDate = leaveEndDate = "";
       currentLeaveFilter = "hôm nay";
+      leaveDateType = "CheckinDate";
       document.getElementById("leaveSearchBox").value = "";
       document.getElementById("leaveStartDate").value = "";
       document.getElementById("leaveEndDate").value = "";
+      document.getElementById("leaveDateTypeFilter").value = "CheckinDate";
       highlightLeaveFilterButton();
       loadLeaveData();
     }
