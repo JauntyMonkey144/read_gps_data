@@ -28,8 +28,8 @@ MONGO_URI = os.getenv(
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 
 # ---- Email Config ----
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "banhbaobeo2205@gmail.com")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "vynqvvvmbcigpdvy")
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "your_email@gmail.com")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "your_app_password")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
@@ -41,7 +41,7 @@ db = client[DB_NAME]
 admins = db["admins"]
 users = db["users"]
 collection = db["alt_checkins"]
-reset_tokens = db["reset_tokens"]  # New collection for password reset tokens
+reset_tokens = db["reset_tokens"]  # Collection for password reset tokens
 
 # ---- Trang chủ (đăng nhập chính) ----
 @app.route("/")
@@ -76,15 +76,23 @@ def login():
 def request_reset_password():
     email = request.form.get("email")
     if not email:
-        return jsonify({"success": False, "message": "❌ Vui lòng nhập email"}), 400
+        return """
+        <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+        <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+        </head><body><div class="container"><p>❌ Vui lòng nhập email</p>
+        <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
 
     account = admins.find_one({"email": email}) or users.find_one({"email": email})
     if not account:
-        return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+        return """
+        <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+        <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+        </head><body><div class="container"><p>🚫 Email không tồn tại!</p>
+        <a href="/forgot-password">Thử lại</a></div></body></html>""", 404
 
     # Generate reset token
     token = secrets.token_urlsafe(32)
-    expiration = datetime.now(VN_TZ) + timedelta(hours=1)  # Token valid for 1 hour
+    expiration = datetime.now(VN_TZ) + timedelta(days=1)  # Token valid for 1 day
     reset_tokens.insert_one({
         "email": email,
         "token": token,
@@ -105,7 +113,7 @@ def request_reset_password():
         Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết sau để đặt lại mật khẩu của bạn:
         {reset_link}
 
-        Liên kết này sẽ hết hạn sau 1 giờ. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
+        Liên kết này sẽ hết hạn sau 1 ngày. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
 
         Trân trọng,
         Đội ngũ hỗ trợ
@@ -117,10 +125,18 @@ def request_reset_password():
             server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
             server.send_message(msg)
 
-        return jsonify({"success": True, "message": "✅ Email đặt lại mật khẩu đã được gửi!"})
+        return """
+        <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Gửi liên kết thành công</title>
+        <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
+        </head><body><div class="container"><div class="success">✅ Email chứa liên kết đặt lại mật khẩu đã được gửi thành công! Vui lòng kiểm tra hộp thư của bạn.</div>
+        <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
     except Exception as e:
         print(f"❌ Lỗi gửi email: {e}")
-        return jsonify({"success": False, "message": "❌ Lỗi khi gửi email, vui lòng thử lại sau"}), 500
+        return """
+        <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+        <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+        </head><body><div class="container"><p>❌ Lỗi khi gửi email, vui lòng thử lại sau</p>
+        <a href="/forgot-password">Thử lại</a></div></body></html>""", 500
 
 # ---- Trang reset mật khẩu với token ----
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
@@ -145,19 +161,35 @@ def reset_password(token):
     if request.method == "POST":
         token_data = reset_tokens.find_one({"token": token})
         if not token_data or token_data["expiration"] < datetime.now(VN_TZ):
-            return jsonify({"success": False, "message": "❌ Liên kết không hợp lệ hoặc đã hết hạn"}), 400
+            return """
+            <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+            <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+            </head><body><div class="container"><p>❌ Liên kết không hợp lệ hoặc đã hết hạn</p>
+            <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
 
         new_password = request.form.get("new_password")
         confirm_password = request.form.get("confirm_password")
         if not new_password or not confirm_password:
-            return jsonify({"success": False, "message": "❌ Vui lòng điền đầy đủ thông tin"}), 400
+            return """
+            <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+            <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+            </head><body><div class="container"><p>❌ Vui lòng điền đầy đủ thông tin</p>
+            <a href="/reset-password/{}">Thử lại</a></div></body></html>""".format(token), 400
         if new_password != confirm_password:
-            return jsonify({"success": False, "message": "❌ Mật khẩu xác nhận không khớp"}), 400
+            return """
+            <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+            <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+            </head><body><div class="container"><p>❌ Mật khẩu xác nhận không khớp</p>
+            <a href="/reset-password/{}">Thử lại</a></div></body></html>""".format(token), 400
 
         email = token_data["email"]
         account = admins.find_one({"email": email}) or users.find_one({"email": email})
         if not account:
-            return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+            return """
+            <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+            <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+            </head><body><div class="container"><p>🚫 Email không tồn tại!</p>
+            <a href="/forgot-password">Thử lại</a></div></body></html>""", 404
 
         hashed_pw = generate_password_hash(new_password)
         collection_to_update = admins if "username" in account else users
@@ -167,7 +199,7 @@ def reset_password(token):
         return """
         <!DOCTYPE html><html lang="vi"><head><title>Thay đổi mật khẩu thành công</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
-        </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công</div>
+        </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công! Bạn có thể đăng nhập với mật khẩu mới.</div>
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
 
 # ---- Reset mật khẩu (giữ nguyên chức năng cũ) ----
@@ -185,19 +217,31 @@ def forgot_password():
         new_password = request.form.get("new_password")
         confirm_password = request.form.get("confirm_password")
         if not all([email, new_password, confirm_password]):
-            return jsonify({"success": False, "message": "❌ Vui lòng điền đầy đủ thông tin"}), 400
+            return """
+            <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+            <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+            </head><body><div class="container"><p>❌ Vui lòng điền đầy đủ thông tin</p>
+            <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
         if new_password != confirm_password:
-            return jsonify({"success": False, "message": "❌ Mật khẩu xác nhận không khớp"}), 400
+            return """
+            <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+            <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+            </head><body><div class="container"><p>❌ Mật khẩu xác nhận không khớp</p>
+            <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
         account = admins.find_one({"email": email}) or users.find_one({"email": email})
         if not account:
-            return jsonify({"success": False, "message": "🚫 Email không tồn tại!"}), 404
+            return """
+            <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
+            <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+            </head><body><div class="container"><p>🚫 Email không tồn tại!</p>
+            <a href="/forgot-password">Thử lại</a></div></body></html>""", 404
         hashed_pw = generate_password_hash(new_password)
         collection_to_update = admins if "username" in account else users
         collection_to_update.update_one({"email": email}, {"$set": {"password": hashed_pw}})
         return """
         <!DOCTYPE html><html lang="vi"><head><title>Thay đổi mật khẩu thành công</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
-        </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công</div>
+        </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công! Bạn có thể đăng nhập với mật khẩu mới.</div>
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
         
 # ---- Build attendance query ----
@@ -744,4 +788,5 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
