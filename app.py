@@ -28,8 +28,8 @@ MONGO_URI = os.getenv(
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 
 # ---- Email Config ----
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "banhbaobeo2205@gmail.com")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "vynqvvvmbcigpdvy")
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "your_email@gmail.com")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "your_app_password")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 
@@ -92,7 +92,8 @@ def request_reset_password():
 
     # Generate reset token
     token = secrets.token_urlsafe(32)
-    expiration = datetime.now(VN_TZ) + timedelta(days=1)  # Token valid for 1 day
+    # Store expiration as UTC (offset-naive) to match MongoDB's default behavior
+    expiration = datetime.now(VN_TZ).astimezone(timezone.utc).replace(tzinfo=None) + timedelta(days=1)
     reset_tokens.insert_one({
         "email": email,
         "token": token,
@@ -143,7 +144,8 @@ def request_reset_password():
 def reset_password(token):
     if request.method == "GET":
         token_data = reset_tokens.find_one({"token": token})
-        if not token_data or token_data["expiration"] < datetime.now(VN_TZ):
+        # Compare expiration as offset-naive (UTC) datetime
+        if not token_data or token_data["expiration"] < datetime.now(timezone.utc).replace(tzinfo=None):
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
@@ -160,7 +162,8 @@ def reset_password(token):
 
     if request.method == "POST":
         token_data = reset_tokens.find_one({"token": token})
-        if not token_data or token_data["expiration"] < datetime.now(VN_TZ):
+        # Compare expiration as offset-naive (UTC) datetime
+        if not token_data or token_data["expiration"] < datetime.now(timezone.utc).replace(tzinfo=None):
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
@@ -788,6 +791,7 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
 
 
