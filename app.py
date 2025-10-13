@@ -247,6 +247,67 @@ def forgot_password():
         </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công! Bạn có thể đăng nhập với mật khẩu mới.</div>
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
         
+# ---- Build leave query (lọc theo dateType)----
+def build_leave_query(filter_type, start_date_str, end_date_str, search, date_type="CheckinDate", username=None):
+    today = datetime.now(VN_TZ)
+    regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
+    conditions = [{"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}]
+    date_field = date_type  # Use date_type parameter directly
+    date_filter = {}
+
+    if filter_type == "custom" and start_date_str and end_date_str:
+        try:
+            start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=VN_TZ)
+            end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
+            if date_field == "CheckinDate":
+                # For CheckinDate, we need to handle DisplayDate, StartDate/EndDate, or LeaveDate
+                conditions.append({
+                    "$or": [
+                        {"StartDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
+                        {"EndDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
+                        {"LeaveDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
+                        {"DisplayDate": {"$regex": f"(?:(?:{start_dt.strftime('%d/%m/%Y')}|{start_dt.strftime('%Y-%m-%d')}).*(?:{end_dt.strftime('%d/%m/%Y')}|{end_dt.strftime('%Y-%m-%d')}))|(?:{start_dt.strftime('%d/%m/%Y')}|{end_dt.strftime('%d/%m/%Y')}|{start_dt.strftime('%Y-%m-%d')}|{end_dt.strftime('%Y-%m-%d')})"}}
+                    ]
+                })
+            else:
+                date_filter = {date_field: {"$gte": start_dt, "$lte": end_dt}}
+        except ValueError:
+            pass
+    else:
+        if filter_type == "hôm nay":
+            start_dt, end_dt = today.replace(hour=0, minute=0, second=0), today.replace(hour=23, minute=59, second=59)
+        elif filter_type == "tuần":
+            start_dt = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0)
+            end_dt = (start_dt + timedelta(days=6)).replace(hour=23, minute=59, second=59)
+        elif filter_type == "tháng":
+            start_dt = today.replace(day=1, hour=0, minute=0, second=0)
+            _, last_day = calendar.monthrange(today.year, today.month)
+            end_dt = today.replace(day=last_day, hour=23, minute=59, second=59)
+        elif filter_type == "năm":
+            start_dt = today.replace(month=1, day=1, hour=0, minute=0, second=0)
+            end_dt = today.replace(month=12, day=31, hour=23, minute=59, second=59)
+        if filter_type != "tất cả":
+            if date_field == "CheckinDate":
+                conditions.append({
+                    "$or": [
+                        {"StartDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
+                        {"EndDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
+                        {"LeaveDate": {"$gte": start_dt.strftime("%Y-%m-%d"), "$lte": end_dt.strftime("%Y-%m-%d")}},
+                        {"DisplayDate": {"$regex": f"(?:(?:{start_dt.strftime('%d/%m/%Y')}|{start_dt.strftime('%Y-%m-%d')}).*(?:{end_dt.strftime('%d/%m/%Y')}|{end_dt.strftime('%Y-%m-%d')}))|(?:{start_dt.strftime('%d/%m/%Y')}|{end_dt.strftime('%d/%m/%Y')}|{start_dt.strftime('%Y-%m-%d')}|{end_dt.strftime('%Y-%m-%d')})"}}
+                    ]
+                })
+            else:
+                date_filter = {date_field: {"$gte": start_dt, "$lte": end_dt}}
+
+    if date_filter:
+        conditions.append(date_filter)
+    if search:
+        regex = re.compile(search, re.IGNORECASE)
+        conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
+    if username:
+        conditions.append({"EmployeeName": username})
+    return {"$and": conditions}
+
 # ---- Build attendance query ----
 def build_attendance_query(filter_type, start_date, end_date, search, username=None):
     today = datetime.now(VN_TZ)
@@ -266,40 +327,6 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
         date_filter = {"CheckinDate": {"$regex": f"/{today.month:02d}/{today.year}$"}}
     elif filter_type == "năm":
         date_filter = {"CheckinDate": {"$regex": f"/{today.year}$"}}
-    if date_filter: conditions.append(date_filter)
-    if search:
-        regex = re.compile(search, re.IGNORECASE)
-        conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
-    if username:
-        conditions.append({"EmployeeName": username})
-    return {"$and": conditions}
-
-# ---- Build leave query (lọc theo CreationTime)----
-def build_leave_query(filter_type, start_date_str, end_date_str, search, username=None):
-    today = datetime.now(VN_TZ)
-    regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
-    conditions = [{"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}]
-    date_filter = {}
-    if filter_type == "custom" and start_date_str and end_date_str:
-        start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=VN_TZ)
-        end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
-        date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
-    else:
-        if filter_type == "hôm nay":
-            start_dt, end_dt = today.replace(hour=0, minute=0, second=0), today.replace(hour=23, minute=59, second=59)
-        elif filter_type == "tuần":
-            start_dt = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0)
-            end_dt = (start_dt + timedelta(days=6)).replace(hour=23, minute=59, second=59)
-        elif filter_type == "tháng":
-            start_dt = today.replace(day=1, hour=0, minute=0, second=0)
-            _, last_day = calendar.monthrange(today.year, today.month)
-            end_dt = today.replace(day=last_day, hour=23, minute=59, second=59)
-        elif filter_type == "năm":
-            start_dt = today.replace(month=1, day=1, hour=0, minute=0, second=0)
-            end_dt = today.replace(month=12, day=31, hour=23, minute=59, second=59)
-        if filter_type != "tất cả":
-            date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
-   
     if date_filter: conditions.append(date_filter)
     if search:
         regex = re.compile(search, re.IGNORECASE)
@@ -467,8 +494,11 @@ def get_leaves():
         username = None if admin else user["username"]
         query = build_leave_query(
             request.args.get("filter", "tất cả").lower(),
-            request.args.get("startDate"), request.args.get("endDate"),
-            request.args.get("search", "").strip(), username=username
+            request.args.get("startDate"),
+            request.args.get("endDate"),
+            request.args.get("search", "").strip(),
+            request.args.get("dateType", "CheckinDate"),
+            username=username
         )
         data = list(collection.find(query, {"_id": 0}))
         if not data:
@@ -603,7 +633,9 @@ def export_leaves_to_excel():
         query = build_leave_query(
             request.args.get("filter", "tất cả").lower(),
             request.args.get("startDate"), request.args.get("endDate"),
-            request.args.get("search", "").strip(), username=username
+            request.args.get("search", "").strip(),
+            request.args.get("dateType", "CheckinDate"),
+            username=username
         )
         data = list(collection.find(query, {"_id": 0}))
         template_path = "templates/Copy of Form nghỉ phép.xlsx"
@@ -612,7 +644,7 @@ def export_leaves_to_excel():
         # Cập nhật tiêu đề cột theo thứ tự yêu cầu
         ws['A1'], ws['B1'], ws['C1'], ws['D1'], ws['E1'], ws['F1'], ws['G1'], ws['H1'], ws['I1'], ws['J1'], ws['K1'] = (
             "Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
-            "Ngày Duyệt/Từ chối 1", "Trạng thái 1", "Ngày Duyệt/Từ chối 2", "Trạng thái 2", "Note"
+            "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
         )
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
@@ -676,8 +708,9 @@ def export_combined_to_excel():
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
         search = request.args.get("search", "").strip()
+        date_type = request.args.get("dateType", "CheckinDate")
         attendance_query = build_attendance_query(filter_type, start_date, end_date, search, username=username)
-        leave_query = build_leave_query(filter_type, start_date, end_date, search, username=username)
+        leave_query = build_leave_query(filter_type, start_date, end_date, search, date_type, username=username)
         attendance_data = list(collection.find(attendance_query, {"_id": 0}))
         leave_data = list(collection.find(leave_query, {"_id": 0}))
        
@@ -740,7 +773,7 @@ def export_combined_to_excel():
         ws_leaves = wb["Nghỉ phép"]
         ws_leaves['A1'], ws_leaves['B1'], ws_leaves['C1'], ws_leaves['D1'], ws_leaves['E1'], ws_leaves['F1'], ws_leaves['G1'], ws_leaves['H1'], ws_leaves['I1'], ws_leaves['J1'], ws_leaves['K1'] = (
             "Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
-            "Ngày Duyệt/Từ chối 1", "Trạng thái 1", "Ngày Duyệt/Từ chối 2", "Trạng thái 2", "Note"
+            "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
         )
        
         for i, rec in enumerate(leave_data, start=2):
@@ -791,8 +824,3 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-
-
-
-
-
