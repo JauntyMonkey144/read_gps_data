@@ -248,6 +248,7 @@ def forgot_password():
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
         
 # ---- Build leave query (lọc theo dateType)----
+# ---- Build leave query (lọc theo dateType)----
 def build_leave_query(filter_type, start_date_str, end_date_str, search, date_type="CheckinTime", username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
@@ -265,6 +266,19 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, date_ty
                 date_filter = {"ApprovalDate1": {"$gte": start_dt, "$lte": end_dt}}
             elif date_type == "ApprovalDate2":
                 date_filter = {"ApprovalDate2": {"$gte": start_dt, "$lte": end_dt}}
+            # <<< THÊM MỚI >>> Bắt đầu logic cho lọc theo Ngày nghỉ
+            elif date_type == "LeaveDate":
+                start_str = start_dt.strftime("%Y-%m-%d")
+                end_str = end_dt.strftime("%Y-%m-%d")
+                # Điều kiện cho đơn nghỉ nhiều ngày có khoảng thời gian giao với bộ lọc
+                cond1 = {"$and": [
+                    {"StartDate": {"$exists": True, "$lte": end_str}},
+                    {"EndDate": {"$exists": True, "$gte": start_str}}
+                ]}
+                # Điều kiện cho đơn nghỉ một ngày nằm trong bộ lọc
+                cond2 = {"LeaveDate": {"$gte": start_str, "$lte": end_str}}
+                date_filter = {"$or": [cond1, cond2]}
+            # <<< THÊM MỚI >>> Kết thúc logic
         except ValueError:
             pass
     else:
@@ -289,6 +303,19 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, date_ty
             date_filter = {"ApprovalDate1": {"$gte": start_dt, "$lte": end_dt}}
         elif date_type == "ApprovalDate2":
             date_filter = {"ApprovalDate2": {"$gte": start_dt, "$lte": end_dt}}
+        # <<< THÊM MỚI >>> Bắt đầu logic cho lọc theo Ngày nghỉ (cho các bộ lọc đặt sẵn)
+        elif date_type == "LeaveDate":
+            start_str = start_dt.strftime("%Y-%m-%d")
+            end_str = end_dt.strftime("%Y-%m-%d")
+            # Điều kiện cho đơn nghỉ nhiều ngày có khoảng thời gian giao với bộ lọc
+            cond1 = {"$and": [
+                {"StartDate": {"$exists": True, "$lte": end_str}},
+                {"EndDate": {"$exists": True, "$gte": start_str}}
+            ]}
+            # Điều kiện cho đơn nghỉ một ngày nằm trong bộ lọc
+            cond2 = {"LeaveDate": {"$gte": start_str, "$lte": end_str}}
+            date_filter = {"$or": [cond1, cond2]}
+        # <<< THÊM MỚI >>> Kết thúc logic
 
     if date_filter:
         conditions.append(date_filter)
@@ -833,3 +860,4 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
