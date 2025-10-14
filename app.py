@@ -13,7 +13,7 @@ import secrets
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-
+from email.utils import formataddr
 app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
 
@@ -103,7 +103,7 @@ def request_reset_password():
     # Send email
     try:
         msg = MIMEMultipart()
-        msg['From'] = EMAIL_ADDRESS
+        msg['From'] = formataddr(("Sun Automation System", EMAIL_ADDRESS))
         msg['To'] = email
         msg['Subject'] = "Yêu cầu đặt lại mật khẩu"
         
@@ -817,4 +817,5 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
