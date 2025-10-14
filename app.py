@@ -77,10 +77,7 @@ def request_reset_password():
     email = request.form.get("email")
     if not email:
         return """
-        <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
-        <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-        </head><body><div class="container"><p>Vui lòng nhập email</p>
-        <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
+        <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title and so on... (giữ nguyên phần HTML lỗi)""", 400
 
     account = admins.find_one({"email": email}) or users.find_one({"email": email})
     if not account:
@@ -102,24 +99,41 @@ def request_reset_password():
 
     # Send email
     try:
-        msg = MIMEMultipart()
+        msg = MIMEMultipart("alternative")  # Sử dụng alternative để có plain và html
         msg['From'] = formataddr(("Sun Automation System", EMAIL_ADDRESS))
         msg['To'] = email
         msg['Subject'] = "Yêu cầu đặt lại mật khẩu"
         
         reset_link = url_for("reset_password", token=token, _external=True)
-        body = f"""
-        Xin chào,
-
-        Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết sau để đặt lại mật khẩu của bạn:
-        {reset_link}
-
-        Liên kết này sẽ hết hạn sau 1 ngày. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
-
-        Trân trọng,
-        Đội ngũ hỗ trợ
+        
+        # Plain text fallback
+        plain_body = f"""
+            Xin chào,
+            
+            Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết sau để đặt lại mật khẩu của bạn:
+            {reset_link}
+            
+            Liên kết này sẽ hết hạn sau 1 ngày. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
+            
+            Trân trọng,
+            Đội ngũ hỗ trợ
         """
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        
+        # HTML body với <a>
+        html_body = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; color: #333;">
+            <p>Xin chào,</p>
+            <p>Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết sau để đặt lại mật khẩu của bạn:</p>
+            <p><a href="{reset_link}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Đặt lại mật khẩu</a></p>
+            <p>Liên kết này sẽ hết hạn sau 1 ngày. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
+            <p>Trân trọng,<br>Đội ngũ hỗ trợ</p>
+            </body>
+            </html>
+        """
+        
+        msg.attach(MIMEText(plain_body, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
 
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls()
@@ -138,7 +152,6 @@ def request_reset_password():
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
         </head><body><div class="container"><p>Lỗi khi gửi email, vui lòng thử lại sau</p>
         <a href="/forgot-password">Thử lại</a></div></body></html>""", 500
-
 # ---- Trang reset mật khẩu với token ----
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
@@ -820,3 +833,4 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
