@@ -256,17 +256,16 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, date_ty
 
     start_dt, end_dt = None, None
 
-    # Xác định khoảng thời gian start_dt và end_dt dựa trên filter_type
+    # Xác định khoảng thời gian start_dt và end_dt
     if filter_type == "custom" and start_date_str and end_date_str:
         try:
             start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=VN_TZ)
             end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
         except ValueError:
-            pass
+            pass # Bỏ qua nếu định dạng ngày không hợp lệ
     elif filter_type != "tất cả":
         if filter_type == "hôm nay":
-            start_dt = today.replace(hour=0, minute=0, second=0)
-            end_dt = today.replace(hour=23, minute=59, second=59)
+            start_dt, end_dt = today.replace(hour=0, minute=0, second=0), today.replace(hour=23, minute=59, second=59)
         elif filter_type == "tuần":
             start_dt = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0)
             end_dt = (start_dt + timedelta(days=6)).replace(hour=23, minute=59, second=59)
@@ -278,43 +277,24 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, date_ty
             start_dt = today.replace(month=1, day=1, hour=0, minute=0, second=0)
             end_dt = today.replace(month=12, day=31, hour=23, minute=59, second=59)
 
-    # Chỉ xây dựng date_filter nếu có khoảng thời gian hợp lệ
+    # Xây dựng bộ lọc ngày tháng nếu có khoảng thời gian hợp lệ
     if start_dt and end_dt:
+        # Quan trọng: Không lọc theo LeaveDate ở đây nữa, sẽ xử lý sau
         if date_type == "CheckinTime":
             date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
         elif date_type == "ApprovalDate1":
             date_filter = {"ApprovalDate1": {"$gte": start_dt, "$lte": end_dt}}
         elif date_type == "ApprovalDate2":
             date_filter = {"ApprovalDate2": {"$gte": start_dt, "$lte": end_dt}}
-        
-        # <<< PHẦN SỬA LỖI BẮT ĐẦU >>>
-        # Sử dụng trực tiếp đối tượng datetime (start_dt, end_dt) để truy vấn
-        # thay vì chuyển đổi chúng thành chuỗi ký tự.
-        elif date_type == "LeaveDate":
-            # Điều kiện cho đơn nghỉ nhiều ngày giao với khoảng thời gian lọc
-            # Logic: (StartDate <= LọcKếtThúc) VÀ (EndDate >= LọcBắtĐầu)
-            cond1 = {"$and": [
-                {"StartDate": {"$exists": True, "$lte": end_dt}},
-                {"EndDate": {"$exists": True, "$gte": start_dt}}
-            ]}
-            # Điều kiện cho đơn nghỉ một ngày nằm trong khoảng thời gian lọc
-            cond2 = {"LeaveDate": {"$gte": start_dt, "$lte": end_dt}}
-            date_filter = {"$or": [cond1, cond2]}
-        # <<< PHẦN SỬA LỖI KẾT THÚC >>>
 
     if date_filter:
         conditions.append(date_filter)
-    
+
     if search:
         regex = re.compile(search, re.IGNORECASE)
         conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
     if username:
         conditions.append({"EmployeeName": username})
-    
-    # Chỉ trả về mảng rỗng nếu không có điều kiện nào ngoài điều kiện cơ bản
-    if len(conditions) == 1 and filter_type not in ["tất cả", "custom"] and not search and not date_filter:
-         # Tránh trả về tất cả khi không có filter hợp lệ
-        return {"$and": [{"_id": None}]} # Truy vấn không bao giờ trả về kết quả
 
     return {"$and": conditions}
 
@@ -517,57 +497,100 @@ def get_leaves():
         admin = admins.find_one({"email": email})
         user = users.find_one({"email": email})
         if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        
         username = None if admin else user["username"]
-        query = build_leave_query(
-            request.args.get("filter", "tất cả").lower(),
-            request.args.get("startDate"),
-            request.args.get("endDate"),
-            request.args.get("search", "").strip(),
-            request.args.get("dateType", "CheckinDate"),
-            username=username
-        )
+        date_type = request.args.get("dateType", "CheckinDate")
+        filter_type = request.args.get("filter", "tất cả").lower()
+        start_date_str = request.args.get("startDate")
+        end_date_str = request.args.get("endDate")
+        search = request.args.get("search", "").strip()
+
+        query = build_leave_query(filter_type, start_date_str, end_date_str, search, date_type, username=username)
         data = list(collection.find(query, {"_id": 0}))
+
+        # <<< PHẦN SỬA LỖI BẮT ĐẦU >>>
+        # Xử lý lọc theo Ngày nghỉ (LeaveDate) sau khi đã lấy dữ liệu từ DB
+        if date_type == "LeaveDate" and filter_type != "tất cả":
+            filter_start_dt, filter_end_dt = None, None
+            today = datetime.now(VN_TZ)
+
+            # Xác định khoảng thời gian lọc
+            if filter_type == "custom" and start_date_str and end_date_str:
+                try:
+                    filter_start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                    filter_end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                except (ValueError, TypeError):
+                    pass
+            else:
+                if filter_type == "hôm nay":
+                    filter_start_dt = filter_end_dt = today.date()
+                elif filter_type == "tuần":
+                    filter_start_dt = (today - timedelta(days=today.weekday())).date()
+                    filter_end_dt = (filter_start_dt + timedelta(days=6))
+                elif filter_type == "tháng":
+                    filter_start_dt = today.replace(day=1).date()
+                    _, last_day = calendar.monthrange(today.year, today.month)
+                    filter_end_dt = today.replace(day=last_day).date()
+                elif filter_type == "năm":
+                    filter_start_dt = today.replace(month=1, day=1).date()
+                    filter_end_dt = today.replace(month=12, day=31).date()
+
+            # Nếu có khoảng thời gian lọc hợp lệ, tiến hành lọc dữ liệu
+            if filter_start_dt and filter_end_dt:
+                filtered_data = []
+                for item in data:
+                    display_date = item.get("DisplayDate", "")
+                    if not display_date: continue
+
+                    record_start_dt, record_end_dt = None, None
+                    try:
+                        if "đến" in display_date: # Dạng "Từ YYYY-MM-DD đến YYYY-MM-DD"
+                            dates = re.findall(r"\d{4}-\d{2}-\d{2}", display_date)
+                            if len(dates) == 2:
+                                record_start_dt = datetime.strptime(dates[0], "%Y-%m-%d").date()
+                                record_end_dt = datetime.strptime(dates[1], "%Y-%m-%d").date()
+                        else: # Dạng "YYYY-MM-DD ..."
+                            date_part = display_date.split()[0]
+                            record_start_dt = record_end_dt = datetime.strptime(date_part, "%Y-%m-%d").date()
+                        
+                        # Kiểm tra sự giao thoa giữa khoảng thời gian của bản ghi và bộ lọc
+                        if record_start_dt and record_end_dt:
+                            if record_start_dt <= filter_end_dt and record_end_dt >= filter_start_dt:
+                                filtered_data.append(item)
+                    except (ValueError, TypeError, IndexError):
+                        continue # Bỏ qua nếu không thể phân tích ngày tháng
+                data = filtered_data # Ghi đè dữ liệu gốc bằng dữ liệu đã lọc
+        # <<< PHẦN SỬA LỖI KẾT THÚC >>>
+
         if not data:
-            return jsonify([])  # Trả về mảng rỗng nếu không có dữ liệu
+            return jsonify([])
+
+        # Định dạng dữ liệu trước khi trả về (giữ nguyên)
         for item in data:
             item["ApprovalDate1"] = get_formatted_approval_date(item.get("ApprovalDate1"))
             item["ApprovalDate2"] = get_formatted_approval_date(item.get("ApprovalDate2"))
             item["Status1"] = item.get("Status1", "")
             item["Status2"] = item.get("Status2", "")
             item["Note"] = item.get("LeaveNote", "")
-            # Sử dụng CreationTime thay vì Timestamp
             if item.get('CreationTime'):
                 try:
-                    if isinstance(item['CreationTime'], str):
-                        timestamp = datetime.strptime(item['CreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
-                    elif isinstance(item['CreationTime'], datetime):
-                        timestamp = item['CreationTime']
-                    else:
-                        timestamp = None
-                    item['CheckinTime'] = timestamp.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S') if timestamp else ""
+                    timestamp = item['CreationTime'] if isinstance(item['CreationTime'], datetime) else datetime.fromisoformat(item['CreationTime'].replace('Z', '+00:00'))
+                    item['CheckinTime'] = timestamp.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
                 except (ValueError, TypeError):
                     item['CheckinTime'] = ""
             else:
                 item['CheckinTime'] = ""
-            # Ưu tiên sử dụng DisplayDate, nếu không có thì tính từ StartDate/EndDate hoặc LeaveDate
-            if item.get('DisplayDate'):
-                item['CheckinDate'] = item['DisplayDate']
-            elif item.get('StartDate') and item.get('EndDate'):
-                start = datetime.strptime(item['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
-                end = datetime.strptime(item['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
-                item['CheckinDate'] = f"Từ {start} đến {end}"
-            elif item.get('LeaveDate'):
-                leave_date = datetime.strptime(item['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
-                item['CheckinDate'] = f"{leave_date} ({item.get('Session', '')})"
-            else:
-                item['CheckinDate'] = ""
-            # Ưu tiên Reason cho Lý do, nếu không có thì lấy Tasks
+            
+            item['CheckinDate'] = item.get('DisplayDate', "") # Ưu tiên DisplayDate cho cột Ngày nghỉ
             tasks = item.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
             item['Tasks'] = item.get("Reason") or tasks_str
+
         return jsonify(data)
     except Exception as e:
+        import traceback
         print(f"❌ Lỗi tại get_leaves: {e}")
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 # ---- API xuất Excel Chấm công ----
@@ -850,5 +873,6 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
 
