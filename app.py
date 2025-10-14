@@ -89,6 +89,7 @@ def request_reset_password():
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
         </head><body><div class="container"><p>Email không tồn tại!</p>
         <a href="/forgot-password">Thử lại</a></div></body></html>""", 404
+
     # Generate reset token
     token = secrets.token_urlsafe(32)
     # Store expiration as UTC (offset-naive) to match MongoDB's default behavior
@@ -98,12 +99,14 @@ def request_reset_password():
         "token": token,
         "expiration": expiration
     })
+
     # Send email
     try:
         msg = MIMEMultipart()
         msg['From'] = formataddr(("Sun Automation System", EMAIL_ADDRESS))
         msg['To'] = email
-        msg['Subject'] = "Yêu cầu đặt lại mật khẩu"    
+        msg['Subject'] = "Yêu cầu đặt lại mật khẩu"
+        
         reset_link = url_for("reset_password", token=token, _external=True)
         body = f"""
         Xin chào,
@@ -163,7 +166,7 @@ def reset_password(token):
         if not token_data or token_data["expiration"] < datetime.now(timezone.utc).replace(tzinfo=None):
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
-            <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+        <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
             </head><body><div class="container"><p>Liên kết không hợp lệ hoặc đã hết hạn</p>
             <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
 
@@ -354,7 +357,7 @@ def calculate_leave_days_from_record(record):
     if 'StartDate' in record and 'EndDate' in record:
         try:
             start_date = datetime.strptime(record['StartDate'], "%Y-%m-%d")
-            end_date = datetime.strptime(record['EndDate'], '%Y-%m-%d")
+            end_date = datetime.strptime(record['EndDate'], "%Y-%m-%d")
             days = 0.0
             current = start_date
             while current <= end_date:
