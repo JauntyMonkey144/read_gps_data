@@ -727,17 +727,25 @@ def export_leaves_to_excel():
         try:
             export_dt = datetime.strptime(month_str, "%Y-%m")
             export_year, export_month = export_dt.year, export_dt.month
+            start_dt = export_dt.replace(day=1, hour=0, minute=0, second=0, tzinfo=VN_TZ)
+            _, last_day = calendar.monthrange(export_year, export_month)
+            end_dt = export_dt.replace(day=last_day, hour=23, minute=59, second=59, tzinfo=VN_TZ)
         except ValueError:
             return jsonify({"error": "❌ Định dạng tháng không hợp lệ. Vui lòng sử dụng YYYY-MM."}), 400
 
-        # Build a broad query to get all leave data, filtering will happen in Python
-        query = build_leave_query(
-            "tất cả", # Fetch all records regardless of date filter
-            None, None,
-            request.args.get("search", "").strip(),
-            "CheckinDate", # This parameter doesn't have a significant effect with "tất cả"
-            username=username
-        )
+        # Build a query filtered by CreationTime for the selected month
+        regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
+        conditions = [
+            {"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]},
+            {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
+        ]
+        search = request.args.get("search", "").strip()
+        if search:
+            regex = re.compile(search, re.IGNORECASE)
+            conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
+        if username:
+            conditions.append({"EmployeeName": username})
+        query = {"$and": conditions}
         all_leaves_data = list(collection.find(query, {"_id": 0}))
 
         template_path = "templates/Copy of Form nghỉ phép.xlsx"
@@ -838,6 +846,8 @@ def export_combined_to_excel():
             start_date = export_dt.strftime("%Y-%m-%d")
             _, last_day = calendar.monthrange(export_year, export_month)
             end_date = export_dt.replace(day=last_day).strftime("%Y-%m-%d")
+            leave_start_dt = export_dt.replace(day=1, hour=0, minute=0, second=0, tzinfo=VN_TZ)
+            leave_end_dt = export_dt.replace(day=last_day, hour=23, minute=59, second=59, tzinfo=VN_TZ)
         except ValueError:
             return jsonify({"error": "❌ Định dạng tháng không hợp lệ. Vui lòng sử dụng YYYY-MM."}), 400
         
@@ -845,7 +855,18 @@ def export_combined_to_excel():
         
         # --- Get Data for Both Sheets ---
         attendance_query = build_attendance_query("custom", start_date, end_date, search, username=username)
-        leave_query = build_leave_query("tất cả", None, None, search, "CheckinTime", username=username)
+        
+        regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
+        leave_conditions = [
+            {"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]},
+            {"CreationTime": {"$gte": leave_start_dt, "$lte": leave_end_dt}}
+        ]
+        if search:
+            regex = re.compile(search, re.IGNORECASE)
+            leave_conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
+        if username:
+            leave_conditions.append({"EmployeeName": username})
+        leave_query = {"$and": leave_conditions}
         
         attendance_data = list(collection.find(attendance_query, {"_id": 0}))
         leave_data = list(collection.find(leave_query, {"_id": 0}))
@@ -972,4 +993,3 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-
