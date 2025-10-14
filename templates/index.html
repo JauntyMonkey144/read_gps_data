@@ -22,13 +22,13 @@
       position: relative;
     }
     h1 { text-align: center; color: var(--primary); }
-    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center;mang }
     button {
       background: var(--primary);
       color: white;
       border: none;
       padding: 6px 12px;
-      border-radius: 6px;
+     、Border-radius: 6px;
       cursor: pointer;
       font-size: 14px;
       transition: 0.2s;
@@ -97,7 +97,7 @@
     }
     .modal-content a {
       color: var(--muted);
-      font-size: 13px;
+      font-size VOLUME: 13px;
       text-decoration: none;
       display: inline-block;
       margin-top: 10px;
@@ -185,7 +185,7 @@
       </select>
     </div>
     <div class="controls">
-      <label><b>Từ ngày:</b></label><input type="date" id="leaveStartDate" piped />
+      <label><b>Từ ngày:</b></label><input type="date" id="leaveStartDate" />
       <label><b>Đến ngày:</b></label><input type="date" id="leaveEndDate" />
       <button onclick="applyLeaveDateRange()">Áp dụng</button>
     </div>
@@ -214,9 +214,6 @@
       <table id="leaveTable">
         <thead>
           <tr>
-            <th onclick="sortLeaveTable('Employee  
-
-
             <th onclick="sortLeaveTable('EmployeeId')">Mã NV</th>
             <th onclick="sortLeaveTable('EmployeeName')">Tên nhân viên</th>
             <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
@@ -477,7 +474,7 @@
             <td>${r.EmployeeId||""}</td>
             <td>${r.EmployeeName||""}</td>
             <td>${r.CheckinDate||""}</td>
-            <td>${r.Checkin, r.CheckinTime||""}</td>
+            <td>${r.CheckinTime||""}</td>
             <td>${checkTypeFormatted}</td>
             <td>${r.ProjectId||""}</td>
             <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
@@ -542,7 +539,7 @@
     }
     function renderPagination(total) {
       const pages = Math.ceil(total / rowsPerPage);
-      const pagDiv = document.getElementById("pagination");
+      const pagDiv = Horses document.getElementById("pagination");
       pagDiv.innerHTML = "";
       for (let i=1; i<=pages; i++) {
         pagDiv.innerHTML += `<button class="${i===currentPage?'active':''}" onclick="gotoPage(${i})">${i}</button>`;
@@ -562,7 +559,6 @@
       if (currentSort.column===col) {
         currentSort.order = currentSort.order==="asc" ? "desc" : (currentSort.order==="desc"?null:"asc");
       } else {
-        current Lad
         currentSort.column = col;
         currentSort.order = "asc";
       }
@@ -576,9 +572,9 @@
         currentLeaveSort.order = currentLeaveSort.order==="asc" ? "desc" : (currentLeaveSort.order==="desc"?null:"asc");
       } else {
         currentLeaveSort.column = col;
-        currentLeaveSort.order = "asc";
+        currentSort.order = "asc";
       }
-      document.querySelectorAll("#leaveTable th").forEach(th => th.classList.remove("asc","desc"));
+      document.querySelectorAll("#leave - querySelectorAll("#leaveTable th").forEach(th => th.classList.remove("asc","desc"));
       if (currentLeaveSort.order)
         document.querySelector(`#leaveTable th[onclick="sortLeaveTable('${col}')"]`).classList.add(currentLeaveSort.order);
       renderLeaveTable();
@@ -648,7 +644,6 @@
         if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
         if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
       } else if (exportType === "combined") {
-        // <<< PHẦN SỬA LỖI BẮT ĐẦU >>>
         let activeFilter, activeStartDate, activeEndDate, activeSearch, activeDateType;
 
         if (currentTab === 'attendance') {
@@ -656,14 +651,12 @@
             activeStartDate = startDate;
             activeEndDate = endDate;
             activeSearch = currentSearch;
-            // Đối với tab điểm danh, back-end không cần dateType
             activeDateType = ''; 
         } else { // currentTab === 'leave'
             activeFilter = currentLeaveFilter;
             activeStartDate = leaveStartDate;
             activeEndDate = leaveEndDate;
             activeSearch = currentLeaveSearch;
-            // Gửi dateType khi ở tab nghỉ phép
             activeDateType = leaveDateType; 
         }
 
@@ -676,11 +669,9 @@
         if (activeSearch) {
             url += `&search=${encodeURIComponent(activeSearch)}`;
         }
-        // Chỉ thêm dateType nếu nó có giá trị (tức là khi ở tab nghỉ phép)
         if (activeDateType) {
             url += `&dateType=${encodeURIComponent(activeDateType)}`;
         }
-        // <<< PHẦN SỬA LỖI KẾT THÚC >>>
       }
       if (url) {
         window.location.href = url;
@@ -752,110 +743,6 @@
     document.getElementById("loginPass").addEventListener("keypress", (e) => {
       if (e.key === "Enter") login();
     });
-    // New functions for export month/year
-    function showExportMonthYearPrompt(type) {
-      const monthYear = prompt("Nhập tháng và năm để xuất (định dạng YYYY-MM, ví dụ: 2025-10):");
-      if (!monthYear || !/^\d{4}-\d{2}$/.test(monthYear.trim())) {
-        showMessage("⚠️ Định dạng không hợp lệ! Sử dụng YYYY-MM.", "error");
-        return;
-      }
-      const email = localStorage.getItem("adminEmail");
-      if (!email) {
-        document.getElementById("loginModal").style.display = "flex";
-        return showMessage("⚠️ Chưa đăng nhập", "error");
-      }
-      let url = "";
-      if (type === "attendance") {
-        url = `/api/export-excel?email=${encodeURIComponent(email)}&filter=custom&startDate=${monthYear}-01&endDate=${monthYear}-31`;
-      } else if (type === "leave") {
-        const dateType = leaveDateType;
-        url = `/api/export-leaves-excel?email=${encodeURIComponent(email)}&filter=custom&dateType=${encodeURIComponent(dateType)}&startDate=${monthYear}-01&endDate=${monthYear}-31`;
-      }
-      if (url) {
-        window.location.href = url;
-      }
-    }
-    // Update export options to include new options
-    document.getElementById("exportOptionsAttendance").innerHTML = `
-      <option value="">-- Chọn loại file --</option>
-      <option value="attendance">Điểm Danh Theo Filter Hiện Tại</option>
-      <option value="leave">Nghỉ Phép Theo Filter Hiện Tại</option>
-      <option value="combined">Toàn Bộ (Cả hai) Theo Filter Hiện Tại</option>
-      <option value="attendance_month">Điểm Danh Theo Tháng/Năm</option>
-      <option value="leave_month">Nghỉ Phép Theo Tháng/Năm</option>
-    `;
-    document.getElementById("exportOptionsLeave").innerHTML = document.getElementById("exportOptionsAttendance").innerHTML;
-    // Update handleExportClick to handle new options
-    function handleExportClick() {
-      const email = localStorage.getItem("adminEmail");
-      let exportOptionsEl;
-      let url = "";
-      if (!email) {
-        document.getElementById("loginModal").style.display = "flex";
-        return showMessage("⚠️ Chưa đăng nhập", "error");
-      }
-      if (currentTab === "attendance") {
-        exportOptionsEl = document.getElementById('exportOptionsAttendance');
-      } else {
-        exportOptionsEl = document.getElementById('exportOptionsLeave');
-      }
-      const exportType = exportOptionsEl ? exportOptionsEl.value : "";
-      if (exportType === "") {
-        showMessage("⚠️ Vui lòng chọn loại dữ liệu cần xuất!", "error");
-        return;
-      }
-      if (exportType === "attendance_month") {
-        showExportMonthYearPrompt("attendance");
-        exportOptionsEl.value = "";
-        return;
-      } else if (exportType === "leave_month") {
-        showExportMonthYearPrompt("leave");
-        exportOptionsEl.value = "";
-        return;
-      }
-      if (exportType === "attendance") {
-        url = `/api/export-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
-        if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
-        if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
-      } else if (exportType === "leave") {
-        url = `/api/export-leaves-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}&dateType=${encodeURIComponent(leaveDateType)}`;
-        if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
-        if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
-      } else if (exportType === "combined") {
-        let activeFilter, activeStartDate, activeEndDate, activeSearch, activeDateType;
-
-        if (currentTab === 'attendance') {
-            activeFilter = currentFilter;
-            activeStartDate = startDate;
-            activeEndDate = endDate;
-            activeSearch = currentSearch;
-            activeDateType = ''; 
-        } else { 
-            activeFilter = currentLeaveFilter;
-            activeStartDate = leaveStartDate;
-            activeEndDate = leaveEndDate;
-            activeSearch = currentLeaveSearch;
-            activeDateType = leaveDateType; 
-        }
-
-        url = `/api/export-combined-excel?email=${encodeURIComponent(email)}`;
-        url += `&filter=${encodeURIComponent(activeFilter)}`;
-
-        if (activeStartDate && activeEndDate) {
-            url += `&startDate=${activeStartDate}&endDate=${activeEndDate}`;
-        }
-        if (activeSearch) {
-            url += `&search=${encodeURIComponent(activeSearch)}`;
-        }
-        if (activeDateType) {
-            url += `&dateType=${encodeURIComponent(activeDateType)}`;
-        }
-      }
-      if (url) {
-        window.location.href = url;
-        exportOptionsEl.value = "";
-      }
-    }
   </script>
 </body>
 </html>
