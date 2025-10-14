@@ -143,7 +143,7 @@
         <option value="leave">Nghỉ Phép Theo Filter Hiện Tại</option>
         <option value="combined">Toàn Bộ (Cả hai) Theo Filter Hiện Tại</option>
       </select>
-      <select id="exportMonthAttendance">
+      <select id="exportMonthAttendance" style="display:none;">
         <option value="">-- Tháng --</option>
         <option value="1">1</option>
         <option value="2">2</option>
@@ -158,7 +158,7 @@
         <option value="11">11</option>
         <option value="12">12</option>
       </select>
-      <select id="exportYearAttendance">
+      <select id="exportYearAttendance" style="display:none;">
         <option value="">-- Năm --</option>
       </select>
       <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button>
@@ -223,7 +223,7 @@
           <option value="leave">Nghỉ Phép Theo Filter Hiện Tại</option>
           <option value="combined">Toàn Bộ (Cả hai) Theo Filter Hiện Tại</option>
         </select>
-        <select id="exportMonthLeave">
+        <select id="exportMonthLeave" style="display:none;">
           <option value="">-- Tháng --</option>
           <option value="1">1</option>
           <option value="2">2</option>
@@ -238,7 +238,7 @@
           <option value="11">11</option>
           <option value="12">12</option>
         </select>
-        <select id="exportYearLeave">
+        <select id="exportYearLeave" style="display:none;">
           <option value="">-- Năm --</option>
         </select>
         <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button>
@@ -676,6 +676,10 @@
         showMessage("⚠️ Vui lòng chọn loại dữ liệu cần xuất!", "error");
         return;
       }
+      if (!month || !year) {
+        showMessage("⚠️ Vui lòng chọn tháng và năm!", "error");
+        return;
+      }
       if (exportType === "attendance") {
         url = `/api/export-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
         if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
@@ -788,6 +792,12 @@
     }
     window.onload = () => {
       populateYears();
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+      document.getElementById('exportMonthAttendance').value = currentMonth;
+      document.getElementById('exportYearAttendance').value = currentYear;
+      document.getElementById('exportMonthLeave').value = currentMonth;
+      document.getElementById('exportYearLeave').value = currentYear;
       const email = localStorage.getItem("adminEmail");
       if (email) {
         const username = localStorage.getItem("adminUser");
@@ -801,6 +811,28 @@
     };
     document.getElementById("loginPass").addEventListener("keypress", (e) => {
       if (e.key === "Enter") login();
+    });
+    document.getElementById("exportOptionsAttendance").addEventListener("change", function() {
+      const monthSelect = document.getElementById("exportMonthAttendance");
+      const yearSelect = document.getElementById("exportYearAttendance");
+      if (this.value !== "") {
+        monthSelect.style.display = "inline-block";
+        yearSelect.style.display = "inline-block";
+      } else {
+        monthSelect.style.display = "none";
+        yearSelect.style.display = "none";
+      }
+    });
+    document.getElementById("exportOptionsLeave").addEventListener("change", function() {
+      const monthSelect = document.getElementById("exportMonthLeave");
+      const yearSelect = document.getElementById("exportYearLeave");
+      if (this.value !== "") {
+        monthSelect.style.display = "inline-block";
+        yearSelect.style.display = "inline-block";
+      } else {
+        monthSelect.style.display = "none";
+        yearSelect.style.display = "none";
+      }
     });
   </script>
 </body>
