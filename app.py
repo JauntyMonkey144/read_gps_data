@@ -332,7 +332,7 @@ def calculate_leave_days_for_month(record, export_year, export_month):
     - Returns (0, False) if cannot parse dates.
     - Computes days_in_month ignoring status.
     - If days_in_month == 0, returns (0, False)
-    - Else, checks status: if bad, returns (0, True), else (days_in_month, True)
+    - Else, determines final status and adjusts days_in_month accordingly.
     """
     display_date = record.get("DisplayDate", "").strip().lower()
     start_date, end_date = None, None
@@ -363,31 +363,36 @@ def calculate_leave_days_for_month(record, export_year, export_month):
 
     # Compute days_in_month
     days_in_month = 0.0
+    _, last_day = calendar.monthrange(export_year, export_month)
+    month_start = datetime(export_year, export_month, 1)
+    month_end = datetime(export_year, export_month, last_day)
     if start_date == end_date:
-        if start_date.year == export_year and start_date.month == export_month:
-            if "sáng" in display_date or "chiều" in display_date or record.get('Session', '').lower() in ['sáng', 'chiều']:
-                days_in_month = 0.5
-            else:
+        if month_start <= start_date <= month_end and start_date.weekday() <= 5:
+            if "cả ngày" in display_date or not ("sáng" in display_date or "chiều" in display_date or record.get('Session', '').lower() in ['sáng', 'chiều']):
                 days_in_month = 1.0
-
+            else:
+                days_in_month = 0.5
     else:
-        current_date = start_date
-        while current_date <= end_date:
-            if current_date.year == export_year and current_date.month == export_month and current_date.weekday() < 6:
-                days_in_month += 1
+        current_date = max(start_date, month_start)
+        end = min(end_date, month_end)
+        while current_date <= end:
+            if current_date.weekday() <= 5:
+                days_in_month += 1.0
             current_date += timedelta(days=1)
 
-    is_overlap = days_in_month > 0
-    if not is_overlap:
+    if days_in_month == 0:
         return 0.0, False
 
-    # Now check status
-    status1 = record.get("Status1", "")
-    status2 = record.get("Status2", "")
-    if "từ chối" in (status1 or "") or "từ chối" in (status2 or ""):
-        return 0.0, True
-    elif "đã duyệt" in (status1 or "") or "đã duyệt" in (status2 or ""):
-        return float(days_in_month), True
+    # Determine final status
+    status1 = record.get("Status1", "").lower()
+    status2 = record.get("Status2", "").lower()
+    if status2:
+        final_status = status2
+    else:
+        final_status = status1
+
+    if "duyệt" in final_status:
+        return days_in_month, True
     else:
         return 0.0, True
 
@@ -888,7 +893,7 @@ def export_combined_to_excel():
             attendance_grouped.setdefault(key, []).append(d)
         
         start_row_att = 2
-        for i, ((emp_id, emp_name, date_str), records) in enumerate(grouped.items()):
+        for i, ((emp_id, emp_name, date_str), records) in enumerate(attendance_grouped.items()):
             row = start_row_att + i
             ws_attendance.cell(row=row, column=1, value=emp_id)
             ws_attendance.cell(row=row, column=2, value=emp_name)
