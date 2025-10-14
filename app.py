@@ -354,7 +354,7 @@ def calculate_leave_days_from_record(record):
     if 'StartDate' in record and 'EndDate' in record:
         try:
             start_date = datetime.strptime(record['StartDate'], "%Y-%m-%d")
-            end_date = datetime.strptime(record['EndDate'], '%Y-%m-%d")
+            end_date = datetime.strptime(record['EndDate'], '%Y-%m-%d')
             days = 0.0
             current = start_date
             while current <= end_date:
@@ -834,3 +834,4 @@ def export_combined_to_excel():
         return jsonify({"error": str(e)}), 500
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
