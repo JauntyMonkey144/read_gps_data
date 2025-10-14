@@ -181,6 +181,7 @@
         <option value="CheckinTime">Ngày tạo đơn</option>
         <option value="ApprovalDate1">Ngày duyệt/từ chối lần đầu</option>
         <option value="ApprovalDate2">Ngày duyệt/từ chối lần cuối</option>
+        <option value="LeaveDate">Ngày nghỉ</option>          
       </select>
     </div>
     <div class="controls">
@@ -616,7 +617,7 @@
       currentLeaveSearch = document.getElementById("leaveSearchBox").value.trim();
       loadLeaveData();
     }
-    function handleExportClick() {
+  function handleExportClick() {
       const email = localStorage.getItem("adminEmail");
       let exportOptionsEl;
       let url = "";
@@ -643,14 +644,39 @@
         if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
         if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
       } else if (exportType === "combined") {
-        let activeFilter = currentTab === "attendance" ? currentFilter : currentLeaveFilter;
-        let activeStartDate = currentTab === "attendance" ? startDate : leaveStartDate;
-        let activeEndDate = currentTab === "attendance" ? endDate : leaveEndDate;
-        let activeSearch = currentTab === "attendance" ? currentSearch : currentLeaveSearch;
+        // <<< PHẦN SỬA LỖI BẮT ĐẦU >>>
+        let activeFilter, activeStartDate, activeEndDate, activeSearch, activeDateType;
+
+        if (currentTab === 'attendance') {
+            activeFilter = currentFilter;
+            activeStartDate = startDate;
+            activeEndDate = endDate;
+            activeSearch = currentSearch;
+            // Đối với tab điểm danh, back-end không cần dateType
+            activeDateType = ''; 
+        } else { // currentTab === 'leave'
+            activeFilter = currentLeaveFilter;
+            activeStartDate = leaveStartDate;
+            activeEndDate = leaveEndDate;
+            activeSearch = currentLeaveSearch;
+            // Gửi dateType khi ở tab nghỉ phép
+            activeDateType = leaveDateType; 
+        }
+
         url = `/api/export-combined-excel?email=${encodeURIComponent(email)}`;
         url += `&filter=${encodeURIComponent(activeFilter)}`;
-        if (activeStartDate && activeEndDate) url += `&startDate=${activeStartDate}&endDate=${activeEndDate}`;
-        if (activeSearch) url += `&search=${encodeURIComponent(activeSearch)}`;
+
+        if (activeStartDate && activeEndDate) {
+            url += `&startDate=${activeStartDate}&endDate=${activeEndDate}`;
+        }
+        if (activeSearch) {
+            url += `&search=${encodeURIComponent(activeSearch)}`;
+        }
+        // Chỉ thêm dateType nếu nó có giá trị (tức là khi ở tab nghỉ phép)
+        if (activeDateType) {
+            url += `&dateType=${encodeURIComponent(activeDateType)}`;
+        }
+        // <<< PHẦN SỬA LỖI KẾT THÚC >>>
       }
       if (url) {
         window.location.href = url;
