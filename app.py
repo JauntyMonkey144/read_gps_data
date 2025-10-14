@@ -384,9 +384,9 @@ def calculate_leave_days_for_month(record, export_year, export_month):
     # Now check status
     status1 = record.get("Status1", "")
     status2 = record.get("Status2", "")
-    if "từ chối" in status1 or "từ chối" in status2:
+    if "từ chối" in (status1 or "") or "từ chối" in (status2 or ""):
         return 0.0, True
-    elif "đã duyệt" in status1 or "đã duyệt" in status2:
+    elif "đã duyệt" in (status1 or "") or "đã duyệt" in (status2 or ""):
         return float(days_in_month), True
     else:
         return 0.0, True
@@ -888,7 +888,7 @@ def export_combined_to_excel():
             attendance_grouped.setdefault(key, []).append(d)
         
         start_row_att = 2
-        for i, ((emp_id, emp_name, date_str), records) in enumerate(attendance_grouped.items()):
+        for i, ((emp_id, emp_name, date_str), records) in enumerate(grouped.items()):
             row = start_row_att + i
             ws_attendance.cell(row=row, column=1, value=emp_id)
             ws_attendance.cell(row=row, column=2, value=emp_name)
