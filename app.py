@@ -384,14 +384,14 @@ def calculate_leave_days_for_month(record, export_year, export_month):
         return 0.0, False
 
     # Determine final status
-    status1 = record.get("Status1", "").lower()
-    status2 = record.get("Status2", "").lower()
-    if status2:
-        final_status = status2
-    else:
-        final_status = status1
+    status1 = str(record.get("Status1") or "").lower()
+    status2 = str(record.get("Status2") or "").lower()
 
-    if "duyệt" in final_status:
+    if "từ chối" in status2:
+        return 0.0, True
+    elif "duyệt" in status2:
+        return days_in_month, True
+    elif "duyệt" in status1:
         return days_in_month, True
     else:
         return 0.0, True
@@ -761,10 +761,17 @@ def export_leaves_to_excel():
         wb = load_workbook(template_path)
         ws = wb.active
         
-        ws['A1'], ws['B1'], ws['C1'], ws['D1'], ws['E1'], ws['F1'], ws['G1'], ws['H1'], ws['I1'], ws['J1'], ws['K1'] = (
-            "Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
-            "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
-        )
+        ws['A1'] = "Mã NV"
+        ws['B1'] = "Tên NV"
+        ws['C1'] = "Ngày Nghỉ"
+        ws['D1'] = "Số ngày nghỉ"
+        ws['E1'] = "Ngày tạo đơn"
+        ws['F1'] = "Lý do"
+        ws['G1'] = "Ngày Duyệt/Từ chối Lần đầu"
+        ws['H1'] = "Trạng thái Lần đầu"
+        ws['I1'] = "Ngày Duyệt/Từ chối Lần cuối"
+        ws['J1'] = "Trạng thái Lần cuối"
+        ws['K1'] = "Ghi chú"
         
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
@@ -937,10 +944,17 @@ def export_combined_to_excel():
 
         # ---- Xử lý sheet Nghỉ phép ----
         ws_leaves = wb["Nghỉ phép"]
-        ws_leaves['A1'], ws_leaves['B1'], ws_leaves['C1'], ws_leaves['D1'], ws_leaves['E1'], ws_leaves['F1'], ws_leaves['G1'], ws_leaves['H1'], ws_leaves['I1'], ws_leaves['J1'], ws_leaves['K1'] = (
-            "Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
-            "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
-        )
+        ws_leaves['A1'] = "Mã NV"
+        ws_leaves['B1'] = "Tên NV"
+        ws_leaves['C1'] = "Ngày Nghỉ"
+        ws_leaves['D1'] = "Số ngày nghỉ"
+        ws_leaves['E1'] = "Ngày tạo đơn"
+        ws_leaves['F1'] = "Lý do"
+        ws_leaves['G1'] = "Ngày Duyệt/Từ chối Lần đầu"
+        ws_leaves['H1'] = "Trạng thái Lần đầu"
+        ws_leaves['I1'] = "Ngày Duyệt/Từ chối Lần cuối"
+        ws_leaves['J1'] = "Trạng thái Lần cuối"
+        ws_leaves['K1'] = "Ghi chú"
         
         current_row_leave = 2
         for rec in leave_data:
