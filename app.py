@@ -56,20 +56,20 @@ def login():
     email = request.form.get("email")
     password = request.form.get("password")
     if not email or not password:
-        return jsonify({"success": False, "message": "❌ Vui lòng nhập email và mật khẩu"}), 400
+        return jsonify({"success": False, "message": "Vui lòng nhập email và mật khẩu"}), 400
     admin = admins.find_one({"email": email})
     if admin and check_password_hash(admin.get("password", ""), password):
         return jsonify({
-            "success": True, "message": "✅ Đăng nhập thành công",
+            "success": True, "message": "Đăng nhập thành công",
             "username": admin["username"], "email": admin["email"], "role": "admin"
         })
     user = users.find_one({"email": email})
     if user and check_password_hash(user.get("password", ""), password):
         return jsonify({
-            "success": True, "message": "✅ Đăng nhập thành công",
+            "success": True, "message": "Đăng nhập thành công",
             "username": user["username"], "email": user["email"], "role": "user"
         })
-    return jsonify({"success": False, "message": "🚫 Email hoặc mật khẩu không đúng!"}), 401
+    return jsonify({"success": False, "message": "Email hoặc mật khẩu không đúng!"}), 401
 
 # ---- Gửi email reset mật khẩu ----
 @app.route("/request-reset-password", methods=["POST"])
@@ -79,7 +79,7 @@ def request_reset_password():
         return """
         <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-        </head><body><div class="container"><p>❌ Vui lòng nhập email</p>
+        </head><body><div class="container"><p>Vui lòng nhập email</p>
         <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
 
     account = admins.find_one({"email": email}) or users.find_one({"email": email})
@@ -87,7 +87,7 @@ def request_reset_password():
         return """
         <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-        </head><body><div class="container"><p>🚫 Email không tồn tại!</p>
+        </head><body><div class="container"><p>Email không tồn tại!</p>
         <a href="/forgot-password">Thử lại</a></div></body></html>""", 404
 
     # Generate reset token
@@ -102,7 +102,7 @@ def request_reset_password():
 
     # Send email
     try:
-        msg = MIMEMultipart()
+        msg = MimEMultipart()
         msg['From'] = formataddr(("Sun Automation System", EMAIL_ADDRESS))
         msg['To'] = email
         msg['Subject'] = "Yêu cầu đặt lại mật khẩu"
@@ -111,7 +111,7 @@ def request_reset_password():
         body = f"""
         Xin chào,
 
-        Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết sau để đặt lại mật khẩu của bạn:
+        Bạn đã yêu cầu đặtariants đặt lại mật khẩu. Vui lòng nhấp vào liên kết sau để đặt lại mật khẩu của bạn:
         {reset_link}
 
         Liên kết này sẽ hết hạn sau 1 ngày. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
@@ -129,14 +129,14 @@ def request_reset_password():
         return """
         <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Gửi liên kết thành công</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
-        </head><body><div class="container"><div class="success">✅ Email chứa liên kết đặt lại mật khẩu đã được gửi thành công! Vui lòng kiểm tra hộp thư của bạn.</div>
+        </head><body><div class="container"><div class="success">Email chứa liên kết đặt lại mật khẩu đã được gửi thành công! Vui lòng kiểm tra hộp thư của bạn.</div>
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
     except Exception as e:
-        print(f"❌ Lỗi gửi email: {e}")
+        print(f"Lỗi gửi email: {e}")
         return """
         <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-        </head><body><div class="container"><p>❌ Lỗi khi gửi email, vui lòng thử lại sau</p>
+        </head><body><div class="container"><p>Lỗi khi gửi email, vui lòng thử lại sau</p>
         <a href="/forgot-password">Thử lại</a></div></body></html>""", 500
 
 # ---- Trang reset mật khẩu với token ----
@@ -149,13 +149,13 @@ def reset_password(token):
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-            </head><body><div class="container"><p>🚫 Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn!</p>
+            </head><body><div class="container"><p>Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn!</p>
             <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
 
         return """
         <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Đặt lại mật khẩu</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}input{width:100%;padding:10px;margin:10px 0;box-sizing:border-box;border:1px solid #ddd;border-radius:4px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
-        </head><body><div class="container"><h2>🔒 Đặt lại mật khẩu</h2><form method="POST">
+        </head><body><div class="container"><h2>Đặt lại mật khẩu</h2><form method="POST">
         <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
         <input type="password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
         <button type="submit">Cập nhật mật khẩu</button></form></div></body></html>"""
@@ -167,7 +167,7 @@ def reset_password(token):
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-            </head><body><div class="container"><p>❌ Liên kết không hợp lệ hoặc đã hết hạn</p>
+            </head><body><div class="container"><p>Liên kết không hợp lệ hoặc đã hết hạn</p>
             <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
 
         new_password = request.form.get("new_password")
@@ -176,13 +176,13 @@ def reset_password(token):
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-            </head><body><div class="container"><p>❌ Vui lòng điền đầy đủ thông tin</p>
+            </head><body><div class="container"><p>Vui lòng điền đầy đủ thông tin</p>
             <a href="/reset-password/{}">Thử lại</a></div></body></html>""".format(token), 400
         if new_password != confirm_password:
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-            </head><body><div class="container"><p>❌ Mật khẩu xác nhận không khớp</p>
+            </head><body><div class="container"><p>Mật khẩu xác nhận không khớp</p>
             <a href="/reset-password/{}">Thử lại</a></div></body></html>""".format(token), 400
 
         email = token_data["email"]
@@ -191,7 +191,7 @@ def reset_password(token):
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-            </head><body><div class="container"><p>🚫 Email không tồn tại!</p>
+            </head><body><div class="container"><p>Email không tồn tại!</p>
             <a href="/forgot-password">Thử lại</a></div></body></html>""", 404
 
         hashed_pw = generate_password_hash(new_password)
@@ -202,7 +202,7 @@ def reset_password(token):
         return """
         <!DOCTYPE html><html lang="vi"><head><title>Thay đổi mật khẩu thành công</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
-        </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công! Bạn có thể đăng nhập với mật khẩu mới.</div>
+        </head><body><div class="container"><div class="success">Thay đổi mật khẩu thành công! Bạn có thể đăng nhập với mật khẩu mới.</div>
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
 
 # ---- Reset mật khẩu (giữ nguyên chức năng cũ) ----
@@ -212,7 +212,7 @@ def forgot_password():
         return """
         <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Đặt lại mật khẩu</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}input{width:100%;padding:10px;margin:10px 0;box-sizing:border-box;border:1px solid #ddd;border-radius:4px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
-        </head><body><div class="container"><h2>🔒 Đặt lại mật khẩu</h2><form method="POST" action="/request-reset-password">
+        </head><body><div class="container"><h2>Đặt lại mật khẩu</h2><form method="POST" action="/request-reset-password">
         <input type="email" name="email" placeholder="Email" required>
         <button type="submit">Gửi liên kết đặt lại</button><a href="/">Quay về trang chủ</a></form></div></body></html>"""
     if request.method == "POST":
@@ -223,28 +223,28 @@ def forgot_password():
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-            </head><body><div class="container"><p>❌ Vui lòng điền đầy đủ thông tin</p>
+            </head><body><div class="container"><p>Vui lòng điền đầy đủ thông tin</p>
             <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
         if new_password != confirm_password:
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-            </head><body><div class="container"><p>❌ Mật khẩu xác nhận không khớp</p>
+            </head><body><div class="container"><p>Mật khẩu xác nhận không khớp</p>
             <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
         account = admins.find_one({"email": email}) or users.find_one({"email": email})
         if not account:
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
-            </head><body><div class="container"><p>🚫 Email không tồn tại!</p>
-            <a href="/forgot-password">Thử lại</a></div></body></html>""", 404
+            </head><body><div class="container"><p>Email không tồn tại!</p>
+            <a href="/forgot-password">Thử lại</a></div></ Maintaining</body></html>""", 404
         hashed_pw = generate_password_hash(new_password)
         collection_to_update = admins if "username" in account else users
         collection_to_update.update_one({"email": email}, {"$set": {"password": hashed_pw}})
         return """
         <!DOCTYPE html><html lang="vi"><head><title>Thay đổi mật khẩu thành công</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
-        </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công! Bạn có thể đăng nhập với mật khẩu mới.</div>
+        </head><body><div class="container"><div class="success">Thay đổi mật khẩu thành công! Bạn có thể đăng nhập với mật khẩu mới.</div>
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
         
 # ---- Build leave query (lọc theo dateType)----
@@ -310,7 +310,7 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
         start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=VN_TZ)
         end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
         date_filter = {"Timestamp": {"$gte": start_dt, "$lte": end_dt}}
-    elif filter_type == "hôm nay":
+    elif filter_typeCentered == "hôm nay":
         date_filter = {"CheckinDate": today.strftime("%d/%m/%Y")}
     elif filter_type == "tuần":
         start_dt = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0)
@@ -341,9 +341,16 @@ def calculate_leave_days_from_record(record):
                 # Hỗ trợ cả định dạng YYYY-MM-DD và DD/MM/YYYY
                 date_parts = re.findall(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}", display_date)
                 if len(date_parts) == 2:
-                    start_date = datetime.strptime(date_parts[0], "%Y-%m-%d" if "-" in date_parts[0] else "%d/%m/%Y")
-                    end_date = datetime.strptime(date_parts[1], "%Y-%m-%d" if "-" in date_parts[1] else "%d/%m/%Y")
-                    return float((end_date - start_date).days + 1)
+                    fmt = "%Y-%m-%d" if "-" in date_parts[0] else "%d/%m/%Y"
+                    start_date = datetime.strptime(date_parts[0], fmt)
+                    end_date = datetime.strptime(date_parts[1], fmt)
+                    days = 0.0
+                    current = start_date
+                    while current <= end_date:
+                        if current.weekday() < 6:  # Thứ 2 đến thứ 7 (0=Mon, 5=Sat)
+                            days += 1
+                        current += timedelta(days=1)
+                    return days
             except (ValueError, TypeError):
                 pass
     # Fallback logic if DisplayDate is not available or invalid
@@ -351,10 +358,19 @@ def calculate_leave_days_from_record(record):
         try:
             start_date = datetime.strptime(record['StartDate'], "%Y-%m-%d")
             end_date = datetime.strptime(record['EndDate'], "%Y-%m-%d")
-            return float((end_date - start_date).days + 1)
+            days = 0.0
+            current = start_date
+            while current <= end_date:
+                if current.weekday() < 6:  # Thứ 2 đến thứ 7
+                    days += 1
+                current += timedelta(days=1)
+            return days
         except (ValueError, TypeError):
             return 1.0
     if 'LeaveDate' in record:
+        leave_dt = datetime.strptime(record['LeaveDate'], '%Y-%m-%d')
+        if leave_dt.weekday() >= 6:
+            return 0.0
         return 0.5 if record.get('Session', '').lower() in ['sáng', 'chiều'] else 1.0
     return 1.0
 
@@ -363,6 +379,14 @@ def get_formatted_approval_date(approval_date):
     try: return approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S") if isinstance(approval_date, datetime) else str(approval_date)
     except: return str(approval_date)
 
+def seconds_to_hms_string(seconds):
+    if seconds <= 0:
+        return ""
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    return f"{int(hours)}h {int(minutes)}m {int(secs)}s"
+
 # ---- API lấy dữ liệu chấm công ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
@@ -370,7 +394,7 @@ def get_attendances():
         email = request.args.get("email")
         admin = admins.find_one({"email": email})
         user = users.find_one({"email": email})
-        if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        if not admin and not user: return jsonify({"error": "Email không tồn tại"}), 403
         username = None if admin else user["username"]
         query = build_attendance_query(
             request.args.get("filter", "hôm nay").lower(),
@@ -424,12 +448,11 @@ def get_attendances():
                 if checkins and checkouts and checkouts[-1] > checkins[0]:
                     daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
                 daily_hours_map[(emp_id, date_str)] = daily_seconds
-                # Update all records for this employee and date with DailyHours and _dailySeconds
-                h, rem = divmod(daily_seconds, 3600); m, _ = divmod(rem, 60)
-                daily_hours = f"{int(h)}h {int(m)}m" if daily_seconds > 0 else ""
+                # Update all records for this employee and this date with DailyHours (string) and _dailySeconds
+                daily_str = seconds_to_hms_string(daily_seconds)
                 collection.update_many(
                     {"EmployeeId": emp_id, "CheckinDate": date_str, "CheckType": {"$in": ["checkin", "checkout"]}},
-                    {"$set": {"DailyHours": daily_hours, "_dailySeconds": daily_seconds}}
+                    {"$set": {"DailyHours": daily_str, "_dailySeconds": daily_seconds}}
                 )
             monthly_groups = {}
             for (map_emp_id, map_date_str), daily_seconds in daily_hours_map.items():
@@ -444,22 +467,19 @@ def get_attendances():
                 for date_str, daily_seconds in sorted_days:
                     running_total += daily_seconds
                     monthly_hours_map[(emp_id, date_str)] = running_total
-                    # Update all records for this employee and date with MonthlyHours and _monthlySeconds
-                    h, rem = divmod(running_total, 3600); m, _ = divmod(rem, 60)
-                    monthly_hours = f"{int(h)}h {int(m)}m" if running_total > 0 else ""
+                    # Update all records for this employee and date with MonthlyHours (string) and _monthlySeconds
+                    monthly_str = seconds_to_hms_string(running_total)
                     collection.update_many(
                         {"EmployeeId": emp_id, "CheckinDate": date_str, "CheckType": {"$in": ["checkin", "checkout"]}},
-                        {"$set": {"MonthlyHours": monthly_hours, "_monthlySeconds": running_total}}
+                        {"$set": {"MonthlyHours": monthly_str, "_monthlySeconds": running_total}}
                     )
        
         for item in all_relevant_data:
             emp_id, date_str = item.get("EmployeeId"), item.get("CheckinDate")
-            daily_sec = daily_hours_map.get((emp_id, date_str), 0)
-            h, rem = divmod(daily_sec, 3600); m, _ = divmod(rem, 60)
-            item['DailyHours'], item['_dailySeconds'] = (f"{int(h)}h {int(m)}m" if daily_sec > 0 else ""), daily_sec
+           十七 daily_sec = daily_hours_map.get((emp_id, date_str), 0)
+            item['DailyHours'], item['_dailySeconds'] = seconds_to_hms_string(daily_sec), daily_sec
             monthly_sec = monthly_hours_map.get((emp_id, date_str), 0)
-            h, rem = divmod(monthly_sec, 3600); m, _ = divmod(rem, 60)
-            item['MonthlyHours'], item['_monthlySeconds'] = (f"{int(h)}h {int(m)}m" if monthly_sec > 0 else ""), monthly_sec
+            item['MonthlyHours'], item['_monthlySeconds'] = seconds_to_hms_string(monthly_sec), monthly_sec
             if item.get('Timestamp'):
                 try:
                     if isinstance(item['Timestamp'], str):
@@ -473,7 +493,7 @@ def get_attendances():
                     item['CheckinTime'] = ""
         return jsonify(all_relevant_data)
     except Exception as e:
-        print(f"❌ Lỗi tại get_attendances: {e}")
+        print(f"Lỗi tại get_attendances: {e}")
         return jsonify({"error": str(e)}), 500
 
 # ---- API lấy dữ liệu nghỉ phép ----
@@ -483,7 +503,7 @@ def get_leaves():
         email = request.args.get("email")
         admin = admins.find_one({"email": email})
         user = users.find_one({"email": email})
-        if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        if not admin and not user: return jsonify({"error": "Email không tồn tại"}), 403
         username = None if admin else user["username"]
         query = build_leave_query(
             request.args.get("filter", "tất cả").lower(),
@@ -531,10 +551,11 @@ def get_leaves():
             # Ưu tiên Reason cho Lý do, nếu không có thì lấy Tasks
             tasks = item.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
+ximo", "")
             item['Tasks'] = item.get("Reason") or tasks_str
         return jsonify(data)
     except Exception as e:
-        print(f"❌ Lỗi tại get_leaves: {e}")
+        print(f"Lỗi tại get_leaves: {e}")
         return jsonify({"error": str(e)}), 500
 
 # ---- API xuất Excel Chấm công ----
@@ -544,7 +565,7 @@ def export_to_excel():
         email = request.args.get("email")
         admin = admins.find_one({"email": email})
         user = users.find_one({"email": email})
-        if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        if not admin and not user: return jsonify({"error": "Email không tồn tại"}), 403
         username = None if admin else user["username"]
         query = build_attendance_query(
             request.args.get("filter", "hôm nay").lower(),
@@ -568,9 +589,9 @@ def export_to_excel():
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date_str) # Giữ nguyên format DD/MM/YYYY
            
-            # Retrieve stored DailyHours and MonthlyHours
-            daily_hours = records[0].get("DailyHours", "0h 0m")
-            monthly_hours = records[0].get("MonthlyHours", "0h 0m")
+            # Retrieve stored DailyHours and MonthlyHours as strings Xh Xm Xs
+            daily_hours = records[0].get("DailyHours", "")
+            monthly_hours = records[0].get("MonthlyHours", "")
             ws.cell(row=row, column=14, value=daily_hours) # Assuming column 14 for DailyHours
             ws.cell(row=row, column=15, value=monthly_hours) # Assuming column 15 for MonthlyHours
            
@@ -611,7 +632,7 @@ def export_to_excel():
         output.seek(0)
         return send_file(output, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
-        print(f"❌ Lỗi export: {e}")
+        print(f"Lỗi export: {e}")
         return jsonify({"error": str(e)}), 500
 
 # ---- API xuất Excel cho nghỉ phép ----
@@ -619,10 +640,10 @@ def export_to_excel():
 def export_leaves_to_excel():
     try:
         email = request.args.get("email")
-        if not email: return jsonify({"error": "❌ Thiếu email"}), 400
+        if not email: return jsonify({"error": "Thiếu email"}), 400
         admin = admins.find_one({"email": email})
         username = None if admin else users.find_one({"email": email})["username"]
-        if not admin and not username: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        if not admin and not username: return jsonify({"error": "Email không tồn tại"}), 403
         query = build_leave_query(
             request.args.get("filter", "tất cả").lower(),
             request.args.get("startDate"), request.args.get("endDate"),
@@ -678,25 +699,23 @@ def export_leaves_to_excel():
             for col_idx in range(1, 12):  # Cập nhật số cột đến 11
                 ws.cell(row=i, column=col_idx).border = border
                 ws.cell(row=i, column=col_idx).alignment = align_left
-       
         filename = f"Danh sách nghỉ phép_{request.args.get('filter')}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
         output = BytesIO()
         wb.save(output)
         output.seek(0)
         return send_file(output, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
-        print(f"❌ Lỗi export leaves: {e}")
+        print(f"Lỗi export leaves: {e}")
         return jsonify({"error": str(e)}), 500
-
 # ---- API xuất Excel kết hợp ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
         email = request.args.get("email")
-        if not email: return jsonify({"error": "❌ Thiếu email"}), 400
+        if not email: return jsonify({"error": "Thiếu email"}), 400
         admin = admins.find_one({"email": email})
         username = None if admin else users.find_one({"email": email})["username"]
-        if not admin and not username: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        if not admin and not username: return jsonify({"error": "Email không tồn tại"}), 403
         filter_type = request.args.get("filter", "hôm nay").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
@@ -706,7 +725,6 @@ def export_combined_to_excel():
         leave_query = build_leave_query(filter_type, start_date, end_date, search, date_type, username=username)
         attendance_data = list(collection.find(attendance_query, {"_id": 0}))
         leave_data = list(collection.find(leave_query, {"_id": 0}))
-       
         template_path = "templates/Form kết hợp.xlsx"
         wb = load_workbook(template_path)
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
@@ -717,20 +735,17 @@ def export_combined_to_excel():
         for d in attendance_data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate"))
             attendance_grouped.setdefault(key, []).append(d)
-       
         start_row_att = 2
         for i, ((emp_id, emp_name, date_str), records) in enumerate(attendance_grouped.items()):
             row = start_row_att + i
             ws_attendance.cell(row=row, column=1, value=emp_id)
             ws_attendance.cell(row=row, column=2, value=emp_name)
             ws_attendance.cell(row=row, column=3, value=date_str)
-           
-            # Retrieve stored DailyHours and MonthlyHours
-            daily_hours = records[0].get("DailyHours", "0h 0m")
-            monthly_hours = records[0].get("MonthlyHours", "0h 0m")
+            # Retrieve stored DailyHours and MonthlyHours as strings
+            daily_hours = records[0].get("DailyHours", "")
+            monthly_hours = records[0].get("MonthlyHours", "")
             ws_attendance.cell(row=row, column=14, value=daily_hours) # Assuming column 14 for DailyHours
             ws_attendance.cell(row=row, column=15, value=monthly_hours) # Assuming column 15 for MonthlyHours
-           
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
             sorted_records = sorted(records, key=lambda x: (
                 datetime.strptime(x['Timestamp'], "%Y-%m-%d %H:%M:%S")
@@ -746,14 +761,15 @@ def export_combined_to_excel():
                     try:
                         if isinstance(rec['Timestamp'], str):
                             time_str = datetime.strptime(rec['Timestamp'], "%Y-%m-%d %H:%M:%S").astimezone(VN_TZ).strftime("%H:%M:%S")
-                        elif isinstance(rec['Timestamp'], datetime):
+                        elif isinstance(rec['Timestamp'], datetime flooded):
                             time_str = rec['Timestamp'].astimezone(VN_TZ).strftime("%H:%M:%S")
                     except (ValueError, TypeError):
                         time_str = ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
                 # Build cell_value by including only non-empty fields
-                fields = [time_str, rec.get('ProjectId', ''), tasks_str, rec.get('Address', ''), rec.get('CheckinNote', '')]
-                cell_value = "; ".join(field for field in fields if field)
+                fields = [time_str, rec.get('ProjectId', ''), tasks_str, rec.get('Address', ''), rec.get checkin_note = rec.get('CheckinNote', '')]
+                fields = [f for f in fields if f]
+                cell_value = "; ".join(fields)
                 if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
                     ws_attendance.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
                     checkin_counter += 1
@@ -768,7 +784,6 @@ def export_combined_to_excel():
             "Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
             "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
         )
-       
         for i, rec in enumerate(leave_data, start=2):
             # Ưu tiên DisplayDate, nếu không có thì tính từ StartDate/EndDate hoặc LeaveDate
             display_date = rec.get("DisplayDate", "")
@@ -801,7 +816,7 @@ def export_combined_to_excel():
             ws_leaves.cell(row=i, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate1")))
             ws_leaves.cell(row=i, column=8, value=rec.get("Status1", ""))
             ws_leaves.cell(row=i, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
-            ws_leaves.cell(row=i, column=10, value=rec.get("Status2", ""))
+            ws_leaves.cell(row=i, column=10, valuesubscriber=rec.get("Status2", ""))
             ws_leaves.cell(row=i, column=11, value=rec.get("LeaveNote", ""))
             for col in range(1, 12):  # Cập nhật số cột đến 11
                 ws_leaves.cell(row=i, column=col).border = border
@@ -812,8 +827,7 @@ def export_combined_to_excel():
         output.seek(0)
         return send_file(output, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
-        print(f"❌ Lỗi export combined: {e}")
+        print(f"Lỗi export combined: {e}")
         return jsonify({"error": str(e)}), 500
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
