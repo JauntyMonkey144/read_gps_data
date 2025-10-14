@@ -754,9 +754,9 @@ def export_leaves_to_excel():
         wb = load_workbook(template_path)
         ws = wb.active
         
-        ws['A1'], ws['B1'], ws['C1'], ws['D1'], ws['E1'], ws['F1'], ws['G1'], ws['H1'], ws['I1'], ws['J1'], ws['K1'] = (
+        ws['A1'], ws['B1'], ws['C1'], ws['D1'], ws['E1'], ws['F1'], ws['G1'], ws['H1'], ws['I1'], ws['J1'] = (
             "Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
-            "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
+            "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối"
         )
         
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
@@ -809,9 +809,8 @@ def export_leaves_to_excel():
                 ws.cell(row=current_row, column=8, value=rec.get("Status1", ""))
                 ws.cell(row=current_row, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
                 ws.cell(row=current_row, column=10, value=rec.get("Status2", ""))
-                ws.cell(row=current_row, column=11, value=rec.get("LeaveNote", ""))
                 
-                for col_idx in range(1, 12):
+                for col_idx in range(1, 11):
                     ws.cell(row=current_row, column=col_idx).border = border
                     ws.cell(row=current_row, column=col_idx).alignment = align_left
                 
@@ -930,9 +929,9 @@ def export_combined_to_excel():
 
         # ---- Xử lý sheet Nghỉ phép ----
         ws_leaves = wb["Nghỉ phép"]
-        ws_leaves['A1'], ws_leaves['B1'], ws_leaves['C1'], ws_leaves['D1'], ws_leaves['E1'], ws_leaves['F1'], ws_leaves['G1'], ws_leaves['H1'], ws_leaves['I1'], ws_leaves['J1'], ws_leaves['K1'] = (
+        ws_leaves['A1'], ws_leaves['B1'], ws_leaves['C1'], ws_leaves['D1'], ws_leaves['E1'], ws_leaves['F1'], ws_leaves['G1'], ws_leaves['H1'], ws_leaves['I1'], ws_leaves['J1'] = (
             "Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
-            "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
+            "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối"
         )
         
         current_row_leave = 2
@@ -975,8 +974,7 @@ def export_combined_to_excel():
                 ws_leaves.cell(row=current_row_leave, column=8, value=rec.get("Status1", ""))
                 ws_leaves.cell(row=current_row_leave, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
                 ws_leaves.cell(row=current_row_leave, column=10, value=rec.get("Status2", ""))
-                ws_leaves.cell(row=current_row_leave, column=11, value=rec.get("LeaveNote", ""))
-                for col in range(1, 12):
+                for col in range(1, 11):
                     ws_leaves.cell(row=current_row_leave, column=col).border = border
                     ws_leaves.cell(row=current_row_leave, column=col).alignment = align_left
                 current_row_leave += 1
