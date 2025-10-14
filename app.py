@@ -326,46 +326,65 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
     return {"$and": conditions}
 
 # ---- Helper functions ----
-def calculate_leave_days_from_record(record):
+def calculate_leave_days_for_month(record, export_year, export_month):
+    """
+    Calculates the number of leave days for a given record within a specific month and year.
+    - Returns 0 if the request was rejected or is pending first approval.
+    - Only counts workdays (Mon-Sat) that fall within the export month.
+    """
+    status1 = record.get("Status1", "")
+    status2 = record.get("Status2", "")
+
+    # Rule 1: Check approval status. Return 0 if rejected or pending first approval.
+    if not status1 or "Từ chối" in status1 or "Từ chối" in status2:
+        return 0.0
+
     display_date = record.get("DisplayDate", "").strip().lower()
-    if display_date:
-        if "cả ngày" in display_date:
-            return 1.0
-        if "sáng" in display_date or "chiều" in display_date:
-            return 0.5
-        if "từ" in display_date and "đến" in display_date:
-            try:
-                # Hỗ trợ cả định dạng YYYY-MM-DD và DD/MM/YYYY
-                date_parts = re.findall(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}", display_date)
+    start_date, end_date = None, None
+
+    # Parse start and end dates from various possible fields
+    try:
+        if display_date:
+            if "từ" in display_date and "đến" in display_date:
+                # Format: "Từ YYYY-MM-DD ... đến YYYY-MM-DD ..."
+                date_parts = re.findall(r"\d{4}-\d{2}-\d{2}", display_date)
                 if len(date_parts) == 2:
-                    start_date = datetime.strptime(date_parts[0], "%Y-%m-%d" if "-" in date_parts[0] else "%d/%m/%Y")
-                    end_date = datetime.strptime(date_parts[1], "%Y-%m-%d" if "-" in date_parts[1] else "%d/%m/%Y")
-                    work_days = 0
-                    current_date = start_date
-                    while current_date <= end_date:
-                        if current_date.weekday() < 6:  # Monday=0, Sunday=6
-                            work_days += 1
-                        current_date += timedelta(days=1)
-                    return float(work_days)
-            except (ValueError, TypeError):
-                pass
-    # Fallback logic if DisplayDate is not available or invalid
-    if 'StartDate' in record and 'EndDate' in record:
-        try:
-            start_date = datetime.strptime(record['StartDate'], "%Y-%m-%d")
-            end_date = datetime.strptime(record['EndDate'], "%Y-%m-%d")
-            work_days = 0
-            current_date = start_date
-            while current_date <= end_date:
-                if current_date.weekday() < 6:  # Monday=0, Sunday=6
-                    work_days += 1
-                current_date += timedelta(days=1)
-            return float(work_days)
-        except (ValueError, TypeError):
+                    start_date = datetime.strptime(date_parts[0], "%Y-%m-%d")
+                    end_date = datetime.strptime(date_parts[1], "%Y-%m-%d")
+            else:
+                 # Format: "YYYY-MM-DD ..." (single day)
+                date_part = display_date.split()[0]
+                start_date = end_date = datetime.strptime(date_part, "%Y-%m-%d")
+        elif record.get('StartDate') and record.get('EndDate'):
+             start_date = datetime.strptime(record['StartDate'], "%Y-%m-%d")
+             end_date = datetime.strptime(record['EndDate'], "%Y-%m-%d")
+        elif record.get('LeaveDate'):
+             start_date = end_date = datetime.strptime(record['LeaveDate'], "%Y-%m-%d")
+    except (ValueError, TypeError, IndexError):
+        return 0.0 # Cannot parse date, so no days can be calculated.
+
+    if not start_date or not end_date:
+        return 0.0
+
+    # Rule 2: Handle single-day leave (half or full day)
+    if start_date == end_date:
+        if start_date.year == export_year and start_date.month == export_month:
+            if "sáng" in display_date or "chiều" in display_date or record.get('Session', '').lower() in ['sáng', 'chiều']:
+                return 0.5
             return 1.0
-    if 'LeaveDate' in record:
-        return 0.5 if record.get('Session', '').lower() in ['sáng', 'chiều'] else 1.0
-    return 1.0
+        else:
+            return 0.0 # The single leave day is not in the export month.
+
+    # Rule 3: Calculate for date ranges, counting only days within the export month
+    leave_days_in_month = 0.0
+    current_date = start_date
+    while current_date <= end_date:
+        # Check if the current day is within the target export month and is a workday (Mon-Sat)
+        if current_date.year == export_year and current_date.month == export_month and current_date.weekday() < 6: # Monday=0, Sunday=6
+            leave_days_in_month += 1
+        current_date += timedelta(days=1)
+
+    return float(leave_days_in_month)
 
 def get_formatted_approval_date(approval_date):
     if not approval_date: return ""
@@ -601,11 +620,25 @@ def export_to_excel():
         admin = admins.find_one({"email": email})
         user = users.find_one({"email": email})
         if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
-        username = None if admin else user["username"]
+        username = None if admin else user.get("username")
+
+        # Get month from request, default to current month
+        month_str = request.args.get("month", datetime.now(VN_TZ).strftime("%Y-%m"))
+        try:
+            export_dt = datetime.strptime(month_str, "%Y-%m")
+            export_year, export_month = export_dt.year, export_dt.month
+            start_date = export_dt.strftime("%Y-%m-%d")
+            _, last_day = calendar.monthrange(export_year, export_month)
+            end_date = export_dt.replace(day=last_day).strftime("%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": "❌ Định dạng tháng không hợp lệ. Vui lòng sử dụng YYYY-MM."}), 400
+
         query = build_attendance_query(
-            request.args.get("filter", "hôm nay").lower(),
-            request.args.get("startDate"), request.args.get("endDate"),
-            request.args.get("search", "").strip(), username=username
+            "custom", # Use custom filter to specify date range
+            start_date,
+            end_date,
+            request.args.get("search", "").strip(),
+            username=username
         )
         data = list(collection.find(query, {"_id": 0}))
         grouped = {}
@@ -627,14 +660,14 @@ def export_to_excel():
             # Retrieve stored DailyHours and MonthlyHours
             daily_hours = records[0].get("DailyHours", "0h 0m 0s")
             monthly_hours = records[0].get("MonthlyHours", "0h 0m 0s")
-            ws.cell(row=row, column=14, value=daily_hours) # Assuming column 14 for DailyHours
-            ws.cell(row=row, column=15, value=monthly_hours) # Assuming column 15 for MonthlyHours
+            ws.cell(row=row, column=14, value=daily_hours)
+            ws.cell(row=row, column=15, value=monthly_hours)
             
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
             sorted_records = sorted(records, key=lambda x: (
                 datetime.strptime(x['Timestamp'], "%Y-%m-%d %H:%M:%S")
                 if isinstance(x.get('Timestamp'), str) and x.get('Timestamp')
-                else x['Timestamp']
+                else x.get('Timestamp', datetime.min)
                 if isinstance(x.get('Timestamp'), datetime)
                 else datetime.min
             ))
@@ -642,10 +675,10 @@ def export_to_excel():
                 time_str = ""
                 if rec.get('Timestamp'):
                     try:
-                        if isinstance(rec['Timestamp'], str):
-                            time_str = datetime.strptime(rec['Timestamp'], "%Y-%m-%d %H:%M:%S").astimezone(VN_TZ).strftime("%H:%M:%S")
-                        elif isinstance(rec['Timestamp'], datetime):
-                            time_str = rec['Timestamp'].astimezone(VN_TZ).strftime("%H:%M:%S")
+                        timestamp = rec['Timestamp']
+                        if isinstance(timestamp, str):
+                            timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+                        time_str = timestamp.astimezone(VN_TZ).strftime("%H:%M:%S")
                     except (ValueError, TypeError):
                         time_str = ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
@@ -658,10 +691,12 @@ def export_to_excel():
                     checkin_counter += 1
                 elif rec.get('CheckType') == 'checkout':
                     ws.cell(row=row, column=checkout_col, value=cell_value)
-            for col in range(1, 16): # Adjusted to include DailyHours and MonthlyHours columns
+            for col in range(1, 16):
                 ws.cell(row=row, column=col).border = border
                 ws.cell(row=row, column=col).alignment = align_left
-        filename = f"Danh sách chấm công_{request.args.get('filter')}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
+
+        export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
+        filename = f"Danh sách chấm công_Tháng_{export_month}-{export_year}_{export_date_str}.xlsx"
         output = BytesIO()
         wb.save(output)
         output.seek(0)
@@ -676,72 +711,112 @@ def export_leaves_to_excel():
     try:
         email = request.args.get("email")
         if not email: return jsonify({"error": "❌ Thiếu email"}), 400
+        
         admin = admins.find_one({"email": email})
-        username = None if admin else users.find_one({"email": email})["username"]
-        if not admin and not username: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        user_doc = users.find_one({"email": email})
+        username = None
+        if admin:
+            username = None # Admin can see all
+        elif user_doc:
+            username = user_doc.get("username")
+        else:
+            return jsonify({"error": "🚫 Email không tồn tại"}), 403
+
+        # Get month from request, default to current month if not provided
+        month_str = request.args.get("month", datetime.now(VN_TZ).strftime("%Y-%m"))
+        try:
+            export_dt = datetime.strptime(month_str, "%Y-%m")
+            export_year, export_month = export_dt.year, export_dt.month
+        except ValueError:
+            return jsonify({"error": "❌ Định dạng tháng không hợp lệ. Vui lòng sử dụng YYYY-MM."}), 400
+
+        # Build a broad query to get all leave data, filtering will happen in Python
         query = build_leave_query(
-            request.args.get("filter", "tất cả").lower(),
-            request.args.get("startDate"), request.args.get("endDate"),
+            "tất cả", # Fetch all records regardless of date filter
+            None, None,
             request.args.get("search", "").strip(),
-            request.args.get("dateType", "CheckinDate"),
+            "CheckinDate", # This parameter doesn't have a significant effect with "tất cả"
             username=username
         )
-        data = list(collection.find(query, {"_id": 0}))
+        all_leaves_data = list(collection.find(query, {"_id": 0}))
+
         template_path = "templates/Copy of Form nghỉ phép.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
-        # Cập nhật tiêu đề cột theo thứ tự yêu cầu
+        
         ws['A1'], ws['B1'], ws['C1'], ws['D1'], ws['E1'], ws['F1'], ws['G1'], ws['H1'], ws['I1'], ws['J1'], ws['K1'] = (
             "Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
             "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
         )
+        
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        for i, rec in enumerate(data, start=2):
-            # Ưu tiên DisplayDate, nếu không có thì tính từ StartDate/EndDate hoặc LeaveDate
-            display_date = rec.get("DisplayDate", "")
-            if not display_date and rec.get('StartDate') and rec.get('EndDate'):
-                start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
-                end = datetime.strptime(rec['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
-                display_date = f"Từ {start} đến {end}"
-            elif not display_date and rec.get('LeaveDate'):
-                leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
-                display_date = f"{leave_date} ({rec.get('Session', '')})"
-            ws.cell(row=i, column=1, value=rec.get("EmployeeId", ""))
-            ws.cell(row=i, column=2, value=rec.get("EmployeeName", ""))
-            ws.cell(row=i, column=3, value=display_date)
-            leave_days = calculate_leave_days_from_record(rec)
-            ws.cell(row=i, column=4, value=leave_days if isinstance(leave_days, (int, float)) else 0.0)
-            # Sử dụng CreationTime cho Ngày tạo đơn
-            timestamp_str = ""
-            if rec.get("CreationTime"):
-                try:
-                    if isinstance(rec['CreationTime'], str):
-                        timestamp_str = datetime.strptime(rec['CreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
-                    elif isinstance(rec['CreationTime'], datetime):
-                        timestamp_str = rec['CreationTime'].astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
-                except (ValueError, TypeError):
-                    timestamp_str = ""
-            ws.cell(row=i, column=5, value=timestamp_str)
-            tasks = rec.get("Tasks", [])
-            tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
-            ws.cell(row=i, column=6, value=rec.get("Reason") or tasks_str)
-            ws.cell(row=i, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate1")))
-            ws.cell(row=i, column=8, value=rec.get("Status1", ""))
-            ws.cell(row=i, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
-            ws.cell(row=i, column=10, value=rec.get("Status2", ""))
-            ws.cell(row=i, column=11, value=rec.get("LeaveNote", ""))
-            for col_idx in range(1, 12):  # Cập nhật số cột đến 11
-                ws.cell(row=i, column=col_idx).border = border
-                ws.cell(row=i, column=col_idx).alignment = align_left
-        
-        filename = f"Danh sách nghỉ phép_{request.args.get('filter')}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
+
+        current_row = 2 # Start writing data from row 2
+        for rec in all_leaves_data:
+            # Calculate leave days specifically for the requested month
+            leave_days = calculate_leave_days_for_month(rec, export_year, export_month)
+
+            # Only include records with leave days in the selected month
+            if leave_days > 0:
+                display_date = rec.get("DisplayDate", "")
+                if not display_date and rec.get('StartDate') and rec.get('EndDate'):
+                    start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                    end = datetime.strptime(rec['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                    display_date = f"Từ {start} đến {end}"
+                elif not display_date and rec.get('LeaveDate'):
+                    leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                    display_date = f"{leave_date} ({rec.get('Session', '')})"
+
+                ws.cell(row=current_row, column=1, value=rec.get("EmployeeId", ""))
+                ws.cell(row=current_row, column=2, value=rec.get("EmployeeName", ""))
+                ws.cell(row=current_row, column=3, value=display_date)
+                ws.cell(row=current_row, column=4, value=leave_days)
+
+                timestamp_str = ""
+                if rec.get("CreationTime"):
+                    try:
+                        creation_time = rec['CreationTime']
+                        timestamp_dt = None
+                        if isinstance(creation_time, str):
+                            creation_time = creation_time.replace('Z', '+00:00')
+                            timestamp_dt = datetime.fromisoformat(creation_time)
+                        elif isinstance(creation_time, datetime):
+                            timestamp_dt = creation_time
+                        
+                        if timestamp_dt:
+                            timestamp_str = timestamp_dt.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+
+                    except (ValueError, TypeError):
+                        timestamp_str = str(rec.get("CreationTime"))
+                        
+                ws.cell(row=current_row, column=5, value=timestamp_str)
+                
+                tasks = rec.get("Tasks", [])
+                tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
+                ws.cell(row=current_row, column=6, value=rec.get("Reason") or tasks_str)
+                ws.cell(row=current_row, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate1")))
+                ws.cell(row=current_row, column=8, value=rec.get("Status1", ""))
+                ws.cell(row=current_row, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
+                ws.cell(row=current_row, column=10, value=rec.get("Status2", ""))
+                ws.cell(row=current_row, column=11, value=rec.get("LeaveNote", ""))
+                
+                for col_idx in range(1, 12):
+                    ws.cell(row=current_row, column=col_idx).border = border
+                    ws.cell(row=current_row, column=col_idx).alignment = align_left
+                
+                current_row += 1
+
+        export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
+        filename = f"Danh sách nghỉ phép_Tháng_{export_month}-{export_year}_{export_date_str}.xlsx"
         output = BytesIO()
         wb.save(output)
         output.seek(0)
         return send_file(output, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
+        import traceback
         print(f"❌ Lỗi export leaves: {e}")
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 # ---- API xuất Excel kết hợp ----
@@ -751,15 +826,27 @@ def export_combined_to_excel():
         email = request.args.get("email")
         if not email: return jsonify({"error": "❌ Thiếu email"}), 400
         admin = admins.find_one({"email": email})
-        username = None if admin else users.find_one({"email": email})["username"]
-        if not admin and not username: return jsonify({"error": "🚫 Email không tồn tại"}), 403
-        filter_type = request.args.get("filter", "hôm nay").lower()
-        start_date = request.args.get("startDate")
-        end_date = request.args.get("endDate")
+        user = users.find_one({"email": email})
+        if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        username = None if admin else user.get("username")
+
+        # Get month from request, default to current month
+        month_str = request.args.get("month", datetime.now(VN_TZ).strftime("%Y-%m"))
+        try:
+            export_dt = datetime.strptime(month_str, "%Y-%m")
+            export_year, export_month = export_dt.year, export_dt.month
+            start_date = export_dt.strftime("%Y-%m-%d")
+            _, last_day = calendar.monthrange(export_year, export_month)
+            end_date = export_dt.replace(day=last_day).strftime("%Y-%m-%d")
+        except ValueError:
+            return jsonify({"error": "❌ Định dạng tháng không hợp lệ. Vui lòng sử dụng YYYY-MM."}), 400
+        
         search = request.args.get("search", "").strip()
-        date_type = request.args.get("dateType", "CheckinDate")
-        attendance_query = build_attendance_query(filter_type, start_date, end_date, search, username=username)
-        leave_query = build_leave_query(filter_type, start_date, end_date, search, date_type, username=username)
+        
+        # --- Get Data for Both Sheets ---
+        attendance_query = build_attendance_query("custom", start_date, end_date, search, username=username)
+        leave_query = build_leave_query("tất cả", None, None, search, "CheckinTime", username=username)
+        
         attendance_data = list(collection.find(attendance_query, {"_id": 0}))
         leave_data = list(collection.find(leave_query, {"_id": 0}))
         
@@ -767,6 +854,7 @@ def export_combined_to_excel():
         wb = load_workbook(template_path)
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        
         # ---- Xử lý sheet Điểm danh ----
         ws_attendance = wb["Điểm danh"]
         attendance_grouped = {}
@@ -781,17 +869,16 @@ def export_combined_to_excel():
             ws_attendance.cell(row=row, column=2, value=emp_name)
             ws_attendance.cell(row=row, column=3, value=date_str)
             
-            # Retrieve stored DailyHours and MonthlyHours
             daily_hours = records[0].get("DailyHours", "0h 0m 0s")
             monthly_hours = records[0].get("MonthlyHours", "0h 0m 0s")
-            ws_attendance.cell(row=row, column=14, value=daily_hours) # Assuming column 14 for DailyHours
-            ws_attendance.cell(row=row, column=15, value=monthly_hours) # Assuming column 15 for MonthlyHours
+            ws_attendance.cell(row=row, column=14, value=daily_hours)
+            ws_attendance.cell(row=row, column=15, value=monthly_hours)
             
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
             sorted_records = sorted(records, key=lambda x: (
                 datetime.strptime(x['Timestamp'], "%Y-%m-%d %H:%M:%S")
                 if isinstance(x.get('Timestamp'), str) and x.get('Timestamp')
-                else x['Timestamp']
+                else x.get('Timestamp', datetime.min)
                 if isinstance(x.get('Timestamp'), datetime)
                 else datetime.min
             ))
@@ -800,14 +887,13 @@ def export_combined_to_excel():
                 time_str = ""
                 if rec.get('Timestamp'):
                     try:
-                        if isinstance(rec['Timestamp'], str):
-                            time_str = datetime.strptime(rec['Timestamp'], "%Y-%m-%d %H:%M:%S").astimezone(VN_TZ).strftime("%H:%M:%S")
-                        elif isinstance(rec['Timestamp'], datetime):
-                            time_str = rec['Timestamp'].astimezone(VN_TZ).strftime("%H:%M:%S")
+                        timestamp = rec['Timestamp']
+                        if isinstance(timestamp, str):
+                            timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+                        time_str = timestamp.astimezone(VN_TZ).strftime("%H:%M:%S")
                     except (ValueError, TypeError):
                         time_str = ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
-                # Build cell_value by including only non-empty fields
                 fields = [time_str, rec.get('ProjectId', ''), tasks_str, rec.get('Address', ''), rec.get('CheckinNote', '')]
                 cell_value = "; ".join(field for field in fields if field)
                 if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
@@ -815,9 +901,10 @@ def export_combined_to_excel():
                     checkin_counter += 1
                 elif rec.get('CheckType') == 'checkout':
                     ws_attendance.cell(row=row, column=checkout_col, value=cell_value)
-            for col in range(1, 16): # Adjusted to include DailyHours and MonthlyHours columns
+            for col in range(1, 16):
                 ws_attendance.cell(row=row, column=col).border = border
                 ws_attendance.cell(row=row, column=col).alignment = align_left
+
         # ---- Xử lý sheet Nghỉ phép ----
         ws_leaves = wb["Nghỉ phép"]
         ws_leaves['A1'], ws_leaves['B1'], ws_leaves['C1'], ws_leaves['D1'], ws_leaves['E1'], ws_leaves['F1'], ws_leaves['G1'], ws_leaves['H1'], ws_leaves['I1'], ws_leaves['J1'], ws_leaves['K1'] = (
@@ -825,53 +912,63 @@ def export_combined_to_excel():
             "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
         )
         
-        for i, rec in enumerate(leave_data, start=2):
-            # Ưu tiên DisplayDate, nếu không có thì tính từ StartDate/EndDate hoặc LeaveDate
-            display_date = rec.get("DisplayDate", "")
-            if not display_date and rec.get('StartDate') and rec.get('EndDate'):
-                start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
-                end = datetime.strptime(rec['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
-                display_date = f"Từ {start} đến {end}"
-            elif not display_date and rec.get('LeaveDate'):
-                leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
-                display_date = f"{leave_date} ({rec.get('Session', '')})"
-            ws_leaves.cell(row=i, column=1, value=rec.get("EmployeeId"))
-            ws_leaves.cell(row=i, column=2, value=rec.get("EmployeeName"))
-            ws_leaves.cell(row=i, column=3, value=display_date)
-            leave_days = calculate_leave_days_from_record(rec)
-            ws_leaves.cell(row=i, column=4, value=leave_days if isinstance(leave_days, (int, float)) else 0.0)
-            # Sử dụng CreationTime cho Ngày tạo đơn
-            timestamp_str = ""
-            if rec.get("CreationTime"):
-                try:
-                    if isinstance(rec['CreationTime'], str):
-                        timestamp_str = datetime.strptime(rec['CreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ").astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
-                    elif isinstance(rec['CreationTime'], datetime):
-                        timestamp_str = rec['CreationTime'].astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
-                except (ValueError, TypeError):
-                    timestamp_str = ""
-            ws_leaves.cell(row=i, column=5, value=timestamp_str)
-            tasks = rec.get("Tasks", [])
-            tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
-            ws_leaves.cell(row=i, column=6, value=rec.get("Reason") or tasks_str)
-            ws_leaves.cell(row=i, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate1")))
-            ws_leaves.cell(row=i, column=8, value=rec.get("Status1", ""))
-            ws_leaves.cell(row=i, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
-            ws_leaves.cell(row=i, column=10, value=rec.get("Status2", ""))
-            ws_leaves.cell(row=i, column=11, value=rec.get("LeaveNote", ""))
-            for col in range(1, 12):  # Cập nhật số cột đến 11
-                ws_leaves.cell(row=i, column=col).border = border
-                ws_leaves.cell(row=i, column=col).alignment = align_left
-        filename = f"Báo cáo tổng hợp_{filter_type}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
+        current_row_leave = 2
+        for rec in leave_data:
+            leave_days = calculate_leave_days_for_month(rec, export_year, export_month)
+            if leave_days > 0:
+                display_date = rec.get("DisplayDate", "")
+                if not display_date and rec.get('StartDate') and rec.get('EndDate'):
+                    start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                    end = datetime.strptime(rec['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                    display_date = f"Từ {start} đến {end}"
+                elif not display_date and rec.get('LeaveDate'):
+                    leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                    display_date = f"{leave_date} ({rec.get('Session', '')})"
+                
+                ws_leaves.cell(row=current_row_leave, column=1, value=rec.get("EmployeeId"))
+                ws_leaves.cell(row=current_row_leave, column=2, value=rec.get("EmployeeName"))
+                ws_leaves.cell(row=current_row_leave, column=3, value=display_date)
+                ws_leaves.cell(row=current_row_leave, column=4, value=leave_days)
+                
+                timestamp_str = ""
+                if rec.get("CreationTime"):
+                    try:
+                        creation_time = rec['CreationTime']
+                        timestamp_dt = None
+                        if isinstance(creation_time, str):
+                           timestamp_dt = datetime.fromisoformat(creation_time.replace('Z', '+00:00'))
+                        elif isinstance(creation_time, datetime):
+                           timestamp_dt = creation_time
+                        if timestamp_dt:
+                           timestamp_str = timestamp_dt.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+                    except (ValueError, TypeError):
+                       timestamp_str = str(rec.get("CreationTime"))
+                ws_leaves.cell(row=current_row_leave, column=5, value=timestamp_str)
+
+                tasks = rec.get("Tasks", [])
+                tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
+                ws_leaves.cell(row=current_row_leave, column=6, value=rec.get("Reason") or tasks_str)
+                ws_leaves.cell(row=current_row_leave, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate1")))
+                ws_leaves.cell(row=current_row_leave, column=8, value=rec.get("Status1", ""))
+                ws_leaves.cell(row=current_row_leave, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
+                ws_leaves.cell(row=current_row_leave, column=10, value=rec.get("Status2", ""))
+                ws_leaves.cell(row=current_row_leave, column=11, value=rec.get("LeaveNote", ""))
+                for col in range(1, 12):
+                    ws_leaves.cell(row=current_row_leave, column=col).border = border
+                    ws_leaves.cell(row=current_row_leave, column=col).alignment = align_left
+                current_row_leave += 1
+
+        export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
+        filename = f"Báo cáo tổng hợp_Tháng_{export_month}-{export_year}_{export_date_str}.xlsx"
         output = BytesIO()
         wb.save(output)
         output.seek(0)
         return send_file(output, as_attachment=True, download_name=filename, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
+        import traceback
         print(f"❌ Lỗi export combined: {e}")
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-
-
