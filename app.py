@@ -329,16 +329,11 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
 def calculate_leave_days_for_month(record, export_year, export_month):
     """
     Calculates the number of leave days for a given record within a specific month and year.
-    - Returns 0 if the request was rejected or is pending first approval.
-    - Only counts workdays (Mon-Sat) that fall within the export month.
+    - Returns (0, False) if cannot parse dates.
+    - Computes days_in_month ignoring status.
+    - If days_in_month == 0, returns (0, False)
+    - Else, checks status: if bad, returns (0, True), else (days_in_month, True)
     """
-    status1 = record.get("Status1", "")
-    status2 = record.get("Status2", "")
-
-    # Rule 1: Check approval status. Return 0 if rejected or pending first approval.
-    if not status1 or "từ chối" in status1 or "từ chối" in status2:
-        return 0.0
-
     display_date = record.get("DisplayDate", "").strip().lower()
     start_date, end_date = None, None
 
@@ -361,30 +356,38 @@ def calculate_leave_days_for_month(record, export_year, export_month):
         elif record.get('LeaveDate'):
              start_date = end_date = datetime.strptime(record['LeaveDate'], "%Y-%m-%d")
     except (ValueError, TypeError, IndexError):
-        return 0.0 # Cannot parse date, so no days can be calculated.
+        return 0.0, False # Cannot parse date
 
     if not start_date or not end_date:
-        return 0.0
+        return 0.0, False
 
-    # Rule 2: Handle single-day leave (half or full day)
+    # Compute days_in_month
+    days_in_month = 0.0
     if start_date == end_date:
         if start_date.year == export_year and start_date.month == export_month:
             if "sáng" in display_date or "chiều" in display_date or record.get('Session', '').lower() in ['sáng', 'chiều']:
-                return 0.5
-            return 1.0
-        else:
-            return 0.0 # The single leave day is not in the export month.
+                days_in_month = 0.5
+            else:
+                days_in_month = 1.0
 
-    # Rule 3: Calculate for date ranges, counting only days within the export month
-    leave_days_in_month = 0.0
-    current_date = start_date
-    while current_date <= end_date:
-        # Check if the current day is within the target export month and is a workday (Mon-Sat)
-        if current_date.year == export_year and current_date.month == export_month and current_date.weekday() < 6: # Monday=0, Sunday=6
-            leave_days_in_month += 1
-        current_date += timedelta(days=1)
+    else:
+        current_date = start_date
+        while current_date <= end_date:
+            if current_date.year == export_year and current_date.month == export_month and current_date.weekday() < 6:
+                days_in_month += 1
+            current_date += timedelta(days=1)
 
-    return float(leave_days_in_month)
+    is_overlap = days_in_month > 0
+    if not is_overlap:
+        return 0.0, False
+
+    # Now check status
+    status1 = record.get("Status1", "")
+    status2 = record.get("Status2", "")
+    if not status1 or "từ chối" in status1 or "từ chối" in status2:
+        return 0.0, True
+
+    return float(days_in_month), True
 
 def get_formatted_approval_date(approval_date):
     if not approval_date: return ""
@@ -761,11 +764,11 @@ def export_leaves_to_excel():
 
         current_row = 2 # Start writing data from row 2
         for rec in all_leaves_data:
-            # Calculate leave days specifically for the requested month
-            leave_days = calculate_leave_days_for_month(rec, export_year, export_month)
+            # Calculate leave days and overlap
+            leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
 
-            # Only include records with leave days in the selected month
-            if leave_days > 0:
+            # Include if overlaps the month
+            if is_overlap:
                 display_date = rec.get("DisplayDate", "")
                 if not display_date and rec.get('StartDate') and rec.get('EndDate'):
                     start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
@@ -934,8 +937,8 @@ def export_combined_to_excel():
         
         current_row_leave = 2
         for rec in leave_data:
-            leave_days = calculate_leave_days_for_month(rec, export_year, export_month)
-            if leave_days > 0:
+            leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
+            if is_overlap:
                 display_date = rec.get("DisplayDate", "")
                 if not display_date and rec.get('StartDate') and rec.get('EndDate'):
                     start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
