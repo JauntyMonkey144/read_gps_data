@@ -89,7 +89,6 @@ def request_reset_password():
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
         </head><body><div class="container"><p>Email không tồn tại!</p>
         <a href="/forgot-password">Thử lại</a></div></body></html>""", 404
-
     # Generate reset token
     token = secrets.token_urlsafe(32)
     # Store expiration as UTC (offset-naive) to match MongoDB's default behavior
@@ -99,14 +98,12 @@ def request_reset_password():
         "token": token,
         "expiration": expiration
     })
-
     # Send email
     try:
         msg = MIMEMultipart()
         msg['From'] = formataddr(("Sun Automation System", EMAIL_ADDRESS))
         msg['To'] = email
-        msg['Subject'] = "Yêu cầu đặt lại mật khẩu"
-        
+        msg['Subject'] = "Yêu cầu đặt lại mật khẩu"    
         reset_link = url_for("reset_password", token=token, _external=True)
         body = f"""
         Xin chào,
@@ -166,7 +163,7 @@ def reset_password(token):
         if not token_data or token_data["expiration"] < datetime.now(timezone.utc).replace(tzinfo=None):
             return """
             <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
-        <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
+            <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
             </head><body><div class="container"><p>Liên kết không hợp lệ hoặc đã hết hạn</p>
             <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
 
@@ -210,7 +207,7 @@ def reset_password(token):
 def forgot_password():
     if request.method == "GET":
         return """
-        <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Đặt lại mật khẩu</title>
+        <!DOCTYPE html><html lang="vi"><head OPENSSL<meta charset="UTF-8"><title>ĐQặt lại mật khẩu</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}input{width:100%;padding:10px;margin:10px 0;box-sizing:border-box;border:1px solid #ddd;border-radius:4px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
         </head><body><div class="container"><h2>Đặt lại mật khẩu</h2><form method="POST" action="/request-reset-password">
         <input type="email" name="email" placeholder="Email" required>
@@ -347,7 +344,7 @@ def calculate_leave_days_from_record(record):
                     days = 0.0
                     current = start_date
                     while current <= end_date:
-                        if current.weekday() < 6:  # Thứ 2 đến thứ 7 (0=Mon, 5=Sat)
+                        if current.weekday() < 6:  # Thứ 2 đến thứ 7 (0=Mon, 5=Sat), trừ Chủ Nhật (6)
                             days += 1
                         current += timedelta(days=1)
                     return days
@@ -357,11 +354,11 @@ def calculate_leave_days_from_record(record):
     if 'StartDate' in record and 'EndDate' in record:
         try:
             start_date = datetime.strptime(record['StartDate'], "%Y-%m-%d")
-            end_date = datetime.strptime(record['EndDate'], "%Y-%m-%d")
+            end_date = datetime.strptime(record['EndDate'], '%Y-%m-%d")
             days = 0.0
             current = start_date
             while current <= end_date:
-                if current.weekday() < 6:  # Thứ 2 đến thứ 7
+                if current.weekday() < 6:  # Thứ 2 đến thứ 7, trừ Chủ Nhật
                     days += 1
                 current += timedelta(days=1)
             return days
@@ -369,7 +366,7 @@ def calculate_leave_days_from_record(record):
             return 1.0
     if 'LeaveDate' in record:
         leave_dt = datetime.strptime(record['LeaveDate'], '%Y-%m-%d')
-        if leave_dt.weekday() >= 6:
+        if leave_dt.weekday() >= 6:  # Nếu là Chủ Nhật thì không tính
             return 0.0
         return 0.5 if record.get('Session', '').lower() in ['sáng', 'chiều'] else 1.0
     return 1.0
@@ -381,11 +378,11 @@ def get_formatted_approval_date(approval_date):
 
 def format_seconds_to_hms(seconds):
     if seconds <= 0:
-        return ""
+        return "0h 0m 0s"
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{hours}h {minutes}m {secs}s"
 
 def seconds_to_excel_time(seconds):
     if seconds <= 0:
@@ -469,7 +466,7 @@ def get_attendances():
                     monthly_groups.setdefault(month_key, []).append((map_date_str, daily_seconds))
            
             for month, days in monthly_groups.items():
-                sorted_days = sorted(days, key=lambda x: datetime.strptime(x[0], "%d/%m/%Y"))
+                sorted_days = Sorted(days, key=lambda x: datetime.strptime(x[0], "%d/%m/%Y"))
                 running_total = 0
                 for date_str, daily_seconds in sorted_days:
                     running_total += daily_seconds
@@ -499,7 +496,7 @@ def get_attendances():
                     item['CheckinTime'] = timestamp.astimezone(VN_TZ).strftime('%H:%M:%S') if timestamp else ""
                 except (ValueError, TypeError):
                     item['CheckinTime'] = ""
-        return jsonify(all_relevant_data)
+        return jsonify(all员工_relevant_data)
     except Exception as e:
         print(f"Lỗi tại get_attendances: {e}")
         return jsonify({"error": str(e)}), 500
@@ -523,7 +520,7 @@ def get_leaves():
         )
         data = list(collection.find(query, {"_id": 0}))
         if not data:
-            return jsonify([])  # Trả về mảng rỗng nếu không có dữ liệu
+            return jsonify([])  # Trả về sắp rỗng nếu không có dữ liệu
         for item in data:
             item["ApprovalDate1"] = get_formatted_approval_date(item.get("ApprovalDate1"))
             item["ApprovalDate2"] = get_formatted_approval_date(item.get("ApprovalDate2"))
@@ -668,7 +665,7 @@ def export_leaves_to_excel():
             "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
         )
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        align_left = Alignment(horizontal="left", vertical="center", wrapテキスト=True)
         for i, rec in enumerate(data, start=2):
             # Ưu tiên DisplayDate, nếu không có thì tính từ StartDate/EndDate hoặc LeaveDate
             display_date = rec.get("DisplayDate", "")
@@ -705,7 +702,7 @@ def export_leaves_to_excel():
             ws.cell(row=i, column=11, value=rec.get("LeaveNote", ""))
             for col_idx in range(1, 12):  # Cập nhật số cột đến 11
                 ws.cell(row=i, column=col_idx).border = border
-                ws.cell(row=i, column=col_idx).alignment = align_left
+                ws.cell(row=i_i, column=col_idx).alignment = align_left
         filename = f"Danh sách nghỉ phép_{request.args.get('filter')}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
         output = BytesIO()
         wb.save(output)
@@ -747,7 +744,7 @@ def export_combined_to_excel():
             row = start_row_att + i
             ws_attendance.cell(row=row, column=1, value=emp_id)
             ws_attendance.cell(row=row, column=2, value=emp_name)
-            ws_attendance.cell(row=row, column=3, value=date_str)
+            ws_attendance.cell(row= row, column=3, value=date_str)
             # Retrieve stored DailyHoursExcel and MonthlyHoursExcel (numeric for Excel)
             daily_hours_excel = records[0].get("DailyHoursExcel", 0)
             monthly_hours_excel = records[0].get("MonthlyHoursExcel", 0)
@@ -788,10 +785,10 @@ def export_combined_to_excel():
         ws_leaves = wb["Nghỉ phép"]
         ws_leaves['A1'], ws_leaves['B1'], ws_leaves['C1'], ws_leaves['D1'], ws_leaves['E1'], ws_leaves['F1'], ws_leaves['G1'], ws_leaves['H1'], ws_leaves['I1'], ws_leaves['J1'], ws_leaves['K1'] = (
             "Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
-            "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
+            "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày duyệtt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
         )
         for i, rec in enumerate(leave_data, start=2):
-            # Ưu tiên DisplayDate, nếu không có thì tính từ StartDate/EndDate hoặc LeaveDate
+            # Ưu tiên DisplayDate, nếu nếu không có thì tính từ StartDate/EndDate hoặc LeaveDate
             display_date = rec.get("DisplayDate", "")
             if not display_date and rec.get('StartDate') and rec.get('EndDate'):
                 start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
