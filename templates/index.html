@@ -22,13 +22,13 @@
       position: relative;
     }
     h1 { text-align: center; color: var(--primary); }
-    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center;mang }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
     button {
       background: var(--primary);
       color: white;
       border: none;
       padding: 6px 12px;
-     、Border-radius: 6px;
+      border-radius: 6px;
       cursor: pointer;
       font-size: 14px;
       transition: 0.2s;
@@ -97,12 +97,15 @@
     }
     .modal-content a {
       color: var(--muted);
-      font-size VOLUME: 13px;
+      font-size: 13px;
       text-decoration: none;
       display: inline-block;
       margin-top: 10px;
     }
     .modal-content a:hover { text-decoration: underline; }
+    .month-picker { display: none; gap: 5px; align-items: center; }
+    .month-picker label { white-space: nowrap; margin-right: 5px; }
+    .month-picker.active { display: flex; }
   </style>
 </head>
 <body>
@@ -125,7 +128,7 @@
   <div id="dateFilter" class="controls">
     <label><b>Từ ngày:</b></label><input type="date" id="startDate" />
     <label><b>Đến ngày:</b></label><input type="date" id="endDate" />
-    <button onclick="applyDateRange()">Áp dụng</button>
+    <button onclick="applyDateRange()">Áp dụng}}(</button>
   </div>
   <div id="searchFilter" class="controls">
     <input type="text" id="searchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
@@ -137,12 +140,17 @@
       <option value="25">25 dòng</option>
     </select>
     <div class="export-group" id="exportGroupAttendance">
-      <select id="exportOptionsAttendance" style="border: 1px solid var(--primary);">
+      <select id="exportOptionsAttendance" style="border: 1px solid var(--primary);" onchange="toggleMonthPicker('attendance')">
         <option value="">-- Chọn loại file --</option>
         <option value="attendance">Điểm Danh Theo Filter Hiện Tại</option>
         <option value="leave">Nghỉ Phép Theo Filter Hiện Tại</option>
         <option value="combined">Toàn Bộ (Cả hai) Theo Filter Hiện Tại</option>
+        <option value="monthly">Điểm Danh Theo Tháng</option>
       </select>
+      <div class="month-picker" id="monthPickerAttendance">
+        <label>Chọn tháng:</label>
+        <input type="month" id="exportMonthAttendance" />
+      </div>
       <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button>
     </div>
     <button onclick="refreshData()">🔄 Làm mới</button>
@@ -199,12 +207,17 @@
         <option value="25">25 dòng</option>
       </select>
       <div class="export-group" id="exportGroupLeave">
-        <select id="exportOptionsLeave" style="border: 1px solid var(--primary);">
+        <select id="exportOptionsLeave" style="border: 1px solid var(--primary);" onchange="toggleMonthPicker('leave')">
           <option value="">-- Chọn loại file --</option>
           <option value="attendance">Điểm Danh Theo Filter Hiện Tại</option>
           <option value="leave">Nghỉ Phép Theo Filter Hiện Tại</option>
           <option value="combined">Toàn Bộ (Cả hai) Theo Filter Hiện Tại</option>
+          <option value="monthly">Nghỉ Phép Theo Tháng</option>
         </select>
+        <div class="month-picker" id="monthPickerLeave">
+          <label>Chọn tháng:</label>
+          <input type="month" id="exportMonthLeave" />
+        </div>
         <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button>
       </div>
       <button onclick="refreshLeaveData()">🔄 Làm mới</button>
@@ -269,7 +282,7 @@
       }, 4000);
     }
     function showDashboard() {
-      document.getElementById("loginModal").style.display = "none";
+      document.getElementById("loginModal"). Tessa.style.display = "none";
       document.getElementById("greeting").style.display = "block";
       document.getElementById("logoutBtn").style.display = "inline-block";
       document.getElementById("dataTabs").style.display = "flex";
@@ -291,6 +304,20 @@
     function resetExportOptions() {
       document.getElementById('exportOptionsAttendance').value = "";
       document.getElementById('exportOptionsLeave').value = "";
+      document.getElementById('monthPickerAttendance').classList.remove('active');
+      document.getElementById('monthPickerLeave').classList.remove('active');
+      document,有 document.getElementById('exportMonthAttendance').value = "";
+      document.getElementById('exportMonthLeave').value = "";
+    }
+    function toggleMonthPicker(tab) {
+      const exportOptions = tab === 'attendance' ? document.getElementById('exportOptionsAttendance').value;
+      const pickerId = tab === 'attendance' ? 'monthPickerAttendance' : 'monthPickerLeave';
+      const picker = document.getElementById(pickerId);
+      if (exportOptions === 'monthly') {
+        picker.classList.add('active');
+      } else {
+        picker.classList.remove('active');
+      }
     }
     function switchTab(tab) {
       currentTab = tab;
@@ -525,7 +552,7 @@
             <td>${r.EmployeeName||""}</td>
             <td>${r.CheckinDate||""}</td>
             <td>${r.CheckinTime||""}</td>
-            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
+            <td>${Array.isArray(r a(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
             <td>${r.ApprovalDate1||""}</td>
             <td>${r.Status1||""}</td>
             <td>${r.ApprovalDate2||""}</td>
@@ -539,7 +566,7 @@
     }
     function renderPagination(total) {
       const pages = Math.ceil(total / rowsPerPage);
-      const pagDiv = Horses document.getElementById("pagination");
+      const pagDiv = document.getElementById("pagination");
       pagDiv.innerHTML = "";
       for (let i=1; i<=pages; i++) {
         pagDiv.innerHTML += `<button class="${i===currentPage?'active':''}" onclick="gotoPage(${i})">${i}</button>`;
@@ -574,7 +601,7 @@
         currentLeaveSort.column = col;
         currentSort.order = "asc";
       }
-      document.querySelectorAll("#leave - querySelectorAll("#leaveTable th").forEach(th => th.classList.remove("asc","desc"));
+      document.querySelectorAll("#leaveTable th").forEach(th => th.classList.remove("asc","desc"));
       if (currentLeaveSort.order)
         document.querySelector(`#leaveTable th[onclick="sortLeaveTable('${col}')"]`).classList.add(currentLeaveSort.order);
       renderLeaveTable();
@@ -617,7 +644,7 @@
       currentLeaveSearch = document.getElementById("leaveSearchBox").value.trim();
       loadLeaveData();
     }
-  function handleExportClick() {
+    function handleExportClick() {
       const email = localStorage.getItem("adminEmail");
       let exportOptionsEl;
       let url = "";
@@ -635,7 +662,20 @@
         showMessage("⚠️ Vui lòng chọn loại dữ liệu cần xuất!", "error");
         return;
       }
-      if (exportType === "attendance") {
+      if (exportType === "monthly") {
+        const monthInput = currentTab === "attendance" ? document.getElementById('exportMonthAttendance') : document.getElementById('exportMonthLeave');
+        const monthValue = monthInput.value;
+        if (!monthValue) {
+          showMessage("Vui lòng chọn tháng để xuất dữ liệu theo tháng!", "error");
+          return;
+        }
+        const [year, month] = monthValue.split('-');
+        if (currentTab === "attendance") {
+          url = `/api/export-monthly-attendance-excel?email=${encodeURIComponent(email)}&year=${year}&month=${month}`;
+        } else {
+          url = `/api/export-monthly-leaves-excel?email=${encodeURIComponent(email)}&year=${year}&month=${month}&dateType=${encodeURIComponent(leaveDateType)}`;
+        }
+      } else if (exportType === "attendance") {
         url = `/api/export-excel?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
         if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
         if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
@@ -652,7 +692,7 @@
             activeEndDate = endDate;
             activeSearch = currentSearch;
             activeDateType = ''; 
-        } else { // currentTab === 'leave'
+        } else { 
             activeFilter = currentLeaveFilter;
             activeStartDate = leaveStartDate;
             activeEndDate = leaveEndDate;
@@ -676,6 +716,7 @@
       if (url) {
         window.location.href = url;
         exportOptionsEl.value = "";
+        toggleMonthPicker(currentTab);
       }
     }
     function updateRowsPerPage() {
@@ -704,13 +745,13 @@
       currentLeaveSearch = "";
       leaveStartDate = leaveEndDate = "";
       currentLeaveFilter = "hôm nay";
-      leaveDateType = "CheckinTime"; // Thay đổi default
+      leaveDateType = "CheckinTime";
       document.getElementById("leaveSearchBox").value = "";
       document.getElementById("leaveStartDate").value = "";
       document.getElementById("leaveEndDate").value = "";
-      document.getElementById("leaveDateTypeFilter").value = "CheckinTime"; // Thay đổi default
+      document.getElementById("leaveDateTypeFilter").value = "CheckinTime";
       highlightLeaveFilterButton();
-      loadLeaveData();
+      LoadsData();
     }
     function highlightFilterButton() {
       document.querySelectorAll("#filters button").forEach(btn => btn.classList.remove("active"));
