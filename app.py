@@ -253,23 +253,19 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, date_ty
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
     conditions = [{"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}]
     date_filter = {}
-
+    start_dt = None
+    end_dt = None
+    # Xác định khoảng thời gian lọc (start_dt và end_dt)
     if filter_type == "custom" and start_date_str and end_date_str:
         try:
             start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=VN_TZ)
             end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
-            
-            if date_type == "CheckinTime":
-                date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
-            elif date_type == "ApprovalDate1":
-                date_filter = {"ApprovalDate1": {"$gte": start_dt, "$lte": end_dt}}
-            elif date_type == "ApprovalDate2":
-                date_filter = {"ApprovalDate2": {"$gte": start_dt, "$lte": end_dt}}
         except ValueError:
-            pass
-    else:
+            pass # Bỏ qua nếu ngày không hợp lệ
+    elif filter_type != "tất cả":
         if filter_type == "hôm nay":
-            start_dt, end_dt = today.replace(hour=0, minute=0, second=0), today.replace(hour=23, minute=59, second=59)
+            start_dt = today.replace(hour=0, minute=0, second=0)
+            end_dt = today.replace(hour=23, minute=59, second=59)
         elif filter_type == "tuần":
             start_dt = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0)
             end_dt = (start_dt + timedelta(days=6)).replace(hour=23, minute=59, second=59)
@@ -280,25 +276,39 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, date_ty
         elif filter_type == "năm":
             start_dt = today.replace(month=1, day=1, hour=0, minute=0, second=0)
             end_dt = today.replace(month=12, day=31, hour=23, minute=59, second=59)
-        else:
-            return {"$and": conditions}  # Không thêm date filter cho "tất cả"
-        
+    # Nếu có khoảng thời gian hợp lệ, xây dựng bộ lọc date_filter
+    if start_dt and end_dt:
         if date_type == "CheckinTime":
             date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
         elif date_type == "ApprovalDate1":
             date_filter = {"ApprovalDate1": {"$gte": start_dt, "$lte": end_dt}}
         elif date_type == "ApprovalDate2":
             date_filter = {"ApprovalDate2": {"$gte": start_dt, "$lte": end_dt}}
-
+        # --- PHẦN MÃ MỚI ĐƯỢC THÊM ---
+        elif date_type == "LeaveDate":
+            # Chuyển đổi ngày lọc sang định dạng chuỗi YYYY-MM-DD để so sánh với dữ liệu trong DB
+            start_date_query_str = start_dt.strftime("%Y-%m-%d")
+            end_date_query_str = end_dt.strftime("%Y-%m-%d")
+            # Tạo truy vấn để tìm các bản ghi có ngày nghỉ giao với khoảng thời gian lọc
+            date_filter = {
+                "$or": [
+                    # Trường hợp nghỉ 1 ngày (LeaveDate nằm trong khoảng lọc)
+                    {"LeaveDate": {"$gte": start_date_query_str, "$lte": end_date_query_str}},
+                    # Trường hợp nghỉ nhiều ngày (khoảng nghỉ giao với khoảng lọc)
+                    {"$and": [
+                        {"StartDate": {"$lte": end_date_query_str}},
+                        {"EndDate": {"$gte": start_date_query_str}}
+                    ]}
+                ]
+            }
+        # --- KẾT THÚC PHẦN MÃ MỚI ---
     if date_filter:
         conditions.append(date_filter)
-    
     if search:
         regex = re.compile(search, re.IGNORECASE)
         conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
     if username:
         conditions.append({"EmployeeName": username})
-    
     return {"$and": conditions}
 
 # ---- Build attendance query ----
@@ -833,3 +843,4 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
