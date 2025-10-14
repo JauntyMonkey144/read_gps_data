@@ -327,49 +327,47 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
 
 # ---- Helper functions ----
 def calculate_leave_days_from_record(record):
-    display_date = record.get("DisplayDate", "").strip().lower()
-    if display_date:
-        if "cả ngày" in display_date:
-            return 1.0
-        if "sáng" in display_date or "chiều" in display_date:
-            return 0.5
-        if "từ" in display_date and "đến" in display_date:
-            try:
-                # Hỗ trợ cả định dạng YYYY-MM-DD và DD/MM/YYYY
-                date_parts = re.findall(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}", display_date)
-                if len(date_parts) == 2:
-                    fmt = "%Y-%m-%d" if "-" in date_parts[0] else "%d/%m/%Y"
-                    start_date = datetime.strptime(date_parts[0], fmt)
-                    end_date = datetime.strptime(date_parts[1], fmt)
-                    days = 0.0
-                    current = start_date
-                    while current <= end_date:
-                        if current.weekday() < 6:  # Thứ 2 đến thứ 7 (0=Mon, 5=Sat), trừ Chủ Nhật (6)
-                            days += 1
-                        current += timedelta(days=1)
-                    return days
-            except (ValueError, TypeError):
-                pass
-    # Fallback logic if DisplayDate is not available or invalid
-    if 'StartDate' in record and 'EndDate' in record:
-        try:
-            start_date = datetime.strptime(record['StartDate'], "%Y-%m-%d")
-            end_date = datetime.strptime(record['EndDate'], '%Y-%m-%d')
-            days = 0.0
-            current = start_date
-            while current <= end_date:
-                if current.weekday() < 6:  # Thứ 2 đến thứ 7, trừ Chủ Nhật
-                    days += 1
-                current += timedelta(days=1)
-            return days
-        except (ValueError, TypeError):
-            return 1.0
-    if 'LeaveDate' in record:
-        leave_dt = datetime.strptime(record['LeaveDate'], '%Y-%m-%d')
-        if leave_dt.weekday() >= 6:  # Nếu là Chủ Nhật thì không tính
-            return 0.0
-        return 0.5 if record.get('Session', '').lower() in ['sáng', 'chiều'] else 1.0
-    return 1.0
+    display_date = record.get("DisplayDate", "").strip().lower()
+    if display_date:
+        if "cả ngày" in display_date:
+            return 1.0
+        if "sáng" in display_date or "chiều" in display_date:
+            return 0.5
+        if "từ" in display_date and "đến" in display_date:
+            try:
+                date_parts = re.findall(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}", display_date)
+                if len(date_parts) == 2:
+                    start_date = datetime.strptime(date_parts[0], "%Y-%m-%d" if "-" in date_parts[0] else "%d/%m/%Y")
+                    end_date = datetime.strptime(date_parts[1], "%Y-%m-%d" if "-" in date_parts[1] else "%d/%m/%Y")
+                    # ---- THAY ĐỔI: TÍNH SỐ NGÀY LÀM VIỆC (THỨ 2 - THỨ 7) ----
+                    work_days = 0
+                    current_date = start_date
+                    while current_date <= end_date:
+                        # weekday() trả về 0 cho Thứ Hai và 6 cho Chủ Nhật
+                        if current_date.weekday() < 6: # Chỉ đếm nếu không phải là Chủ Nhật
+                            work_days += 1
+                        current_date += timedelta(days=1)
+                    return float(work_days)
+            except (ValueError, TypeError):
+                pass
+    # Fallback logic if DisplayDate is not available or invalid
+    if 'StartDate' in record and 'EndDate' in record:
+        try:
+            start_date = datetime.strptime(record['StartDate'], "%Y-%m-%d")
+            end_date = datetime.strptime(record['EndDate'], "%Y-%m-%d")
+            # ---- THAY ĐỔI: TÍNH SỐ NGÀY LÀM VIỆC (THỨ 2 - THỨ 7) ----
+            work_days = 0
+            current_date = start_date
+            while current_date <= end_date:
+                if current_date.weekday() < 6: # Chỉ đếm nếu không phải là Chủ Nhật
+                    work_days += 1
+                current_date += timedelta(days=1)
+            return float(work_days)
+        except (ValueError, TypeError):
+            return 1.0
+    if 'LeaveDate' in record:
+        return 0.5 if record.get('Session', '').lower() in ['sáng', 'chiều'] else 1.0
+    return 1.0
 
 def get_formatted_approval_date(approval_date):
     if not approval_date: return ""
@@ -393,113 +391,127 @@ def seconds_to_excel_time(seconds):
 # ---- API lấy dữ liệu chấm công ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
-    try:
-        email = request.args.get("email")
-        admin = admins.find_one({"email": email})
-        user = users.find_one({"email": email})
-        if not admin and not user: return jsonify({"error": "Email không tồn tại"}), 403
-        username = None if admin else user["username"]
-        query = build_attendance_query(
-            request.args.get("filter", "hôm nay").lower(),
-            request.args.get("startDate"), request.args.get("endDate"),
-            request.args.get("search", "").strip(), username=username
-        )
-       
-        all_relevant_data = list(collection.find(query, {"_id": 0}))
-        daily_hours_map, monthly_hours_map = {}, {}
-        emp_data = {}
-        for rec in all_relevant_data:
-            emp_id = rec.get("EmployeeId")
-            if emp_id: emp_data.setdefault(emp_id, []).append(rec)
-       
-        for emp_id, records in emp_data.items():
-            daily_groups = {}
-            for rec in records:
-                date_str = rec.get("CheckinDate")
-                if date_str: daily_groups.setdefault(date_str, []).append(rec)
-           
-            for date_str, day_records in daily_groups.items():
-                checkins = []
-                for r in day_records:
-                    if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
-                        try:
-                            if isinstance(r['Timestamp'], str):
-                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
-                            elif isinstance(r['Timestamp'], datetime):
-                                timestamp = r['Timestamp']
-                            else:
-                                continue
-                            checkins.append(timestamp)
-                        except (ValueError, TypeError):
-                            continue
-                checkins = sorted(checkins)
-                checkouts = []
-                for r in day_records:
-                    if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
-                        try:
-                            if isinstance(r['Timestamp'], str):
-                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
-                            elif isinstance(r['Timestamp'], datetime):
-                                timestamp = r['Timestamp']
-                            else:
-                                continue
-                            checkouts.append(timestamp)
-                        except (ValueError, TypeError):
-                            continue
-                checkouts = sorted(checkouts)
-                daily_seconds = 0
-                if checkins and checkouts and checkouts[-1] > checkins[0]:
-                    daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
-                daily_hours_map[(emp_id, date_str)] = daily_seconds
-                # Update all records for this employee and date with DailyHours (excel + display), _dailySeconds
-                daily_excel = seconds_to_excel_time(daily_seconds)
-                daily_display = format_seconds_to_hms(daily_seconds)
-                collection.update_many(
-                    {"EmployeeId": emp_id, "CheckinDate": date_str, "CheckType": {"$in": ["checkin", "checkout"]}},
-                    {"$set": {"DailyHoursExcel": daily_excel, "DailyHours": daily_display, "_dailySeconds": daily_seconds}}
-                )
-            monthly_groups = {}
-            for (map_emp_id, map_date_str), daily_seconds in daily_hours_map.items():
-                if map_emp_id == emp_id:
-                    try: month_key = datetime.strptime(map_date_str, "%d/%m/%Y").strftime("%Y-%m")
-                    except: continue
-                    monthly_groups.setdefault(month_key, []).append((map_date_str, daily_seconds))
-           
-            for month, days in monthly_groups.items():
-                sorted_days = Sorted(days, key=lambda x: datetime.strptime(x[0], "%d/%m/%Y"))
-                running_total = 0
-                for date_str, daily_seconds in sorted_days:
-                    running_total += daily_seconds
-                    monthly_hours_map[(emp_id, date_str)] = running_total
-                    # Update all records for this employee and date with MonthlyHours (excel + display), _monthlySeconds
-                    monthly_excel = seconds_to_excel_time(running_total)
-                    monthly_display = format_seconds_to_hms(running_total)
-                    collection.update_many(
-                        {"EmployeeId": emp_id, "CheckinDate": date_str, "CheckType": {"$in": ["checkin", "checkout"]}},
-                        {"$set": {"MonthlyHoursExcel": monthly_excel, "MonthlyHours": monthly_display, "_monthlySeconds": running_total}}
-                    )
-       
-        for item in all_relevant_data:
-            emp_id, date_str = item.get("EmployeeId"), item.get("CheckinDate")
-            daily_sec = daily_hours_map.get((emp_id, date_str), 0)
-            item['DailyHoursExcel'], item['DailyHours'], item['_dailySeconds'] = seconds_to_excel_time(daily_sec), format_seconds_to_hms(daily_sec), daily_sec
-            monthly_sec = monthly_hours_map.get((emp_id, date_str), 0)
-            item['MonthlyHoursExcel'], item['MonthlyHours'], item['_monthlySeconds'] = seconds_to_excel_time(monthly_sec), format_seconds_to_hms(monthly_sec), monthly_sec
-            if item.get('Timestamp'):
-                try:
-                    if isinstance(item['Timestamp'], str):
-                        timestamp = datetime.strptime(item['Timestamp'], "%Y-%m-%d %H:%M:%S")
-                    elif isinstance(item['Timestamp'], datetime):
-                        timestamp = item['Timestamp']
-                    else:
-                        timestamp = None
-                    item['CheckinTime'] = timestamp.astimezone(VN_TZ).strftime('%H:%M:%S') if timestamp else ""
-                except (ValueError, TypeError):
-                    item['CheckinTime'] = ""
-        return jsonify(all员工_relevant_data)
-    except Exception as e:
-        print(f"Lỗi tại get_attendances: {e}")
-        return jsonify({"error": str(e)}), 500
+    try:
+        email = request.args.get("email")
+        admin = admins.find_one({"email": email})
+        user = users.find_one({"email": email})
+        if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        username = None if admin else user["username"]
+        query = build_attendance_query(
+            request.args.get("filter", "hôm nay").lower(),
+            request.args.get("startDate"), request.args.get("endDate"),
+            request.args.get("search", "").strip(), username=username
+        )
+        
+        all_relevant_data = list(collection.find(query, {"_id": 0}))
+        daily_hours_map, monthly_hours_map = {}, {}
+        emp_data = {}
+        for rec in all_relevant_data:
+            emp_id = rec.get("EmployeeId")
+            if emp_id: emp_data.setdefault(emp_id, []).append(rec)
+        
+        for emp_id, records in emp_data.items():
+            daily_groups = {}
+            for rec in records:
+                date_str = rec.get("CheckinDate")
+                if date_str: daily_groups.setdefault(date_str, []).append(rec)
+            
+            for date_str, day_records in daily_groups.items():
+                checkins = []
+                for r in day_records:
+                    if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
+                        try:
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else:
+                                continue
+                            checkins.append(timestamp)
+                        except (ValueError, TypeError):
+                            continue
+                checkins = sorted(checkins)
+                checkouts = []
+                for r in day_records:
+                    if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
+                        try:
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else:
+                                continue
+                            checkouts.append(timestamp)
+                        except (ValueError, TypeError):
+                            continue
+                checkouts = sorted(checkouts)
+                daily_seconds = 0
+                if checkins and checkouts and checkouts[-1] > checkins[0]:
+                    daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
+                daily_hours_map[(emp_id, date_str)] = daily_seconds
+                # Update all records for this employee and date with DailyHours and _dailySeconds
+                  # ---- THAY ĐỔI 1: TÍNH TOÁN GIỜ, PHÚT, GIÂY ----
+                h, rem = divmod(daily_seconds, 3600)
+                m, s = divmod(rem, 60)
+                  # ---- THAY ĐỔI 2: ĐỊNH DẠNG CHUỖI HIỂN THỊ ----
+                daily_hours = f"{int(h)}h {int(m)}m {int(s)}s" if daily_seconds > 0 else ""
+                collection.update_many(
+                    {"EmployeeId": emp_id, "CheckinDate": date_str, "CheckType": {"$in": ["checkin", "checkout"]}},
+                    {"$set": {"DailyHours": daily_hours, "_dailySeconds": daily_seconds}}
+                )
+            monthly_groups = {}
+            for (map_emp_id, map_date_str), daily_seconds in daily_hours_map.items():
+                if map_emp_id == emp_id:
+                    try: month_key = datetime.strptime(map_date_str, "%d/%m/%Y").strftime("%Y-%m")
+                    except: continue
+                    monthly_groups.setdefault(month_key, []).append((map_date_str, daily_seconds))
+            
+            for month, days in monthly_groups.items():
+                sorted_days = sorted(days, key=lambda x: datetime.strptime(x[0], "%d/%m/%Y"))
+                running_total = 0
+                for date_str, daily_seconds in sorted_days:
+                    running_total += daily_seconds
+                    monthly_hours_map[(emp_id, date_str)] = running_total
+                    # Update all records for this employee and date with MonthlyHours and _monthlySeconds
+                      # ---- THAY ĐỔI 3: TÍNH TOÁN GIỜ, PHÚT, GIÂY ----
+                    h, rem = divmod(running_total, 3600)
+                    m, s = divmod(rem, 60)
+                      # ---- THAY ĐỔI 4: ĐỊNH DẠNG CHUỖI HIỂN THỊ ----
+                    monthly_hours = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
+                    collection.update_many(
+                        {"EmployeeId": emp_id, "CheckinDate": date_str, "CheckType": {"$in": ["checkin", "checkout"]}},
+                        {"$set": {"MonthlyHours": monthly_hours, "_monthlySeconds": running_total}}
+                    )
+        
+        for item in all_relevant_data:
+            emp_id, date_str = item.get("EmployeeId"), item.get("CheckinDate")
+            daily_sec = daily_hours_map.get((emp_id, date_str), 0)
+            # ---- THAY ĐỔI 5: TÍNH TOÁN VÀ ĐỊNH DẠNG LẠI (DỰ PHÒNG) ----
+            h, rem = divmod(daily_sec, 3600)
+            m, s = divmod(rem, 60)
+            item['DailyHours'], item['_dailySeconds'] = (f"{int(h)}h {int(m)}m {int(s)}s" if daily_sec > 0 else ""), daily_sec
+            
+            monthly_sec = monthly_hours_map.get((emp_id, date_str), 0)
+            # ---- THAY ĐỔI 6: TÍNH TOÁN VÀ ĐỊNH DẠNG LẠI (DỰ PHÒNG) ----
+            h, rem = divmod(monthly_sec, 3600)
+            m, s = divmod(rem, 60)
+            item['MonthlyHours'], item['_monthlySeconds'] = (f"{int(h)}h {int(m)}m {int(s)}s" if monthly_sec > 0 else ""), monthly_sec
+            
+            if item.get('Timestamp'):
+                try:
+                    if isinstance(item['Timestamp'], str):
+                        timestamp = datetime.strptime(item['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                    elif isinstance(item['Timestamp'], datetime):
+                        timestamp = item['Timestamp']
+                    else:
+                        timestamp = None
+                    item['CheckinTime'] = timestamp.astimezone(VN_TZ).strftime('%H:%M:%S') if timestamp else ""
+                except (ValueError, TypeError):
+                    item['CheckinTime'] = ""
+        return jsonify(all_relevant_data)
+    except Exception as e:
+        print(f"❌ Lỗi tại get_attendances: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # ---- API lấy dữ liệu nghỉ phép ----
 @app.route("/api/leaves", methods=["GET"])
@@ -834,4 +846,5 @@ def export_combined_to_excel():
         return jsonify({"error": str(e)}), 500
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
