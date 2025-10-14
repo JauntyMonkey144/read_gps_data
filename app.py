@@ -622,16 +622,17 @@ def export_to_excel():
         if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
         username = None if admin else user.get("username")
 
-        # Get month from request, default to current month
-        month_str = request.args.get("month", datetime.now(VN_TZ).strftime("%Y-%m"))
+        # Get month and year from request, default to current
+        export_year = int(request.args.get("year", datetime.now(VN_TZ).year))
+        export_month = int(request.args.get("month", datetime.now(VN_TZ).month))
+        month_str = f"{export_year}-{export_month:02d}"
         try:
-            export_dt = datetime.strptime(month_str, "%Y-%m")
-            export_year, export_month = export_dt.year, export_dt.month
+            export_dt = datetime(export_year, export_month, 1)
             start_date = export_dt.strftime("%Y-%m-%d")
             _, last_day = calendar.monthrange(export_year, export_month)
             end_date = export_dt.replace(day=last_day).strftime("%Y-%m-%d")
         except ValueError:
-            return jsonify({"error": "❌ Định dạng tháng không hợp lệ. Vui lòng sử dụng YYYY-MM."}), 400
+            return jsonify({"error": "❌ Định dạng tháng không hợp lệ."}), 400
 
         query = build_attendance_query(
             "custom", # Use custom filter to specify date range
@@ -722,22 +723,20 @@ def export_leaves_to_excel():
         else:
             return jsonify({"error": "🚫 Email không tồn tại"}), 403
 
-        # Get month from request, default to current month if not provided
-        month_str = request.args.get("month", datetime.now(VN_TZ).strftime("%Y-%m"))
+        # Get month and year from request, default to current
+        export_year = int(request.args.get("year", datetime.now(VN_TZ).year))
+        export_month = int(request.args.get("month", datetime.now(VN_TZ).month))
+        month_str = f"{export_year}-{export_month:02d}"
         try:
-            export_dt = datetime.strptime(month_str, "%Y-%m")
-            export_year, export_month = export_dt.year, export_dt.month
-            start_dt = export_dt.replace(day=1, hour=0, minute=0, second=0, tzinfo=VN_TZ)
+            export_dt = datetime(export_year, export_month, 1)
             _, last_day = calendar.monthrange(export_year, export_month)
-            end_dt = export_dt.replace(day=last_day, hour=23, minute=59, second=59, tzinfo=VN_TZ)
         except ValueError:
-            return jsonify({"error": "❌ Định dạng tháng không hợp lệ. Vui lòng sử dụng YYYY-MM."}), 400
+            return jsonify({"error": "❌ Định dạng tháng không hợp lệ."}), 400
 
-        # Build a query filtered by CreationTime for the selected month
+        # Build a query without filtering by CreationTime
         regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
         conditions = [
-            {"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]},
-            {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
+            {"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}
         ]
         search = request.args.get("search", "").strip()
         if search:
@@ -838,18 +837,19 @@ def export_combined_to_excel():
         if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
         username = None if admin else user.get("username")
 
-        # Get month from request, default to current month
-        month_str = request.args.get("month", datetime.now(VN_TZ).strftime("%Y-%m"))
+        # Get month and year from request, default to current
+        export_year = int(request.args.get("year", datetime.now(VN_TZ).year))
+        export_month = int(request.args.get("month", datetime.now(VN_TZ).month))
+        month_str = f"{export_year}-{export_month:02d}"
         try:
-            export_dt = datetime.strptime(month_str, "%Y-%m")
-            export_year, export_month = export_dt.year, export_dt.month
+            export_dt = datetime(export_year, export_month, 1)
             start_date = export_dt.strftime("%Y-%m-%d")
             _, last_day = calendar.monthrange(export_year, export_month)
             end_date = export_dt.replace(day=last_day).strftime("%Y-%m-%d")
             leave_start_dt = export_dt.replace(day=1, hour=0, minute=0, second=0, tzinfo=VN_TZ)
             leave_end_dt = export_dt.replace(day=last_day, hour=23, minute=59, second=59, tzinfo=VN_TZ)
         except ValueError:
-            return jsonify({"error": "❌ Định dạng tháng không hợp lệ. Vui lòng sử dụng YYYY-MM."}), 400
+            return jsonify({"error": "❌ Định dạng tháng không hợp lệ."}), 400
         
         search = request.args.get("search", "").strip()
         
@@ -858,8 +858,7 @@ def export_combined_to_excel():
         
         regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
         leave_conditions = [
-            {"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]},
-            {"CreationTime": {"$gte": leave_start_dt, "$lte": leave_end_dt}}
+            {"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}
         ]
         if search:
             regex = re.compile(search, re.IGNORECASE)
