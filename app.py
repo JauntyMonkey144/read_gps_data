@@ -1,4 +1,3 @@
-```python
 from flask import Flask, render_template, jsonify, request, redirect, url_for, send_file
 from pymongo import MongoClient
 from flask_cors import CORS
@@ -868,4 +867,4 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-```
+
