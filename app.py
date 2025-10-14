@@ -327,47 +327,45 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
 
 # ---- Helper functions ----
 def calculate_leave_days_from_record(record):
-    display_date = record.get("DisplayDate", "").strip().lower()
-    if display_date:
-        if "cả ngày" in display_date:
-            return 1.0
-        if "sáng" in display_date or "chiều" in display_date:
-            return 0.5
-        if "từ" in display_date and "đến" in display_date:
-            try:
-                date_parts = re.findall(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}", display_date)
-                if len(date_parts) == 2:
-                    start_date = datetime.strptime(date_parts[0], "%Y-%m-%d" if "-" in date_parts[0] else "%d/%m/%Y")
-                    end_date = datetime.strptime(date_parts[1], "%Y-%m-%d" if "-" in date_parts[1] else "%d/%m/%Y")
-                    # ---- THAY ĐỔI: TÍNH SỐ NGÀY LÀM VIỆC (THỨ 2 - THỨ 7) ----
-                    work_days = 0
-                    current_date = start_date
-                    while current_date <= end_date:
-                        # weekday() trả về 0 cho Thứ Hai và 6 cho Chủ Nhật
-                        if current_date.weekday() < 6: # Chỉ đếm nếu không phải là Chủ Nhật
-                            work_days += 1
-                        current_date += timedelta(days=1)
-                    return float(work_days)
-            except (ValueError, TypeError):
-                pass
-    # Fallback logic if DisplayDate is not available or invalid
-    if 'StartDate' in record and 'EndDate' in record:
-        try:
-            start_date = datetime.strptime(record['StartDate'], "%Y-%m-%d")
-            end_date = datetime.strptime(record['EndDate'], "%Y-%m-%d")
-            # ---- THAY ĐỔI: TÍNH SỐ NGÀY LÀM VIỆC (THỨ 2 - THỨ 7) ----
-            work_days = 0
-            current_date = start_date
-            while current_date <= end_date:
-                if current_date.weekday() < 6: # Chỉ đếm nếu không phải là Chủ Nhật
-                    work_days += 1
-                current_date += timedelta(days=1)
-            return float(work_days)
-        except (ValueError, TypeError):
-            return 1.0
-    if 'LeaveDate' in record:
-        return 0.5 if record.get('Session', '').lower() in ['sáng', 'chiều'] else 1.0
-    return 1.0
+    display_date = record.get("DisplayDate", "").strip().lower()
+    if display_date:
+        if "cả ngày" in display_date:
+            return 1.0
+        if "sáng" in display_date or "chiều" in display_date:
+            return 0.5
+        if "từ" in display_date and "đến" in display_date:
+            try:
+                date_parts = re.findall(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}", display_date)
+                if len(date_parts) == 2:
+                    start_date = datetime.strptime(date_parts[0], "%Y-%m-%d" if "-" in date_parts[0] else "%d/%m/%Y")
+                    end_date = datetime.strptime(date_parts[1], "%Y-%m-%d" if "-" in date_parts[1] else "%d/%m/%Y")
+                    work_days = 0
+                    current_date = start_date
+                    while current_date <= end_date:
+                        # weekday() trả về 0 cho Thứ Hai và 6 cho Chủ Nhật
+                        if current_date.weekday() < 6:  # Chỉ đếm nếu không phải là Chủ Nhật
+                            work_days += 1
+                        current_date += timedelta(days=1)
+                    return float(work_days)
+            except (ValueError, TypeError):
+                pass
+    # Fallback logic if DisplayDate is not available or invalid
+    if 'StartDate' in record and 'EndDate' in record:
+        try:
+            start_date = datetime.strptime(record['StartDate'], "%Y-%m-%d")
+            end_date = datetime.strptime(record['EndDate'], "%Y-%m-%d")
+            work_days = 0
+            current_date = start_date
+            while current_date <= end_date:
+                if current_date.weekday() < 6:  # Chỉ đếm nếu không phải là Chủ Nhật
+                    work_days += 1
+                current_date += timedelta(days=1)
+            return float(work_days)
+        except (ValueError, TypeError):
+            return 1.0
+    if 'LeaveDate' in record:
+        return 0.5 if record.get('Session', '').lower() in ['sáng', 'chiều'] else 1.0
+    return 1.0
 
 def get_formatted_approval_date(approval_date):
     if not approval_date: return ""
@@ -846,5 +844,6 @@ def export_combined_to_excel():
         return jsonify({"error": str(e)}), 500
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
 
