@@ -336,7 +336,7 @@ def calculate_leave_days_for_month(record, export_year, export_month):
     status2 = record.get("Status2", "")
 
     # Rule 1: Check approval status. Return 0 if rejected or pending first approval.
-    if not status1 or "Từ chối" in status1 or "Từ chối" in status2:
+    if not status1 or "từ chối" in status1 or "từ chối" in status2:
         return 0.0
 
     display_date = record.get("DisplayDate", "").strip().lower()
@@ -972,3 +972,4 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
