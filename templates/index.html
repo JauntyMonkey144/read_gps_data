@@ -143,6 +143,24 @@
         <option value="leave">Nghỉ Phép Theo Filter Hiện Tại</option>
         <option value="combined">Toàn Bộ (Cả hai) Theo Filter Hiện Tại</option>
       </select>
+      <select id="exportMonthAttendance" style="display:none;">
+        <option value="">-- Tháng --</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+        <option value="10">10</option>
+        <option value="11">11</option>
+        <option value="12">12</option>
+      </select>
+      <select id="exportYearAttendance" style="display:none;">
+        <option value="">-- Năm --</option>
+      </select>
       <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button>
     </div>
     <button onclick="refreshData()">🔄 Làm mới</button>
@@ -204,6 +222,24 @@
           <option value="attendance">Điểm Danh Theo Filter Hiện Tại</option>
           <option value="leave">Nghỉ Phép Theo Filter Hiện Tại</option>
           <option value="combined">Toàn Bộ (Cả hai) Theo Filter Hiện Tại</option>
+        </select>
+        <select id="exportMonthLeave" style="display:none;">
+          <option value="">-- Tháng --</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+          <option value="11">11</option>
+          <option value="12">12</option>
+        </select>
+        <select id="exportYearLeave" style="display:none;">
+          <option value="">-- Năm --</option>
         </select>
         <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button>
       </div>
@@ -291,6 +327,16 @@
     function resetExportOptions() {
       document.getElementById('exportOptionsAttendance').value = "";
       document.getElementById('exportOptionsLeave').value = "";
+      document.getElementById("exportMonthAttendance").style.display = "none";
+      document.getElementById("exportYearAttendance").style.display = "none";
+      document.getElementById("exportMonthLeave").style.display = "none";
+      document.getElementById("exportYearLeave").style.display = "none";
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+      document.getElementById('exportMonthAttendance').value = currentMonth;
+      document.getElementById('exportYearAttendance').value = currentYear;
+      document.getElementById('exportMonthLeave').value = currentMonth;
+      document.getElementById('exportYearLeave').value = currentYear;
     }
     function switchTab(tab) {
       currentTab = tab;
@@ -625,14 +671,23 @@
         document.getElementById("loginModal").style.display = "flex";
         return showMessage("⚠️ Chưa đăng nhập", "error");
       }
+      let month, year;
       if (currentTab === "attendance") {
         exportOptionsEl = document.getElementById('exportOptionsAttendance');
+        month = document.getElementById('exportMonthAttendance').value;
+        year = document.getElementById('exportYearAttendance').value;
       } else {
         exportOptionsEl = document.getElementById('exportOptionsLeave');
+        month = document.getElementById('exportMonthLeave').value;
+        year = document.getElementById('exportYearLeave').value;
       }
       const exportType = exportOptionsEl ? exportOptionsEl.value : "";
       if (exportType === "") {
         showMessage("⚠️ Vui lòng chọn loại dữ liệu cần xuất!", "error");
+        return;
+      }
+      if (!month || !year) {
+        showMessage("⚠️ Vui lòng chọn tháng và năm!", "error");
         return;
       }
       if (exportType === "attendance") {
@@ -678,9 +733,11 @@
         }
         // <<< PHẦN SỬA LỖI KẾT THÚC >>>
       }
+      if (month) url += `&month=${encodeURIComponent(month)}`;
+      if (year) url += `&year=${encodeURIComponent(year)}`;
       if (url) {
         window.location.href = url;
-        exportOptionsEl.value = "";
+        resetExportOptions();
       }
     }
     function updateRowsPerPage() {
@@ -704,6 +761,7 @@
       document.getElementById("endDate").value = "";
       highlightFilterButton();
       loadData();
+      resetExportOptions();
     }
     function resetLeaveFilter() {
       currentLeaveSearch = "";
@@ -716,6 +774,7 @@
       document.getElementById("leaveDateTypeFilter").value = "CheckinTime"; // Thay đổi default
       highlightLeaveFilterButton();
       loadLeaveData();
+      resetExportOptions();
     }
     function highlightFilterButton() {
       document.querySelectorAll("#filters button").forEach(btn => btn.classList.remove("active"));
@@ -733,7 +792,24 @@
       };
       if (map[currentLeaveFilter]) document.getElementById(map[currentLeaveFilter]).classList.add("active");
     }
+    function populateYears() {
+      const currentYear = new Date().getFullYear();
+      const years = [];
+      for (let y = currentYear - 5; y <= currentYear; y++) {
+        years.push(y);
+      }
+      const yearOptions = years.map(y => `<option value="${y}">${y}</option>`).join('');
+      document.getElementById('exportYearAttendance').innerHTML += yearOptions;
+      document.getElementById('exportYearLeave').innerHTML += yearOptions;
+    }
     window.onload = () => {
+      populateYears();
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+      document.getElementById('exportMonthAttendance').value = currentMonth;
+      document.getElementById('exportYearAttendance').value = currentYear;
+      document.getElementById('exportMonthLeave').value = currentMonth;
+      document.getElementById('exportYearLeave').value = currentYear;
       const email = localStorage.getItem("adminEmail");
       if (email) {
         const username = localStorage.getItem("adminUser");
@@ -747,6 +823,28 @@
     };
     document.getElementById("loginPass").addEventListener("keypress", (e) => {
       if (e.key === "Enter") login();
+    });
+    document.getElementById("exportOptionsAttendance").addEventListener("change", function() {
+      const monthSelect = document.getElementById("exportMonthAttendance");
+      const yearSelect = document.getElementById("exportYearAttendance");
+      if (this.value !== "") {
+        monthSelect.style.display = "inline-block";
+        yearSelect.style.display = "inline-block";
+      } else {
+        monthSelect.style.display = "none";
+        yearSelect.style.display = "none";
+      }
+    });
+    document.getElementById("exportOptionsLeave").addEventListener("change", function() {
+      const monthSelect = document.getElementById("exportMonthLeave");
+      const yearSelect = document.getElementById("exportYearLeave");
+      if (this.value !== "") {
+        monthSelect.style.display = "inline-block";
+        yearSelect.style.display = "inline-block";
+      } else {
+        monthSelect.style.display = "none";
+        yearSelect.style.display = "none";
+      }
     });
   </script>
 </body>
