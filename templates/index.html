@@ -327,6 +327,16 @@
     function resetExportOptions() {
       document.getElementById('exportOptionsAttendance').value = "";
       document.getElementById('exportOptionsLeave').value = "";
+      document.getElementById("exportMonthAttendance").style.display = "none";
+      document.getElementById("exportYearAttendance").style.display = "none";
+      document.getElementById("exportMonthLeave").style.display = "none";
+      document.getElementById("exportYearLeave").style.display = "none";
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+      document.getElementById('exportMonthAttendance').value = currentMonth;
+      document.getElementById('exportYearAttendance').value = currentYear;
+      document.getElementById('exportMonthLeave').value = currentMonth;
+      document.getElementById('exportYearLeave').value = currentYear;
     }
     function switchTab(tab) {
       currentTab = tab;
@@ -727,7 +737,7 @@
       if (year) url += `&year=${encodeURIComponent(year)}`;
       if (url) {
         window.location.href = url;
-        exportOptionsEl.value = "";
+        resetExportOptions();
       }
     }
     function updateRowsPerPage() {
@@ -751,6 +761,7 @@
       document.getElementById("endDate").value = "";
       highlightFilterButton();
       loadData();
+      resetExportOptions();
     }
     function resetLeaveFilter() {
       currentLeaveSearch = "";
@@ -763,6 +774,7 @@
       document.getElementById("leaveDateTypeFilter").value = "CheckinTime"; // Thay đổi default
       highlightLeaveFilterButton();
       loadLeaveData();
+      resetExportOptions();
     }
     function highlightFilterButton() {
       document.querySelectorAll("#filters button").forEach(btn => btn.classList.remove("active"));
