@@ -14,7 +14,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
-
 app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
 
@@ -82,6 +81,7 @@ def request_reset_password():
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
         </head><body><div class="container"><p>❌ Vui lòng nhập email</p>
         <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
+
     account = admins.find_one({"email": email}) or users.find_one({"email": email})
     if not account:
         return """
@@ -89,6 +89,7 @@ def request_reset_password():
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
         </head><body><div class="container"><p>🚫 Email không tồn tại!</p>
         <a href="/forgot-password">Thử lại</a></div></body></html>""", 404
+
     # Generate reset token
     token = secrets.token_urlsafe(32)
     # Store expiration as UTC (offset-naive) to match MongoDB's default behavior
@@ -98,27 +99,33 @@ def request_reset_password():
         "token": token,
         "expiration": expiration
     })
+
     # Send email
     try:
         msg = MIMEMultipart()
         msg['From'] = formataddr(("Sun Automation System", EMAIL_ADDRESS))
         msg['To'] = email
         msg['Subject'] = "Yêu cầu đặt lại mật khẩu"
-       
+        
         reset_link = url_for("reset_password", token=token, _external=True)
         body = f"""
         Xin chào,
+
         Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết sau để đặt lại mật khẩu của bạn:
         {reset_link}
+
         Liên kết này sẽ hết hạn sau 1 ngày. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
+
         Trân trọng,
         Đội ngũ hỗ trợ
         """
         msg.attach(MIMEText(body, 'plain', 'utf-8'))
+
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls()
             server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
             server.send_message(msg)
+
         return """
         <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Gửi liên kết thành công</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
@@ -144,6 +151,7 @@ def reset_password(token):
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
             </head><body><div class="container"><p>🚫 Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn!</p>
             <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
+
         return """
         <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Đặt lại mật khẩu</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}input{width:100%;padding:10px;margin:10px 0;box-sizing:border-box;border:1px solid #ddd;border-radius:4px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
@@ -151,6 +159,7 @@ def reset_password(token):
         <input type="password" name="new_password" placeholder="Mật khẩu mới" required>
         <input type="password" name="confirm_password" placeholder="Xác nhận mật khẩu" required>
         <button type="submit">Cập nhật mật khẩu</button></form></div></body></html>"""
+
     if request.method == "POST":
         token_data = reset_tokens.find_one({"token": token})
         # Compare expiration as offset-naive (UTC) datetime
@@ -160,6 +169,7 @@ def reset_password(token):
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
             </head><body><div class="container"><p>❌ Liên kết không hợp lệ hoặc đã hết hạn</p>
             <a href="/forgot-password">Thử lại</a></div></body></html>""", 400
+
         new_password = request.form.get("new_password")
         confirm_password = request.form.get("confirm_password")
         if not new_password or not confirm_password:
@@ -174,6 +184,7 @@ def reset_password(token):
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
             </head><body><div class="container"><p>❌ Mật khẩu xác nhận không khớp</p>
             <a href="/reset-password/{}">Thử lại</a></div></body></html>""".format(token), 400
+
         email = token_data["email"]
         account = admins.find_one({"email": email}) or users.find_one({"email": email})
         if not account:
@@ -182,10 +193,12 @@ def reset_password(token):
             <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
             </head><body><div class="container"><p>🚫 Email không tồn tại!</p>
             <a href="/forgot-password">Thử lại</a></div></body></html>""", 404
+
         hashed_pw = generate_password_hash(new_password)
         collection_to_update = admins if "username" in account else users
         collection_to_update.update_one({"email": email}, {"$set": {"password": hashed_pw}})
         reset_tokens.delete_one({"token": token})  # Remove used token
+
         return """
         <!DOCTYPE html><html lang="vi"><head><title>Thay đổi mật khẩu thành công</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
@@ -233,21 +246,23 @@ def forgot_password():
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
         </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công! Bạn có thể đăng nhập với mật khẩu mới.</div>
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
-
+        
 # ---- Build leave query (lọc theo dateType)----
 def build_leave_query(filter_type, start_date_str, end_date_str, search, date_type="CheckinTime", username=None):
     today = datetime.now(VN_TZ)
     regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
     conditions = [{"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}]
     date_filter = {}
+
     start_dt, end_dt = None, None
+
     # Xác định khoảng thời gian start_dt và end_dt
     if filter_type == "custom" and start_date_str and end_date_str:
         try:
             start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=VN_TZ)
             end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
         except ValueError:
-            pass  # Bỏ qua nếu định dạng ngày không hợp lệ
+            pass # Bỏ qua nếu định dạng ngày không hợp lệ
     elif filter_type != "tất cả":
         if filter_type == "hôm nay":
             start_dt, end_dt = today.replace(hour=0, minute=0, second=0), today.replace(hour=23, minute=59, second=59)
@@ -261,6 +276,7 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, date_ty
         elif filter_type == "năm":
             start_dt = today.replace(month=1, day=1, hour=0, minute=0, second=0)
             end_dt = today.replace(month=12, day=31, hour=23, minute=59, second=59)
+
     # Xây dựng bộ lọc ngày tháng nếu có khoảng thời gian hợp lệ
     if start_dt and end_dt:
         # Quan trọng: Không lọc theo LeaveDate ở đây nữa, sẽ xử lý sau
@@ -270,13 +286,16 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, date_ty
             date_filter = {"ApprovalDate1": {"$gte": start_dt, "$lte": end_dt}}
         elif date_type == "ApprovalDate2":
             date_filter = {"ApprovalDate2": {"$gte": start_dt, "$lte": end_dt}}
+
     if date_filter:
         conditions.append(date_filter)
+
     if search:
         regex = re.compile(search, re.IGNORECASE)
         conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
     if username:
         conditions.append({"EmployeeName": username})
+
     return {"$and": conditions}
 
 # ---- Build attendance query ----
@@ -298,8 +317,7 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
         date_filter = {"CheckinDate": {"$regex": f"/{today.month:02d}/{today.year}$"}}
     elif filter_type == "năm":
         date_filter = {"CheckinDate": {"$regex": f"/{today.year}$"}}
-    if date_filter:
-        conditions.append(date_filter)
+    if date_filter: conditions.append(date_filter)
     if search:
         regex = re.compile(search, re.IGNORECASE)
         conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
@@ -309,11 +327,6 @@ def build_attendance_query(filter_type, start_date, end_date, search, username=N
 
 # ---- Helper functions ----
 def calculate_leave_days_from_record(record):
-    # Check if the leave request was rejected (either Status1 or Status2 is "Từ chối")
-    status1 = record.get("Status1", "") or ""
-    status2 = record.get("Status2", "") or ""
-    if status1.lower() == "từ chối" or status2.lower() == "từ chối":
-        return 0.0
     display_date = record.get("DisplayDate", "").strip().lower()
     if display_date:
         if "cả ngày" in display_date:
@@ -355,12 +368,9 @@ def calculate_leave_days_from_record(record):
     return 1.0
 
 def get_formatted_approval_date(approval_date):
-    if not approval_date:
-        return ""
-    try:
-        return approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S") if isinstance(approval_date, datetime) else str(approval_date)
-    except:
-        return str(approval_date)
+    if not approval_date: return ""
+    try: return approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S") if isinstance(approval_date, datetime) else str(approval_date)
+    except: return str(approval_date)
 
 # ---- API lấy dữ liệu chấm công ----
 @app.route("/api/attendances", methods=["GET"])
@@ -369,30 +379,27 @@ def get_attendances():
         email = request.args.get("email")
         admin = admins.find_one({"email": email})
         user = users.find_one({"email": email})
-        if not admin and not user:
-            return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
         username = None if admin else user["username"]
         query = build_attendance_query(
             request.args.get("filter", "hôm nay").lower(),
             request.args.get("startDate"), request.args.get("endDate"),
             request.args.get("search", "").strip(), username=username
         )
-       
+        
         all_relevant_data = list(collection.find(query, {"_id": 0}))
         daily_hours_map, monthly_hours_map = {}, {}
         emp_data = {}
         for rec in all_relevant_data:
             emp_id = rec.get("EmployeeId")
-            if emp_id:
-                emp_data.setdefault(emp_id, []).append(rec)
-       
+            if emp_id: emp_data.setdefault(emp_id, []).append(rec)
+        
         for emp_id, records in emp_data.items():
             daily_groups = {}
             for rec in records:
                 date_str = rec.get("CheckinDate")
-                if date_str:
-                    daily_groups.setdefault(date_str, []).append(rec)
-           
+                if date_str: daily_groups.setdefault(date_str, []).append(rec)
+            
             for date_str, day_records in daily_groups.items():
                 checkins = []
                 for r in day_records:
@@ -437,12 +444,10 @@ def get_attendances():
             monthly_groups = {}
             for (map_emp_id, map_date_str), daily_seconds in daily_hours_map.items():
                 if map_emp_id == emp_id:
-                    try:
-                        month_key = datetime.strptime(map_date_str, "%d/%m/%Y").strftime("%Y-%m")
-                    except:
-                        continue
+                    try: month_key = datetime.strptime(map_date_str, "%d/%m/%Y").strftime("%Y-%m")
+                    except: continue
                     monthly_groups.setdefault(month_key, []).append((map_date_str, daily_seconds))
-           
+            
             for month, days in monthly_groups.items():
                 sorted_days = sorted(days, key=lambda x: datetime.strptime(x[0], "%d/%m/%Y"))
                 running_total = 0
@@ -457,7 +462,7 @@ def get_attendances():
                         {"EmployeeId": emp_id, "CheckinDate": date_str, "CheckType": {"$in": ["checkin", "checkout"]}},
                         {"$set": {"MonthlyHours": monthly_hours, "_monthlySeconds": running_total}}
                     )
-       
+        
         for item in all_relevant_data:
             emp_id, date_str = item.get("EmployeeId"), item.get("CheckinDate")
             daily_sec = daily_hours_map.get((emp_id, date_str), 0)
@@ -491,22 +496,24 @@ def get_leaves():
         email = request.args.get("email")
         admin = admins.find_one({"email": email})
         user = users.find_one({"email": email})
-        if not admin and not user:
-            return jsonify({"error": "🚫 Email không tồn tại"}), 403
-       
+        if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        
         username = None if admin else user["username"]
         date_type = request.args.get("dateType", "CheckinDate")
         filter_type = request.args.get("filter", "tất cả").lower()
         start_date_str = request.args.get("startDate")
         end_date_str = request.args.get("endDate")
         search = request.args.get("search", "").strip()
+
         query = build_leave_query(filter_type, start_date_str, end_date_str, search, date_type, username=username)
         data = list(collection.find(query, {"_id": 0}))
+
         # <<< PHẦN SỬA LỖI BẮT ĐẦU >>>
         # Xử lý lọc theo Ngày nghỉ (LeaveDate) sau khi đã lấy dữ liệu từ DB
         if date_type == "LeaveDate" and filter_type != "tất cả":
             filter_start_dt, filter_end_dt = None, None
             today = datetime.now(VN_TZ)
+
             # Xác định khoảng thời gian lọc
             if filter_type == "custom" and start_date_str and end_date_str:
                 try:
@@ -527,34 +534,37 @@ def get_leaves():
                 elif filter_type == "năm":
                     filter_start_dt = today.replace(month=1, day=1).date()
                     filter_end_dt = today.replace(month=12, day=31).date()
+
             # Nếu có khoảng thời gian lọc hợp lệ, tiến hành lọc dữ liệu
             if filter_start_dt and filter_end_dt:
                 filtered_data = []
                 for item in data:
                     display_date = item.get("DisplayDate", "")
-                    if not display_date:
-                        continue
+                    if not display_date: continue
+
                     record_start_dt, record_end_dt = None, None
                     try:
-                        if "đến" in display_date:  # Dạng "Từ YYYY-MM-DD đến YYYY-MM-DD"
+                        if "đến" in display_date: # Dạng "Từ YYYY-MM-DD đến YYYY-MM-DD"
                             dates = re.findall(r"\d{4}-\d{2}-\d{2}", display_date)
                             if len(dates) == 2:
                                 record_start_dt = datetime.strptime(dates[0], "%Y-%m-%d").date()
                                 record_end_dt = datetime.strptime(dates[1], "%Y-%m-%d").date()
-                        else:  # Dạng "YYYY-MM-DD ..."
+                        else: # Dạng "YYYY-MM-DD ..."
                             date_part = display_date.split()[0]
                             record_start_dt = record_end_dt = datetime.strptime(date_part, "%Y-%m-%d").date()
-                       
+                        
                         # Kiểm tra sự giao thoa giữa khoảng thời gian của bản ghi và bộ lọc
                         if record_start_dt and record_end_dt:
                             if record_start_dt <= filter_end_dt and record_end_dt >= filter_start_dt:
                                 filtered_data.append(item)
                     except (ValueError, TypeError, IndexError):
-                        continue  # Bỏ qua nếu không thể phân tích ngày tháng
-                data = filtered_data  # Ghi đè dữ liệu gốc bằng dữ liệu đã lọc
+                        continue # Bỏ qua nếu không thể phân tích ngày tháng
+                data = filtered_data # Ghi đè dữ liệu gốc bằng dữ liệu đã lọc
         # <<< PHẦN SỬA LỖI KẾT THÚC >>>
+
         if not data:
             return jsonify([])
+
         # Định dạng dữ liệu trước khi trả về (giữ nguyên)
         for item in data:
             item["ApprovalDate1"] = get_formatted_approval_date(item.get("ApprovalDate1"))
@@ -570,11 +580,12 @@ def get_leaves():
                     item['CheckinTime'] = ""
             else:
                 item['CheckinTime'] = ""
-           
-            item['CheckinDate'] = item.get('DisplayDate', "")  # Ưu tiên DisplayDate cho cột Ngày nghỉ
+            
+            item['CheckinDate'] = item.get('DisplayDate', "") # Ưu tiên DisplayDate cho cột Ngày nghỉ
             tasks = item.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
             item['Tasks'] = item.get("Reason") or tasks_str
+
         return jsonify(data)
     except Exception as e:
         import traceback
@@ -589,8 +600,7 @@ def export_to_excel():
         email = request.args.get("email")
         admin = admins.find_one({"email": email})
         user = users.find_one({"email": email})
-        if not admin and not user:
-            return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        if not admin and not user: return jsonify({"error": "🚫 Email không tồn tại"}), 403
         username = None if admin else user["username"]
         query = build_attendance_query(
             request.args.get("filter", "hôm nay").lower(),
@@ -612,14 +622,14 @@ def export_to_excel():
             row = start_row + i
             ws.cell(row=row, column=1, value=emp_id)
             ws.cell(row=row, column=2, value=emp_name)
-            ws.cell(row=row, column=3, value=date_str)  # Giữ nguyên format DD/MM/YYYY
-           
+            ws.cell(row=row, column=3, value=date_str) # Giữ nguyên format DD/MM/YYYY
+            
             # Retrieve stored DailyHours and MonthlyHours
             daily_hours = records[0].get("DailyHours", "0h 0m 0s")
             monthly_hours = records[0].get("MonthlyHours", "0h 0m 0s")
-            ws.cell(row=row, column=14, value=daily_hours)  # Assuming column 14 for DailyHours
-            ws.cell(row=row, column=15, value=monthly_hours)  # Assuming column 15 for MonthlyHours
-           
+            ws.cell(row=row, column=14, value=daily_hours) # Assuming column 14 for DailyHours
+            ws.cell(row=row, column=15, value=monthly_hours) # Assuming column 15 for MonthlyHours
+            
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
             sorted_records = sorted(records, key=lambda x: (
                 datetime.strptime(x['Timestamp'], "%Y-%m-%d %H:%M:%S")
@@ -642,13 +652,13 @@ def export_to_excel():
                 # Build cell_value by including only non-empty fields
                 fields = [time_str, rec.get('ProjectId', ''), tasks_str, rec.get('Address', ''), rec.get('CheckinNote', '')]
                 cell_value = "; ".join(field for field in fields if field)
-               
+                
                 if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
                     ws.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
                     checkin_counter += 1
                 elif rec.get('CheckType') == 'checkout':
                     ws.cell(row=row, column=checkout_col, value=cell_value)
-            for col in range(1, 16):  # Adjusted to include DailyHours and MonthlyHours columns
+            for col in range(1, 16): # Adjusted to include DailyHours and MonthlyHours columns
                 ws.cell(row=row, column=col).border = border
                 ws.cell(row=row, column=col).alignment = align_left
         filename = f"Danh sách chấm công_{request.args.get('filter')}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
@@ -665,12 +675,10 @@ def export_to_excel():
 def export_leaves_to_excel():
     try:
         email = request.args.get("email")
-        if not email:
-            return jsonify({"error": "❌ Thiếu email"}), 400
+        if not email: return jsonify({"error": "❌ Thiếu email"}), 400
         admin = admins.find_one({"email": email})
         username = None if admin else users.find_one({"email": email})["username"]
-        if not admin and not username:
-            return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        if not admin and not username: return jsonify({"error": "🚫 Email không tồn tại"}), 403
         query = build_leave_query(
             request.args.get("filter", "tất cả").lower(),
             request.args.get("startDate"), request.args.get("endDate"),
@@ -726,7 +734,7 @@ def export_leaves_to_excel():
             for col_idx in range(1, 12):  # Cập nhật số cột đến 11
                 ws.cell(row=i, column=col_idx).border = border
                 ws.cell(row=i, column=col_idx).alignment = align_left
-       
+        
         filename = f"Danh sách nghỉ phép_{request.args.get('filter')}_{datetime.now(VN_TZ).strftime('%d-%m-%Y')}.xlsx"
         output = BytesIO()
         wb.save(output)
@@ -741,12 +749,10 @@ def export_leaves_to_excel():
 def export_combined_to_excel():
     try:
         email = request.args.get("email")
-        if not email:
-            return jsonify({"error": "❌ Thiếu email"}), 400
+        if not email: return jsonify({"error": "❌ Thiếu email"}), 400
         admin = admins.find_one({"email": email})
         username = None if admin else users.find_one({"email": email})["username"]
-        if not admin and not username:
-            return jsonify({"error": "🚫 Email không tồn tại"}), 403
+        if not admin and not username: return jsonify({"error": "🚫 Email không tồn tại"}), 403
         filter_type = request.args.get("filter", "hôm nay").lower()
         start_date = request.args.get("startDate")
         end_date = request.args.get("endDate")
@@ -756,7 +762,7 @@ def export_combined_to_excel():
         leave_query = build_leave_query(filter_type, start_date, end_date, search, date_type, username=username)
         attendance_data = list(collection.find(attendance_query, {"_id": 0}))
         leave_data = list(collection.find(leave_query, {"_id": 0}))
-       
+        
         template_path = "templates/Form kết hợp.xlsx"
         wb = load_workbook(template_path)
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
@@ -767,20 +773,20 @@ def export_combined_to_excel():
         for d in attendance_data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate"))
             attendance_grouped.setdefault(key, []).append(d)
-       
+        
         start_row_att = 2
         for i, ((emp_id, emp_name, date_str), records) in enumerate(attendance_grouped.items()):
             row = start_row_att + i
             ws_attendance.cell(row=row, column=1, value=emp_id)
             ws_attendance.cell(row=row, column=2, value=emp_name)
             ws_attendance.cell(row=row, column=3, value=date_str)
-           
+            
             # Retrieve stored DailyHours and MonthlyHours
             daily_hours = records[0].get("DailyHours", "0h 0m 0s")
             monthly_hours = records[0].get("MonthlyHours", "0h 0m 0s")
-            ws_attendance.cell(row=row, column=14, value=daily_hours)  # Assuming column 14 for DailyHours
-            ws_attendance.cell(row=row, column=15, value=monthly_hours)  # Assuming column 15 for MonthlyHours
-           
+            ws_attendance.cell(row=row, column=14, value=daily_hours) # Assuming column 14 for DailyHours
+            ws_attendance.cell(row=row, column=15, value=monthly_hours) # Assuming column 15 for MonthlyHours
+            
             checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
             sorted_records = sorted(records, key=lambda x: (
                 datetime.strptime(x['Timestamp'], "%Y-%m-%d %H:%M:%S")
@@ -789,7 +795,7 @@ def export_combined_to_excel():
                 if isinstance(x.get('Timestamp'), datetime)
                 else datetime.min
             ))
-           
+            
             for rec in sorted_records:
                 time_str = ""
                 if rec.get('Timestamp'):
@@ -809,7 +815,7 @@ def export_combined_to_excel():
                     checkin_counter += 1
                 elif rec.get('CheckType') == 'checkout':
                     ws_attendance.cell(row=row, column=checkout_col, value=cell_value)
-            for col in range(1, 16):  # Adjusted to include DailyHours and MonthlyHours columns
+            for col in range(1, 16): # Adjusted to include DailyHours and MonthlyHours columns
                 ws_attendance.cell(row=row, column=col).border = border
                 ws_attendance.cell(row=row, column=col).alignment = align_left
         # ---- Xử lý sheet Nghỉ phép ----
@@ -818,7 +824,7 @@ def export_combined_to_excel():
             "Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
             "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối", "Trạng thái Lần cuối", "Ghi chú"
         )
-       
+        
         for i, rec in enumerate(leave_data, start=2):
             # Ưu tiên DisplayDate, nếu không có thì tính từ StartDate/EndDate hoặc LeaveDate
             display_date = rec.get("DisplayDate", "")
@@ -833,7 +839,7 @@ def export_combined_to_excel():
             ws_leaves.cell(row=i, column=2, value=rec.get("EmployeeName"))
             ws_leaves.cell(row=i, column=3, value=display_date)
             leave_days = calculate_leave_days_from_record(rec)
-            ws.cell(row=i, column=4, value=leave_days if isinstance(leave_days, (int, float)) else 0.0)
+            ws_leaves.cell(row=i, column=4, value=leave_days if isinstance(leave_days, (int, float)) else 0.0)
             # Sử dụng CreationTime cho Ngày tạo đơn
             timestamp_str = ""
             if rec.get("CreationTime"):
@@ -867,4 +873,5 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
