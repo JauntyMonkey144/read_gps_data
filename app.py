@@ -400,52 +400,7 @@ def get_formatted_approval_date(approval_date):
     if not approval_date: return ""
     try: return approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S") if isinstance(approval_date, datetime) else str(approval_date)
     except: return str(approval_date)
-        
-def calculate_daily_hours_for_export(day_records):
-    """
-    Tính toán giờ làm việc hàng ngày cho việc xuất file.
-    Nếu có check-in nhưng không có check-out, trả về "0h 0m 0s".
-    """
-    checkins = []
-    checkouts = []
-    for r in day_records:
-        try:
-            timestamp = r.get('Timestamp')
-            if not timestamp: continue
-            
-            dt_obj = None
-            if isinstance(timestamp, str):
-                dt_obj = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-            elif isinstance(timestamp, datetime):
-                dt_obj = timestamp
-            
-            if dt_obj:
-                if r.get('CheckType') == 'checkin':
-                    checkins.append(dt_obj)
-                elif r.get('CheckType') == 'checkout':
-                    checkouts.append(dt_obj)
-        except (ValueError, TypeError):
-            continue # Bỏ qua các bản ghi có định dạng timestamp không hợp lệ
 
-    # --- LOGIC MỚI: Nếu có check-in nhưng không có check-out, mặc định là 0 giờ ---
-    if checkins and not checkouts:
-        return "0h 0m 0s"
-
-    # Logic tính toán như cũ nếu có cả check-in và check-out
-    daily_seconds = 0
-    if checkins and checkouts:
-        first_checkin = min(checkins)
-        last_checkout = max(checkouts)
-        if last_checkout > first_checkin:
-            daily_seconds = (last_checkout - first_checkin).total_seconds()
-    
-    if daily_seconds > 0:
-        h, rem = divmod(daily_seconds, 3600)
-        m, s = divmod(rem, 60)
-        return f"{int(h)}h {int(m)}m {int(s)}s"
-    
-    return "0h 0m 0s"
-    
 # ---- API lấy dữ liệu chấm công ----
 @app.route("/api/attendances", methods=["GET"])
 def get_attendances():
@@ -713,9 +668,9 @@ def export_to_excel():
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date_str) # Giữ nguyên format DD/MM/YYYY
             
-           # Tính toán lại giờ làm việc hàng ngày theo yêu cầu mới
-            daily_hours = calculate_daily_hours_for_export(records)
-            monthly_hours = records[0].get("MonthlyHours", "0h 0m 0s") # Giữ nguyên cách lấy giờ tháng
+            # Retrieve stored DailyHours and MonthlyHours
+            daily_hours = records[0].get("DailyHours", "0h 0m 0s")
+            monthly_hours = records[0].get("MonthlyHours", "0h 0m 0s")
             ws.cell(row=row, column=14, value=daily_hours)
             ws.cell(row=row, column=15, value=monthly_hours)
             
@@ -951,8 +906,8 @@ def export_combined_to_excel():
             ws_attendance.cell(row=row, column=2, value=emp_name)
             ws_attendance.cell(row=row, column=3, value=date_str)
             
-            daily_hours = calculate_daily_hours_for_export(records)
-            monthly_hours = records[0].get("MonthlyHours", "0h 0m 0s") # Giữ nguyên cách lấy giờ tháng
+            daily_hours = records[0].get("DailyHours", "0h 0m 0s")
+            monthly_hours = records[0].get("MonthlyHours", "0h 0m 0s")
             ws_attendance.cell(row=row, column=14, value=daily_hours)
             ws_attendance.cell(row=row, column=15, value=monthly_hours)
             
@@ -1061,4 +1016,3 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-
