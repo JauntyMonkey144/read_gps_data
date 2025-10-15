@@ -108,18 +108,29 @@ def request_reset_password():
         msg['Subject'] = "Yêu cầu đặt lại mật khẩu"
         
         reset_link = url_for("reset_password", token=token, _external=True)
-        body = f"""
-        Xin chào,
-
-        Bạn đã yêu cầu đặt lại mật khẩu. Vui lòng nhấp vào liên kết sau để đặt lại mật khẩu của bạn:
-        {reset_link}
-
-        Liên kết này sẽ hết hạn sau 1 ngày. Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.
-
-        Trân trọng,
-        Đội ngũ hỗ trợ
+        # Tạo nội dung email dưới dạng HTML
+        html_body = f"""
+        <div style="font-family: Arial, sans-serif; color: #333;">
+            <h2 style="color: #007bff;">Yêu cầu đặt lại mật khẩu</h2>
+            <p>Xin chào,</p>
+            <p>Bạn đã yêu cầu đặt lại mật khẩu cho tài khoản của mình. Vui lòng nhấp vào nút bên dưới để hoàn tất quá trình:</p>
+            <p style="text-align: center; margin: 30px 0;">
+                <a href="{reset_link}" 
+                   style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                   Đặt lại mật khẩu
+                </a>
+            </p>
+            <p>Liên kết này sẽ hết hạn sau 1 ngày.</p>
+            <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này một cách an toàn.</p>
+            <hr>
+            <p style="font-size: 0.9em; color: #6c757d;">
+                Trân trọng,<br>
+                Hệ thống tự động Sun Automation
+            </p>
+        </div>
         """
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        # Đính kèm nội dung HTML vào email và đổi định dạng thành 'html'
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
 
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
             server.starttls()
@@ -1016,3 +1027,4 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
