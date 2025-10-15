@@ -23,17 +23,16 @@ CORS(app, methods=["GET", "POST"])
 VN_TZ = timezone(timedelta(hours=7))
 load_dotenv() # Tải các biến từ file .env
 # ---- MongoDB Config ----
-MONGO_URI = os.getenv(
-    "MONGO_URI",
-    "mongodb+srv://banhbaobeo2205:lm2hiCLXp6B0D7hq@cluster0.festnla.mongodb.net/?retryWrites=true&w=majority"
-)
-DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
+MONGO_URI = os.getenv("MONGO_URI") 
+DB_NAME = os.getenv("DB_NAME", "Sun_Database_1") 
 
 # ---- Email Config ----
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS", "sun.automation.sys@gmail.com")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "csccvsmoyfvpuwaw")
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
+# Đã bỏ mật khẩu và email trực tiếp
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS") 
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com") # Lấy từ .env, mặc định là gmail
+# Chuyển đổi cổng sang int vì nó được lưu dưới dạng chuỗi trong .env
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587)) 
 
 # ---- Kết nối MongoDB ----
 client = MongoClient(MONGO_URI)
@@ -1046,6 +1045,7 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
 
 
