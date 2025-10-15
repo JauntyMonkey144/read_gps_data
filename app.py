@@ -621,7 +621,14 @@ def get_leaves():
             else:
                 item['CheckinTime'] = ""
             
-            item['CheckinDate'] = item.get('DisplayDate', "") # Ưu tiên DisplayDate cho cột Ngày nghỉ
+            display_date = item.get('DisplayDate', "")
+            if display_date:
+                # Tìm và định dạng lại tất cả các chuỗi ngày tháng YYYY-MM-DD
+                def reformat_date(match):
+                    return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
+                display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date, display_date)
+            
+            item['CheckinDate'] = display_date # Gán lại giá trị đã định dạng
             tasks = item.get("Tasks", [])
             tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
             item['Tasks'] = item.get("Reason") or tasks_str
@@ -802,7 +809,11 @@ def export_leaves_to_excel():
                 elif not display_date and rec.get('LeaveDate'):
                     leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                     display_date = f"{leave_date} ({rec.get('Session', '')})"
-
+                    
+                if display_date:
+                    def reformat_date_excel(match):
+                        return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
+                    display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date_excel, display_date)
                 ws.cell(row=current_row, column=1, value=rec.get("EmployeeId", ""))
                 ws.cell(row=current_row, column=2, value=rec.get("EmployeeName", ""))
                 ws.cell(row=current_row, column=3, value=display_date)
@@ -979,7 +990,13 @@ def export_combined_to_excel():
                 elif not display_date and rec.get('LeaveDate'):
                     leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                     display_date = f"{leave_date} ({rec.get('Session', '')})"
-                
+
+                # --- PHẦN SỬA ĐỔI BẮT ĐẦU ---
+                if display_date:
+                    def reformat_date_combined(match):
+                        return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
+                    display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date_combined, display_date)
+                # --- PHẦN SỬA ĐỔI KẾT THÚC ---                
                 ws_leaves.cell(row=current_row_leave, column=1, value=rec.get("EmployeeId"))
                 ws_leaves.cell(row=current_row_leave, column=2, value=rec.get("EmployeeName"))
                 ws_leaves.cell(row=current_row_leave, column=3, value=display_date)
@@ -1027,4 +1044,5 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
