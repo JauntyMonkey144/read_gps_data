@@ -139,12 +139,11 @@
     <div class="export-group" id="exportGroupAttendance">
       <select id="exportOptionsAttendance" style="border: 1px solid var(--primary);">
         <option value="">-- Chọn loại file --</option>
-        <option value="attendance">Điểm Danh Theo Filter Hiện Tại</option>
-        <option value="leave">Nghỉ Phép Theo Filter Hiện Tại</option>
-        <option value="combined">Toàn Bộ (Cả hai) Theo Filter Hiện Tại</option>
+        <option value="attendance">Điểm Danh</option>
+        <option value="leave">Nghỉ Phép</option>
+        <option value="combined">Điểm danh & Nghỉ phép</option>
       </select>
       <select id="exportMonthAttendance" style="display:none;">
-        <option value="">-- Tháng --</option>
         <option value="1">1</option>
         <option value="2">2</option>
         <option value="3">3</option>
@@ -159,7 +158,6 @@
         <option value="12">12</option>
       </select>
       <select id="exportYearAttendance" style="display:none;">
-        <option value="">-- Năm --</option>
       </select>
       <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button>
     </div>
@@ -219,9 +217,9 @@
       <div class="export-group" id="exportGroupLeave">
         <select id="exportOptionsLeave" style="border: 1px solid var(--primary);">
           <option value="">-- Chọn loại file --</option>
-          <option value="attendance">Điểm Danh Theo Filter Hiện Tại</option>
-          <option value="leave">Nghỉ Phép Theo Filter Hiện Tại</option>
-          <option value="combined">Toàn Bộ (Cả hai) Theo Filter Hiện Tại</option>
+        <option value="attendance">Điểm Danh</option>
+        <option value="leave">Nghỉ Phép</option>
+        <option value="combined">Điểm danh & Nghỉ phép</option>
         </select>
         <select id="exportMonthLeave" style="display:none;">
           <option value="">-- Tháng --</option>
