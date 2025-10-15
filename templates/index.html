@@ -143,6 +143,7 @@
         <option value="leave">Nghỉ Phép</option>
         <option value="combined">Điểm danh & Nghỉ phép</option>
       </select>
+      <label id="exportDateLabelAttendance" style="display:none; font-weight: bold; margin-left: 5px;">Tháng/Năm:</label>
       <select id="exportMonthAttendance" style="display:none;">
         <option value="1">1</option>
         <option value="2">2</option>
@@ -221,8 +222,8 @@
         <option value="leave">Nghỉ Phép</option>
         <option value="combined">Điểm danh & Nghỉ phép</option>
         </select>
+        <label id="exportDateLabelAttendance" style="display:none; font-weight: bold; margin-left: 5px;">Tháng/Năm:</label>
         <select id="exportMonthLeave" style="display:none;">
-          <option value="">-- Tháng --</option>
           <option value="1">1</option>
           <option value="2">2</option>
           <option value="3">3</option>
@@ -237,7 +238,6 @@
           <option value="12">12</option>
         </select>
         <select id="exportYearLeave" style="display:none;">
-          <option value="">-- Năm --</option>
         </select>
         <button onclick="handleExportClick()">📤 Xuất Dữ Liệu</button>
       </div>
@@ -823,26 +823,32 @@
       if (e.key === "Enter") login();
     });
     document.getElementById("exportOptionsAttendance").addEventListener("change", function() {
-      const monthSelect = document.getElementById("exportMonthAttendance");
-      const yearSelect = document.getElementById("exportYearAttendance");
-      if (this.value !== "") {
-        monthSelect.style.display = "inline-block";
-        yearSelect.style.display = "inline-block";
-      } else {
-        monthSelect.style.display = "none";
-        yearSelect.style.display = "none";
-      }
+        const monthSelect = document.getElementById("exportMonthAttendance");
+        const yearSelect = document.getElementById("exportYearAttendance");
+        const dateLabel = document.getElementById("exportDateLabelAttendance"); // Thêm dòng này
+        if (this.value !== "") {
+            dateLabel.style.display = "inline-block"; // Thêm dòng này
+            monthSelect.style.display = "inline-block";
+            yearSelect.style.display = "inline-block";
+        } else {
+            dateLabel.style.display = "none"; // Thêm dòng này
+            monthSelect.style.display = "none";
+            yearSelect.style.display = "none";
+        }
     });
     document.getElementById("exportOptionsLeave").addEventListener("change", function() {
-      const monthSelect = document.getElementById("exportMonthLeave");
-      const yearSelect = document.getElementById("exportYearLeave");
-      if (this.value !== "") {
-        monthSelect.style.display = "inline-block";
-        yearSelect.style.display = "inline-block";
-      } else {
-        monthSelect.style.display = "none";
-        yearSelect.style.display = "none";
-      }
+        const monthSelect = document.getElementById("exportMonthLeave");
+        const yearSelect = document.getElementById("exportYearLeave");
+        const dateLabel = document.getElementById("exportDateLabelLeave"); // Thêm dòng này
+        if (this.value !== "") {
+            dateLabel.style.display = "inline-block"; // Thêm dòng này
+            monthSelect.style.display = "inline-block";
+            yearSelect.style.display = "inline-block";
+        } else {
+            dateLabel.style.display = "none"; // Thêm dòng này
+            monthSelect.style.display = "none";
+            yearSelect.style.display = "none";
+        }
     });
   </script>
 </body>
