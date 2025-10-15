@@ -329,6 +329,10 @@
       document.getElementById("exportYearAttendance").style.display = "none";
       document.getElementById("exportMonthLeave").style.display = "none";
       document.getElementById("exportYearLeave").style.display = "none";
+      const labelAtt = document.getElementById("exportDateLabelAttendance");
+      const labelLeave = document.getElementById("exportDateLabelLeave");
+      if (labelAtt) labelAtt.style.display = "none";
+      if (labelLeave) labelLeave.style.display = "none";      
       const currentMonth = new Date().getMonth() + 1;
       const currentYear = new Date().getFullYear();
       document.getElementById('exportMonthAttendance').value = currentMonth;
