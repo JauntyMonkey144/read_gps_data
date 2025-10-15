@@ -14,12 +14,14 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
+from dotenv import load_dotenv
+
 app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
 
 # ---- Timezone VN ----
 VN_TZ = timezone(timedelta(hours=7))
-
+load_dotenv() # Tải các biến từ file .env
 # ---- MongoDB Config ----
 MONGO_URI = os.getenv(
     "MONGO_URI",
@@ -1044,6 +1046,7 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
 
 
