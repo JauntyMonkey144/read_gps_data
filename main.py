@@ -259,22 +259,60 @@ def forgot_password():
         </head><body><div class="container"><div class="success">✅ Thay đổi mật khẩu thành công! Bạn có thể đăng nhập với mật khẩu mới.</div>
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
         
-# ---- Build leave query (lọc theo dateType)----
-def build_leave_query(filter_type, start_date_str, end_date_str, search, date_type="CheckinTime", username=None):
+# ## --- HELPER FUNCTIONS --- ##
+def build_attendance_query(filter_type, start_date, end_date, search, username=None):
+    """Xây dựng truy vấn MongoDB cho dữ liệu chấm công dựa trên các bộ lọc."""
     today = datetime.now(VN_TZ)
-    regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
-    conditions = [{"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}]
+    conditions = [{"CheckType": {"$in": ["checkin", "checkout"]}}]
+    date_filter = {}
+
+    if filter_type == "custom" and start_date and end_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=VN_TZ)
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
+            date_filter = {"Timestamp": {"$gte": start_dt, "$lte": end_dt}}
+        except (ValueError, TypeError):
+            pass
+    elif filter_type != "tất cả":
+        if filter_type == "hôm nay":
+            start_dt = today.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_dt = today.replace(hour=23, minute=59, second=59, microsecond=999999)
+        elif filter_type == "tuần":
+            start_dt = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_dt = start_dt + timedelta(days=6, hours=23, minutes=59, seconds=59, microseconds=999999)
+        elif filter_type == "tháng":
+            start_dt = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            _, last_day = calendar.monthrange(today.year, today.month)
+            end_dt = today.replace(day=last_day, hour=23, minute=59, second=59, microsecond=999999)
+        elif filter_type == "năm":
+            start_dt = today.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_dt = today.replace(month=12, day=31, hour=23, minute=59, second=59, microsecond=999999)
+        date_filter = {"Timestamp": {"$gte": start_dt, "$lte": end_dt}}
+
+    if date_filter:
+        conditions.append(date_filter)
+    if search:
+        regex = re.compile(search, re.IGNORECASE)
+        conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
+    if username:
+        conditions.append({"EmployeeName": username})
+
+    return {"$and": conditions} if len(conditions) > 1 else conditions[0]
+
+
+def build_leave_query(filter_type, start_date_str, end_date_str, search, date_type="CreationTime", username=None):
+    """Xây dựng truy vấn MongoDB cho dữ liệu nghỉ phép dựa trên các bộ lọc."""
+    today = datetime.now(VN_TZ)
+    conditions = [{"$or": [{"Tasks": re.compile("Nghỉ phép", re.IGNORECASE)}, {"Reason": {"$exists": True}}]}]
     date_filter = {}
 
     start_dt, end_dt = None, None
-
-    # Xác định khoảng thời gian start_dt và end_dt
     if filter_type == "custom" and start_date_str and end_date_str:
         try:
             start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=VN_TZ)
             end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
-        except ValueError:
-            pass # Bỏ qua nếu định dạng ngày không hợp lệ
+        except (ValueError, TypeError):
+            pass
     elif filter_type != "tất cả":
         if filter_type == "hôm nay":
             start_dt, end_dt = today.replace(hour=0, minute=0, second=0), today.replace(hour=23, minute=59, second=59)
@@ -289,53 +327,22 @@ def build_leave_query(filter_type, start_date_str, end_date_str, search, date_ty
             start_dt = today.replace(month=1, day=1, hour=0, minute=0, second=0)
             end_dt = today.replace(month=12, day=31, hour=23, minute=59, second=59)
 
-    # Xây dựng bộ lọc ngày tháng nếu có khoảng thời gian hợp lệ
     if start_dt and end_dt:
-        # Quan trọng: Không lọc theo LeaveDate ở đây nữa, sẽ xử lý sau
-        if date_type == "CheckinTime":
-            date_filter = {"CreationTime": {"$gte": start_dt, "$lte": end_dt}}
-        elif date_type == "ApprovalDate1":
-            date_filter = {"ApprovalDate1": {"$gte": start_dt, "$lte": end_dt}}
-        elif date_type == "ApprovalDate2":
-            date_filter = {"ApprovalDate2": {"$gte": start_dt, "$lte": end_dt}}
+        # date_type "LeaveDate" được xử lý riêng sau khi query vì logic phức tạp
+        if date_type in ["CheckinTime", "CreationTime", "ApprovalDate1", "ApprovalDate2"]:
+            # Đảm bảo dùng đúng tên trường trong DB
+            db_field = "CreationTime" if date_type in ["CheckinTime", "CreationTime"] else date_type
+            date_filter = {db_field: {"$gte": start_dt, "$lte": end_dt}}
 
     if date_filter:
         conditions.append(date_filter)
-
     if search:
         regex = re.compile(search, re.IGNORECASE)
         conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
     if username:
         conditions.append({"EmployeeName": username})
-
-    return {"$and": conditions}
-
-# ---- Build attendance query ----
-def build_attendance_query(filter_type, start_date, end_date, search, username=None):
-    today = datetime.now(VN_TZ)
-    conditions = [{"CheckType": {"$in": ["checkin", "checkout"]}}]
-    date_filter = {}
-    if filter_type == "custom" and start_date and end_date:
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=VN_TZ)
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=VN_TZ)
-        date_filter = {"Timestamp": {"$gte": start_dt, "$lte": end_dt}}
-    elif filter_type == "hôm nay":
-        date_filter = {"CheckinDate": today.strftime("%d/%m/%Y")}
-    elif filter_type == "tuần":
-        start_dt = (today - timedelta(days=today.weekday())).replace(hour=0, minute=0, second=0)
-        end_dt = (start_dt + timedelta(days=6)).replace(hour=23, minute=59, second=59)
-        date_filter = {"Timestamp": {"$gte": start_dt, "$lte": end_dt}}
-    elif filter_type == "tháng":
-        date_filter = {"CheckinDate": {"$regex": f"/{today.month:02d}/{today.year}$"}}
-    elif filter_type == "năm":
-        date_filter = {"CheckinDate": {"$regex": f"/{today.year}$"}}
-    if date_filter: conditions.append(date_filter)
-    if search:
-        regex = re.compile(search, re.IGNORECASE)
-        conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
-    if username:
-        conditions.append({"EmployeeName": username})
-    return {"$and": conditions}
+    
+    return {"$and": conditions} if len(conditions) > 1 else conditions[0]
 
 # ---- Helper functions ----
 def calculate_leave_days_for_month(record, export_year, export_month):
@@ -426,7 +433,7 @@ def get_attendances():
         username = None if admin else user.get("username")
 
         page = int(request.args.get("page", 1))
-        limit = int(request.args.get("limit", 10))
+        limit = int(request.args.get("limit", 10)) # Đảm bảo có giá trị mặc định
         skip = (page - 1) * limit
 
         query = build_attendance_query(
@@ -455,7 +462,7 @@ def get_attendances():
                     }
                 }
             }},
-             {"$sort": {"_id.CheckinDate": -1, "_id.EmployeeName": 1}},
+            {"$sort": {"_id.CheckinDate": -1, "_id.EmployeeName": 1}},
         ]
 
         total_records_cursor = collection.aggregate(base_pipeline + [{"$count": "total"}])
@@ -503,7 +510,7 @@ def get_leaves():
         username = None if admin else user.get("username")
         
         page = int(request.args.get("page", 1))
-        limit = int(request.args.get("limit", 10))
+        limit = int(request.args.get("limit", 10)) # Đảm bảo có giá trị mặc định
         skip = (page - 1) * limit
         
         date_type = request.args.get("dateType", "CreationTime")
@@ -516,8 +523,6 @@ def get_leaves():
         
         total_records = collection.count_documents(query)
         data = list(collection.find(query, {"_id": 0}).sort("CreationTime", -1).skip(skip).limit(limit))
-
-        # ... (Xử lý logic lọc cho `LeaveDate` nếu cần, tương tự phiên bản cũ)
 
         for item in data:
             item["ApprovalDate1"] = get_formatted_approval_date(item.get("ApprovalDate1"))
@@ -949,6 +954,7 @@ def export_combined_to_excel():
 
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
