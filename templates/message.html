@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Thông báo</title>
+    <style>
+        body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}
+        .message { color: {% if is_error %}#dc3545{% else %}#28a745{% endif %}; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p class="message">{{ message }}</p>
+        <a href="{{ back_url or url_for('index') }}">
+            <button>Quay lại</button>
+        </a>
+    </div>
+</body>
+</html>
