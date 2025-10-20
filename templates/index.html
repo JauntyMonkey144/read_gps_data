@@ -265,7 +265,7 @@
     let startDate = "", endDate = "";
     let rawData = [];
     let currentPage = 1;
-    let rowsPerPage = 50;
+    let rowsPerPage = 10;
 
     // State cho tab Nghỉ phép
     let currentLeaveFilter = "hôm nay";
@@ -275,7 +275,7 @@
     let leaveDateType = "CheckinTime";
     let rawLeaveData = [];
     let currentLeavePage = 1;
-    let leaveRowsPerPage = 50;
+    let leaveRowsPerPage = 10;
     
     function showMessage(msg, type="success", isModal=false) {
       const el = isModal ? document.getElementById("modalMessage") : document.getElementById("messageArea");
