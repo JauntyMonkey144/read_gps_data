@@ -609,4 +609,5 @@ def export_leaves_to_excel():
 if __name__ == "__main__":
     # Khi deploy, hãy sử dụng một WSGI server như Gunicorn
     # Ví dụ: gunicorn --workers 4 --bind 0.0.0.0:5000 app:app
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=True)
+
