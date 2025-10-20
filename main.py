@@ -426,7 +426,7 @@ def get_attendances():
         username = None if admin else user.get("username")
 
         page = int(request.args.get("page", 1))
-        limit = int(request.args.get("limit", 50))
+        limit = int(request.args.get("limit", 10))
         skip = (page - 1) * limit
 
         query = build_attendance_query(
@@ -503,7 +503,7 @@ def get_leaves():
         username = None if admin else user.get("username")
         
         page = int(request.args.get("page", 1))
-        limit = int(request.args.get("limit", 50))
+        limit = int(request.args.get("limit", 10))
         skip = (page - 1) * limit
         
         date_type = request.args.get("dateType", "CreationTime")
@@ -949,6 +949,7 @@ def export_combined_to_excel():
 
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
