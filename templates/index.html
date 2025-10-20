@@ -131,8 +131,8 @@
     <input type="text" id="searchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
     <button onclick="applySearch()">Tìm kiếm</button>
     <select id="rowsPerPage" onchange="updateRowsPerPage()">
-      <option value="5">5 dòng</option>
-      <option value="10" selected>10 dòng</option>
+      <option value="5" selected>5 dòng</option>
+      <option value="10">10 dòng</option>
       <option value="20">20 dòng</option>
       <option value="25">25 dòng</option>
     </select>
@@ -210,8 +210,8 @@
       <input type="text" id="leaveSearchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
       <button onclick="applyLeaveSearch()">Tìm kiếm</button>
       <select id="leaveRowsPerPage" onchange="updateLeaveRowsPerPage()">
-        <option value="5">5 dòng</option>
-        <option value="10" selected>10 dòng</option>
+        <option value="5" selected>5 dòng</option>
+        <option value="10">10 dòng</option>
         <option value="20">20 dòng</option>
         <option value="25">25 dòng</option>
       </select>
@@ -284,7 +284,7 @@
     let rawData = [];
     let displayData = [];
     let currentPage = 1;
-    let rowsPerPage = 10;
+    let rowsPerPage = 5;
     let currentLeaveFilter = "hôm nay";
     let currentLeaveSearch = "";
     let currentLeaveSort = { column: 'CheckinTime', order: 'desc' };
@@ -292,7 +292,7 @@
     let leaveDateType = "CheckinTime";
     let rawLeaveData = [];
     let currentLeavePage = 1;
-    let leaveRowsPerPage = 10;
+    let leaveRowsPerPage = 5;
     function showMessage(msg, type="success", isModal=false) {
       const el = isModal ? document.getElementById("modalMessage") : document.getElementById("messageArea");
       el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
