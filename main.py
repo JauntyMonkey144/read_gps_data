@@ -654,7 +654,6 @@ def export_to_excel():
         # Get month and year from request, default to current
         export_year = int(request.args.get("year", datetime.now(VN_TZ).year))
         export_month = int(request.args.get("month", datetime.now(VN_TZ).month))
-        month_str = f"{export_year}-{export_month:02d}"
         try:
             export_dt = datetime(export_year, export_month, 1)
             start_date = export_dt.strftime("%Y-%m-%d")
@@ -671,6 +670,69 @@ def export_to_excel():
             username=username
         )
         data = list(collection.find(query, {"_id": 0}))
+
+        # <<< PHẦN CẬP NHẬT BẮT ĐẦU >>>
+        # Luôn tính toán lại giờ hàng ngày và hàng tháng dựa trên dữ liệu đầy đủ của tháng
+        daily_hours_map, monthly_hours_map = {}, {}
+        emp_data = {}
+        for rec in data:
+            emp_id = rec.get("EmployeeId")
+            if emp_id: emp_data.setdefault(emp_id, []).append(rec)
+        
+        for emp_id, records in emp_data.items():
+            daily_groups = {}
+            for rec in records:
+                date_str = rec.get("CheckinDate")
+                if date_str: daily_groups.setdefault(date_str, []).append(rec)
+            
+            for date_str, day_records in daily_groups.items():
+                checkins = []
+                for r in day_records:
+                    if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
+                        try:
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else: continue
+                            checkins.append(timestamp)
+                        except (ValueError, TypeError): continue
+                checkins = sorted(checkins)
+
+                checkouts = []
+                for r in day_records:
+                    if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
+                        try:
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else: continue
+                            checkouts.append(timestamp)
+                        except (ValueError, TypeError): continue
+                checkouts = sorted(checkouts)
+
+                daily_seconds = 0
+                if checkins and checkouts and checkouts[-1] > checkins[0]:
+                    daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
+                daily_hours_map[(emp_id, date_str)] = daily_seconds
+            
+            monthly_groups = {}
+            for (map_emp_id, map_date_str), daily_seconds in daily_hours_map.items():
+                if map_emp_id == emp_id:
+                    try: 
+                        month_key = datetime.strptime(map_date_str, "%d/%m/%Y").strftime("%Y-%m")
+                        monthly_groups.setdefault(month_key, []).append((map_date_str, daily_seconds))
+                    except: continue
+            
+            for month, days in monthly_groups.items():
+                sorted_days = sorted(days, key=lambda x: datetime.strptime(x[0], "%d/%m/%Y"))
+                running_total = 0
+                for date_str, daily_seconds in sorted_days:
+                    running_total += daily_seconds
+                    monthly_hours_map[(emp_id, date_str)] = running_total
+        # <<< PHẦN CẬP NHẬT KẾT THÚC >>>
+
         grouped = {}
         for d in data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate"))
@@ -685,11 +747,19 @@ def export_to_excel():
             row = start_row + i
             ws.cell(row=row, column=1, value=emp_id)
             ws.cell(row=row, column=2, value=emp_name)
-            ws.cell(row=row, column=3, value=date_str) # Giữ nguyên format DD/MM/YYYY
+            ws.cell(row=row, column=3, value=date_str)
             
-            # Retrieve stored DailyHours and MonthlyHours
-            daily_hours = records[0].get("DailyHours", "0h 0m 0s")
-            monthly_hours = records[0].get("MonthlyHours", "0h 0m 0s")
+            # Sử dụng giá trị giờ vừa tính toán lại
+            daily_sec = daily_hours_map.get((emp_id, date_str), 0)
+            h_d, rem_d = divmod(daily_sec, 3600)
+            m_d, s_d = divmod(rem_d, 60)
+            daily_hours = f"{int(h_d)}h {int(m_d)}m {int(s_d)}s" if daily_sec > 0 else ""
+            
+            monthly_sec = monthly_hours_map.get((emp_id, date_str), 0)
+            h_m, rem_m = divmod(monthly_sec, 3600)
+            m_m, s_m = divmod(rem_m, 60)
+            monthly_hours = f"{int(h_m)}h {int(m_m)}m {int(s_m)}s" if monthly_sec > 0 else ""
+            
             ws.cell(row=row, column=14, value=daily_hours)
             ws.cell(row=row, column=15, value=monthly_hours)
             
@@ -712,7 +782,6 @@ def export_to_excel():
                     except (ValueError, TypeError):
                         time_str = ""
                 tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
-                # Build cell_value by including only non-empty fields
                 fields = [time_str, rec.get('ProjectId', ''), tasks_str, rec.get('Address', ''), rec.get('CheckinNote', '')]
                 cell_value = "; ".join(field for field in fields if field)
                 
@@ -880,14 +949,11 @@ def export_combined_to_excel():
         # Get month and year from request, default to current
         export_year = int(request.args.get("year", datetime.now(VN_TZ).year))
         export_month = int(request.args.get("month", datetime.now(VN_TZ).month))
-        month_str = f"{export_year}-{export_month:02d}"
         try:
             export_dt = datetime(export_year, export_month, 1)
-            start_date = export_dt.strftime("%Y-%m-%d")
+            start_date = export_dt.strftime("%Y-m-%d")
             _, last_day = calendar.monthrange(export_year, export_month)
-            end_date = export_dt.replace(day=last_day).strftime("%Y-%m-%d")
-            leave_start_dt = export_dt.replace(day=1, hour=0, minute=0, second=0, tzinfo=VN_TZ)
-            leave_end_dt = export_dt.replace(day=last_day, hour=23, minute=59, second=59, tzinfo=VN_TZ)
+            end_date = export_dt.replace(day=last_day).strftime("%Y-m-d")
         except ValueError:
             return jsonify({"error": "❌ Định dạng tháng không hợp lệ."}), 400
         
@@ -917,6 +983,69 @@ def export_combined_to_excel():
         
         # ---- Xử lý sheet Điểm danh ----
         ws_attendance = wb["Điểm danh"]
+
+        # <<< PHẦN CẬP NHẬT BẮT ĐẦU >>>
+        # Luôn tính toán lại giờ cho sheet điểm danh
+        daily_hours_map, monthly_hours_map = {}, {}
+        emp_data = {}
+        for rec in attendance_data:
+            emp_id = rec.get("EmployeeId")
+            if emp_id: emp_data.setdefault(emp_id, []).append(rec)
+
+        for emp_id, records in emp_data.items():
+            daily_groups = {}
+            for rec in records:
+                date_str = rec.get("CheckinDate")
+                if date_str: daily_groups.setdefault(date_str, []).append(rec)
+            
+            for date_str, day_records in daily_groups.items():
+                checkins = []
+                for r in day_records:
+                    if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
+                        try:
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else: continue
+                            checkins.append(timestamp)
+                        except (ValueError, TypeError): continue
+                checkins = sorted(checkins)
+
+                checkouts = []
+                for r in day_records:
+                    if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
+                        try:
+                            if isinstance(r['Timestamp'], str):
+                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
+                            elif isinstance(r['Timestamp'], datetime):
+                                timestamp = r['Timestamp']
+                            else: continue
+                            checkouts.append(timestamp)
+                        except (ValueError, TypeError): continue
+                checkouts = sorted(checkouts)
+
+                daily_seconds = 0
+                if checkins and checkouts and checkouts[-1] > checkins[0]:
+                    daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
+                daily_hours_map[(emp_id, date_str)] = daily_seconds
+            
+            monthly_groups = {}
+            for (map_emp_id, map_date_str), daily_seconds in daily_hours_map.items():
+                if map_emp_id == emp_id:
+                    try: 
+                        month_key = datetime.strptime(map_date_str, "%d/%m/%Y").strftime("%Y-%m")
+                        monthly_groups.setdefault(month_key, []).append((map_date_str, daily_seconds))
+                    except: continue
+            
+            for month, days in monthly_groups.items():
+                sorted_days = sorted(days, key=lambda x: datetime.strptime(x[0], "%d/%m/%Y"))
+                running_total = 0
+                for date_str, daily_seconds in sorted_days:
+                    running_total += daily_seconds
+                    monthly_hours_map[(emp_id, date_str)] = running_total
+        # <<< PHẦN CẬP NHẬT KẾT THÚC >>>
+
         attendance_grouped = {}
         for d in attendance_data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate"))
@@ -929,8 +1058,17 @@ def export_combined_to_excel():
             ws_attendance.cell(row=row, column=2, value=emp_name)
             ws_attendance.cell(row=row, column=3, value=date_str)
             
-            daily_hours = records[0].get("DailyHours", "0h 0m 0s")
-            monthly_hours = records[0].get("MonthlyHours", "0h 0m 0s")
+            # Sử dụng giá trị giờ vừa tính toán lại
+            daily_sec = daily_hours_map.get((emp_id, date_str), 0)
+            h_d, rem_d = divmod(daily_sec, 3600)
+            m_d, s_d = divmod(rem_d, 60)
+            daily_hours = f"{int(h_d)}h {int(m_d)}m {int(s_d)}s" if daily_sec > 0 else ""
+
+            monthly_sec = monthly_hours_map.get((emp_id, date_str), 0)
+            h_m, rem_m = divmod(monthly_sec, 3600)
+            m_m, s_m = divmod(rem_m, 60)
+            monthly_hours = f"{int(h_m)}h {int(m_m)}m {int(s_m)}s" if monthly_sec > 0 else ""
+
             ws_attendance.cell(row=row, column=14, value=daily_hours)
             ws_attendance.cell(row=row, column=15, value=monthly_hours)
             
@@ -965,7 +1103,7 @@ def export_combined_to_excel():
                 ws_attendance.cell(row=row, column=col).border = border
                 ws_attendance.cell(row=row, column=col).alignment = align_left
 
-        # ---- Xử lý sheet Nghỉ phép ----
+        # ---- Xử lý sheet Nghỉ phép (Không thay đổi) ----
         ws_leaves = wb["Nghỉ phép"]
         ws_leaves['A1'] = "Mã NV"
         ws_leaves['B1'] = "Tên NV"
@@ -992,12 +1130,10 @@ def export_combined_to_excel():
                     leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
                     display_date = f"{leave_date} ({rec.get('Session', '')})"
 
-                # --- PHẦN SỬA ĐỔI BẮT ĐẦU ---
                 if display_date:
                     def reformat_date_combined(match):
                         return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
                     display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date_combined, display_date)
-                # --- PHẦN SỬA ĐỔI KẾT THÚC ---                
                 ws_leaves.cell(row=current_row_leave, column=1, value=rec.get("EmployeeId"))
                 ws_leaves.cell(row=current_row_leave, column=2, value=rec.get("EmployeeName"))
                 ws_leaves.cell(row=current_row_leave, column=3, value=display_date)
@@ -1045,6 +1181,7 @@ def export_combined_to_excel():
 
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
