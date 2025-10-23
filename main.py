@@ -10,10 +10,7 @@ from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Border, Side, Alignment
 import secrets
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.utils import formataddr
+import request
 from dotenv import load_dotenv
 
 app = Flask(__name__, template_folder="templates")
@@ -26,13 +23,40 @@ load_dotenv() # Tải các biến từ file .env
 MONGO_URI = os.getenv("MONGO_URI") 
 DB_NAME = os.getenv("DB_NAME", "Sun_Database_1") 
 
-# ---- Email Config ----
-# Đã bỏ mật khẩu và email trực tiếp
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS") 
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com") # Lấy từ .env, mặc định là gmail
-# Chuyển đổi cổng sang int vì nó được lưu dưới dạng chuỗi trong .env
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587)) 
+# ---- Resend API Config ----
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+# Email gửi đi từ domain bạn đã xác thực
+RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "system@sun-automation.id.vn")
+
+def send_email_resend(to_email, subject, html_body):
+    """Gửi email bằng Resend API."""
+    if not RESEND_API_KEY:
+        print("❌ Lỗi: Biến môi trường RESEND_API_KEY chưa được đặt.")
+        return False
+    
+    url = "https://api.resend.com/emails"
+    payload = {
+        "from": f"Sun Automation System <{RESEND_FROM_EMAIL}>",
+        "to": [to_email],
+        "subject": subject,
+        "html": html_body
+    }
+    headers = {
+        "Authorization": f"Bearer {RESEND_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 200:
+            print(f"✅ Gửi email thành công đến {to_email}")
+            return True
+        else:
+            print(f"❌ Lỗi Resend API ({response.status_code}): {response.text}")
+            return False
+    except Exception as e:
+        print(f"❌ Lỗi ngoại lệ khi gửi email: {e}")
+        return False
 
 # ---- Kết nối MongoDB ----
 client = MongoClient(MONGO_URI)
@@ -72,7 +96,8 @@ def login():
         })
     return jsonify({"success": False, "message": "🚫 Email hoặc mật khẩu không đúng!"}), 401
 
-# ---- Gửi email reset mật khẩu ----
+# THAY THẾ TOÀN BỘ HÀM CŨ BẰNG HÀM MỚI NÀY
+
 @app.route("/request-reset-password", methods=["POST"])
 def request_reset_password():
     email = request.form.get("email")
@@ -93,7 +118,6 @@ def request_reset_password():
 
     # Generate reset token
     token = secrets.token_urlsafe(32)
-    # Store expiration as UTC (offset-naive) to match MongoDB's default behavior
     expiration = datetime.now(VN_TZ).astimezone(timezone.utc).replace(tzinfo=None) + timedelta(days=1)
     reset_tokens.insert_one({
         "email": email,
@@ -101,50 +125,37 @@ def request_reset_password():
         "expiration": expiration
     })
 
-    # Send email
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = formataddr(("Sun Automation System", EMAIL_ADDRESS))
-        msg['To'] = email
-        msg['Subject'] = "Yêu cầu đặt lại mật khẩu"
-        
-        reset_link = url_for("reset_password", token=token, _external=True)
-        # Tạo nội dung email dưới dạng HTML
-        html_body = f"""
-        <div style="font-family: Arial, sans-serif; color: #333;">
-            <h2 style="color: #007bff;">Yêu cầu đặt lại mật khẩu</h2>
-            <p>Xin chào,</p>
-            <p>Bạn đã yêu cầu đặt lại mật khẩu cho tài khoản của mình. Vui lòng nhấp vào nút bên dưới để hoàn tất quá trình:</p>
-            <p style="text-align: center; margin: 30px 0;">
-                <a href="{reset_link}" 
-                   style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-                   Đặt lại mật khẩu
-                </a>
-            </p>
-            <p>Liên kết này sẽ hết hạn sau 1 ngày.</p>
-            <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này một cách an toàn.</p>
-            <hr>
-            <p style="font-size: 0.9em; color: #6c757d;">
-                Trân trọng,<br>
-                Hệ thống tự động Sun Automation
-            </p>
-        </div>
-        """
-        # Đính kèm nội dung HTML vào email và đổi định dạng thành 'html'
-        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+    # Nội dung email HTML (giữ nguyên)
+    reset_link = url_for("reset_password", token=token, _external=True)
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+        <h2 style="color: #007bff; text-align: center;">Yêu cầu đặt lại mật khẩu</h2>
+        <p>Xin chào,</p>
+        <p>Bạn đã yêu cầu đặt lại mật khẩu cho tài khoản của mình. Vui lòng nhấp vào nút bên dưới để hoàn tất quá trình:</p>
+        <p style="text-align: center; margin: 30px 0;">
+            <a href="{reset_link}" 
+               style="background-color: #28a745; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+               Đặt lại mật khẩu
+            </a>
+        </p>
+        <p>Liên kết này sẽ hết hạn sau 1 ngày.</p>
+        <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này một cách an toàn.</p>
+        <hr style="border: none; border-top: 1px solid #eee;">
+        <p style="font-size: 0.9em; color: #6c757d; text-align: center;">
+            Trân trọng,<br>
+            Hệ thống tự động Sun Automation
+        </p>
+    </div>
+    """
 
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            server.send_message(msg)
-
+    # Gửi email bằng Resend
+    if send_email_resend(email, "Yêu cầu đặt lại mật khẩu", html_body):
         return """
         <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Gửi liên kết thành công</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}.success{color:#28a745;text-align:center;font-size:18px;margin-bottom:20px}button{background:#28a745;color:white;padding:12px;width:100%;border:none;border-radius:4px;cursor:pointer;font-size:16px}</style>
         </head><body><div class="container"><div class="success">✅ Email chứa liên kết đặt lại mật khẩu đã được gửi thành công! Vui lòng kiểm tra hộp thư của bạn.</div>
         <a href="/"><button>Quay về trang chủ</button></a></div></body></html>"""
-    except Exception as e:
-        print(f"❌ Lỗi gửi email: {e}")
+    else:
         return """
         <!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Lỗi</title>
         <style>body{font-family:Arial,sans-serif;background:#f4f6f9;padding:20px}.container{max-width:400px;margin:100px auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1)}p{color:#dc3545;text-align:center}</style>
@@ -1181,3 +1192,4 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
