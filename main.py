@@ -162,10 +162,11 @@ def request_reset_password():
         </head><body><div class="container"><p>❌ Lỗi khi gửi email, vui lòng thử lại sau</p>
         <a href="/forgot-password">Thử lại</a></div></body></html>""", 500
 
-# ---- Trang reset mật khẩu với token ----
+# ---- Trang reset mật khẩu với token (ĐÃ SỬA LỖI) ----
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
 def reset_password(token):
-    if request.method == "GET":
+    # Sửa lỗi: Xử lý cả yêu cầu GET và HEAD
+    if request.method in ["GET", "HEAD"]:
         token_data = reset_tokens.find_one({"token": token})
         # Compare expiration as offset-naive (UTC) datetime
         if not token_data or token_data["expiration"] < datetime.now(timezone.utc).replace(tzinfo=None):
@@ -220,7 +221,7 @@ def reset_password(token):
         hashed_pw = generate_password_hash(new_password)
         collection_to_update = admins if "username" in account else users
         collection_to_update.update_one({"email": email}, {"$set": {"password": hashed_pw}})
-        reset_tokens.delete_one({"token": token})  # Remove used token
+        reset_tokens.delete_one({"token": token}) # Remove used token
 
         return """
         <!DOCTYPE html><html lang="vi"><head><title>Thay đổi mật khẩu thành công</title>
@@ -1192,5 +1193,6 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
