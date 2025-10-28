@@ -963,9 +963,9 @@ def export_combined_to_excel():
         export_month = int(request.args.get("month", datetime.now(VN_TZ).month))
         try:
             export_dt = datetime(export_year, export_month, 1)
-            start_date = export_dt.strftime("%Y-m-%d")
+            start_date = export_dt.strftime("%Y-%m-%d")
             _, last_day = calendar.monthrange(export_year, export_month)
-            end_date = export_dt.replace(day=last_day).strftime("%Y-m-d")
+            end_date = export_dt.replace(day=last_day).strftime("%Y-%m-%d")
         except ValueError:
             return jsonify({"error": "❌ Định dạng tháng không hợp lệ."}), 400
         
@@ -1193,6 +1193,7 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
