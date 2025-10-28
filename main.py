@@ -15,6 +15,11 @@ from dotenv import load_dotenv
 
 app = Flask(__name__, template_folder="templates")
 CORS(app, methods=["GET", "POST"])
+# ---- Init App ----
+# ---- Cấu hình Domain chính cho ứng dụng ----
+# Đặt 2 dòng này để url_for(_external=True) tạo link đúng (https://app.sun-automation.id.vn)
+app.config["SERVER_NAME"] = os.environ.get("SERVER_NAME", "system.sun-automation.id.vn")
+app.config["PREFERRED_URL_SCHEME"] = "https"
 
 # ---- Timezone VN ----
 VN_TZ = timezone(timedelta(hours=7))
@@ -1193,6 +1198,7 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
