@@ -740,6 +740,39 @@ def add_leave_date_filter(conditions, start_date, end_date):
     except:
         pass
         
+    def is_leave_in_range(display_date, start_dt, end_dt):
+        """
+        Kiểm tra đơn nghỉ có ngày nghỉ giao với [start_dt, end_dt] không
+        """
+        if not display_date:
+            return False
+    
+        display_date = display_date.strip()
+        record_start = record_end = None
+    
+        # Case 1: Nghỉ 1 ngày - "2025-10-20 Cả ngày"
+        match_single = re.match(r"(\d{4}-\d{2}-\d{2})", display_date)
+        if match_single:
+            try:
+                record_start = record_end = datetime.strptime(match_single.group(1), "%Y-%m-%d")
+            except:
+                return False
+        else:
+            # Case 2: Nhiều ngày - "Từ 2025-10-28 đến 2025-10-31"
+            match_range = re.match(r"Từ\s+(\d{4}-\d{2}-\d{2})\s+đến\s+(\d{4}-\d{2}-\d{2})", display_date)
+            if match_range:
+                try:
+                    record_start = datetime.strptime(match_range.group(1), "%Y-%m-%d")
+                    record_end = datetime.strptime(match_range.group(2), "%Y-%m-%d")
+                except:
+                    return False
+    
+        if not record_start or not record_end:
+            return False
+    
+        # Kiểm tra giao thoa
+        return record_start <= end_dt and record_end >= start_dt
+    
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -937,29 +970,37 @@ def export_leaves_to_excel():
         if not start_date or not end_date:
             return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
-        # Lấy tháng xuất
+        # === CHUYỂN ĐỔI NGÀY ===
         try:
             start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
             export_year = start_dt.year
             export_month = start_dt.month
         except:
             today = datetime.now(VN_TZ)
+            start_dt = end_dt = today
             export_year = today.year
             export_month = today.month
 
-        # Lọc đơn có DisplayDate
-        conditions = [{"DisplayDate": {"$exists": True, "$ne": ""}}]
-        search = request.args.get("search", "").strip()
+        # === LẤY DỮ LIỆU NGHỈ PHÉP VÀ LỌC THEO NGÀY ===
+        base_conditions = [{"DisplayDate": {"$exists": True, "$ne": ""}}]
         if search:
             regex = re.compile(search, re.IGNORECASE)
-            conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
+            base_conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
         if username:
-            conditions.append({"EmployeeName": username})
+            base_conditions.append({"EmployeeName": username})
+        
+        query = {"$and": base_conditions}
+        all_leave_data = list(collection.find(query, {"_id": 0}))
+        
+        # Lọc theo ngày nghỉ
+        leave_data = []
+        for rec in all_leave_data:
+            display_date = rec.get("DisplayDate", "").strip()
+            if is_leave_in_range(display_date, start_dt, end_dt):
+                leave_data.append(rec)
 
-        query = {"$and": conditions}
-        all_leaves_data = list(collection.find(query, {"_id": 0}))
-
-        # Xuất Excel
+        # === XUẤT EXCEL ===
         template_path = "templates/Copy of Form nghỉ phép.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
@@ -974,20 +1015,15 @@ def export_leaves_to_excel():
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
         current_row = 2
 
-        for rec in all_leaves_data:
+        for rec in filtered_leaves:
             display_date_raw = rec.get("DisplayDate", "").strip()
-            if not display_date_raw:
-                continue
-
-            # Dùng hàm có sẵn để tính số ngày nghỉ
             leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
 
-            # Định dạng lại ngày trong DisplayDate: 2025-10-20 → 20/10/2025
+            # Định dạng ngày
             def reformat_date(match):
                 return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
             display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date, display_date_raw)
 
-            # Ghi dữ liệu
             ws.cell(row=current_row, column=1, value=rec.get("EmployeeId", ""))
             ws.cell(row=current_row, column=2, value=rec.get("EmployeeName", ""))
             ws.cell(row=current_row, column=3, value=display_date)
@@ -1158,6 +1194,7 @@ def export_combined_to_excel():
         
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
