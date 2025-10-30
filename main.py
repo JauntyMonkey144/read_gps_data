@@ -740,38 +740,37 @@ def add_leave_date_filter(conditions, start_date, end_date):
     except:
         pass
         
-    def is_leave_in_range(display_date, start_dt, end_dt):
-        """
-        Kiểm tra đơn nghỉ có ngày nghỉ giao với [start_dt, end_dt] không
-        """
-        if not display_date:
+def is_leave_in_range(display_date, start_dt, end_dt):
+    """
+    Kiểm tra đơn nghỉ có ngày nghỉ giao với [start_dt, end_dt] không
+    """
+    if not display_date:
+        return False
+
+    display_date = display_date.strip()
+    record_start = record_end = None
+
+    # Case 1: Nghỉ 1 ngày - "2025-10-20 Cả ngày"
+    match_single = re.match(r"(\d{4}-\d{2}-\d{2})", display_date)
+    if match_single:
+        try:
+            record_start = record_end = datetime.strptime(match_single.group(1), "%Y-%m-%d")
+        except:
             return False
-    
-        display_date = display_date.strip()
-        record_start = record_end = None
-    
-        # Case 1: Nghỉ 1 ngày - "2025-10-20 Cả ngày"
-        match_single = re.match(r"(\d{4}-\d{2}-\d{2})", display_date)
-        if match_single:
+    else:
+        # Case 2: Nhiều ngày - "Từ 2025-10-28 đến 2025-10-31"
+        match_range = re.match(r"Từ\s+(\d{4}-\d{2}-\d{2})\s+đến\s+(\d{4}-\d{2}-\d{2})", display_date)
+        if match_range:
             try:
-                record_start = record_end = datetime.strptime(match_single.group(1), "%Y-%m-%d")
+                record_start = datetime.strptime(match_range.group(1), "%Y-%m-%d")
+                record_end = datetime.strptime(match_range.group(2), "%Y-%m-%d")
             except:
                 return False
-        else:
-            # Case 2: Nhiều ngày - "Từ 2025-10-28 đến 2025-10-31"
-            match_range = re.match(r"Từ\s+(\d{4}-\d{2}-\d{2})\s+đến\s+(\d{4}-\d{2}-\d{2})", display_date)
-            if match_range:
-                try:
-                    record_start = datetime.strptime(match_range.group(1), "%Y-%m-%d")
-                    record_end = datetime.strptime(match_range.group(2), "%Y-%m-%d")
-                except:
-                    return False
-    
-        if not record_start or not record_end:
-            return False
-    
-        # Kiểm tra giao thoa
-        return record_start <= end_dt and record_end >= start_dt
+
+    if not record_start or not record_end:
+        return False
+
+    return record_start <= end_dt and record_end >= start_dt
     
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
@@ -982,23 +981,24 @@ def export_leaves_to_excel():
             export_year = today.year
             export_month = today.month
 
-        # === LẤY DỮ LIỆU NGHỈ PHÉP VÀ LỌC THEO NGÀY ===
+        # === LẤY TẤT CẢ ĐƠN CÓ DisplayDate ===
+        search = request.args.get("search", "").strip()  # ĐÃ KHAI BÁO search
         base_conditions = [{"DisplayDate": {"$exists": True, "$ne": ""}}]
         if search:
             regex = re.compile(search, re.IGNORECASE)
             base_conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
         if username:
             base_conditions.append({"EmployeeName": username})
-        
+
         query = {"$and": base_conditions}
-        all_leave_data = list(collection.find(query, {"_id": 0}))
-        
-        # Lọc theo ngày nghỉ
-        leave_data = []
-        for rec in all_leave_data:
+        all_leaves_data = list(collection.find(query, {"_id": 0}))
+
+        # === LỌC THEO NGÀY NGHỈ ===
+        filtered_leaves = []
+        for rec in all_leaves_data:
             display_date = rec.get("DisplayDate", "").strip()
             if is_leave_in_range(display_date, start_dt, end_dt):
-                leave_data.append(rec)
+                filtered_leaves.append(rec)
 
         # === XUẤT EXCEL ===
         template_path = "templates/Copy of Form nghỉ phép.xlsx"
@@ -1019,7 +1019,6 @@ def export_leaves_to_excel():
             display_date_raw = rec.get("DisplayDate", "").strip()
             leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
 
-            # Định dạng ngày
             def reformat_date(match):
                 return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
             display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date, display_date_raw)
@@ -1029,7 +1028,6 @@ def export_leaves_to_excel():
             ws.cell(row=current_row, column=3, value=display_date)
             ws.cell(row=current_row, column=4, value=leave_days if is_overlap else 0)
 
-            # Ngày tạo đơn
             timestamp_str = ""
             if rec.get("CreationTime"):
                 try:
@@ -1076,6 +1074,7 @@ def export_leaves_to_excel():
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
+        # === KIỂM TRA EMAIL ===
         email = request.args.get("email")
         if not email:
             return jsonify({"error": "Thiếu email"}), 400
@@ -1086,27 +1085,42 @@ def export_combined_to_excel():
             return jsonify({"error": "Email không tồn tại"}), 403
         username = None if admin else user.get("username")
 
+        # === LẤY KHOẢNG NGÀY ===
         start_date, end_date = get_export_date_range()
         if not start_date or not end_date:
             return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-        query_start = end_dt.replace(day=1).strftime("%Y-%m-%d")
-        search = request.args.get("search", "").strip()
+        # === CHUYỂN ĐỔI NGÀY ===
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        except:
+            today = datetime.now(VN_TZ)
+            start_dt = end_dt = today
 
-        # === LẤY DỮ LIỆU ĐIỂM DANH (GIỮ NGUYÊN) ===
+        query_start = end_dt.replace(day=1).strftime("%Y-%m-%d")
+        search = request.args.get("search", "").strip()  # ĐÃ KHAI BÁO search
+
+        # === LẤY DỮ LIỆU ĐIỂM DANH (TỪ ĐẦU THÁNG ĐẾN end_date) ===
         attendance_query = build_attendance_query("custom", query_start, end_date, search, username=username)
         attendance_data = list(collection.find(attendance_query, {"_id": 0}))
 
-        # === LẤY DỮ LIỆU NGHỈ PHÉP (DỰA VÀO DisplayDate) ===
-        conditions = [{"DisplayDate": {"$exists": True, "$ne": ""}}]
+        # === LẤY DỮ LIỆU NGHỈ PHÉP + LỌC THEO NGÀY ===
+        base_conditions = [{"DisplayDate": {"$exists": True, "$ne": ""}}]
         if search:
             regex = re.compile(search, re.IGNORECASE)
-            conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
+            base_conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
         if username:
-            conditions.append({"EmployeeName": username})
-        leave_query = {"$and": conditions}
-        leave_data = list(collection.find(leave_query, {"_id": 0}))
+            base_conditions.append({"EmployeeName": username})
+
+        leave_query = {"$and": base_conditions}
+        all_leave_data = list(collection.find(leave_query, {"_id": 0}))
+
+        leave_data = []
+        for rec in all_leave_data:
+            display_date = rec.get("DisplayDate", "").strip()
+            if is_leave_in_range(display_date, start_dt, end_dt):
+                leave_data.append(rec)
 
         # === TẠO EXCEL ===
         template_path = "templates/Form kết hợp.xlsx"
@@ -1114,13 +1128,133 @@ def export_combined_to_excel():
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-        # ================= SHEET: ĐIỂM DANH (GIỮ NGUYÊN) =================
+        # ================= SHEET: ĐIỂM DANH =================
         ws_att = wb["Điểm danh"]
-        # ... (toàn bộ phần điểm danh giữ nguyên như cũ) ...
-        # (Bạn đã có đoạn này hoạt động tốt → không cần thay đổi)
 
-        # ================= SHEET: NGHỈ PHÉP (DỰA VÀO DisplayDate) =================
+        # Tính giờ làm theo ngày
+        daily_hours_map = {}
+        emp_data = {}
+        for rec in attendance_data:
+            emp_id = rec.get("EmployeeId")
+            if emp_id:
+                emp_data.setdefault(emp_id, []).append(rec)
+
+        for emp_id, records in emp_data.items():
+            daily_groups = {}
+            for rec in records:
+                date_str = rec.get("CheckinDate")
+                if date_str:
+                    daily_groups.setdefault(date_str, []).append(rec)
+
+            for date_str, day_records in daily_groups.items():
+                checkins = []
+                checkouts = []
+                for r in day_records:
+                    ts = r.get("Timestamp")
+                    if not ts:
+                        continue
+                    try:
+                        if isinstance(ts, str):
+                            ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                        if r.get("CheckType") == "checkin":
+                            checkins.append(ts)
+                        elif r.get("CheckType") == "checkout":
+                            checkouts.append(ts)
+                    except:
+                        continue
+                checkins = [t for t in checkins if isinstance(t, datetime)]
+                checkouts = [t for t in checkouts if isinstance(t, datetime)]
+                daily_seconds = 0
+                if checkins and checkouts:
+                    first_in = min(checkins)
+                    last_out = max(checkouts)
+                    if last_out > first_in:
+                        daily_seconds = (last_out - first_in).total_seconds()
+                daily_hours_map[(emp_id, date_str)] = daily_seconds
+
+        # Tính tổng giờ tích lũy
+        monthly_hours_map = {}
+        for emp_id, records in emp_data.items():
+            sorted_records = sorted(
+                records,
+                key=lambda r: datetime.strptime(r.get("CheckinDate", "01/01/1900"), "%d/%m/%Y")
+            )
+            running_total = 0
+            for rec in sorted_records:
+                date_str = rec.get("CheckinDate")
+                daily_sec = daily_hours_map.get((emp_id, date_str), 0)
+                running_total += daily_sec
+                h, rem = divmod(running_total, 3600)
+                m, s = divmod(rem, 60)
+                monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
+
+        # Ghi điểm danh (chỉ ngày trong khoảng start_date → end_date)
+        grouped = {}
+        for d in attendance_data:
+            date_str = d.get("CheckinDate", "")
+            try:
+                rec_date = datetime.strptime(date_str, "%d/%m/%Y")
+                if start_dt <= rec_date <= end_dt:
+                    key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), date_str)
+                    grouped.setdefault(key, []).append(d)
+            except:
+                continue
+
+        start_row = 2
+        for i, ((emp_id, emp_name, date_str), records) in enumerate(grouped.items()):
+            row = start_row + i
+            ws_att.cell(row=row, column=1, value=emp_id)
+            ws_att.cell(row=row, column=2, value=emp_name)
+            ws_att.cell(row=row, column=3, value=date_str)
+
+            # Cột 14: Giờ làm trong ngày
+            daily_sec = daily_hours_map.get((emp_id, date_str), 0)
+            h_d, rem_d = divmod(daily_sec, 3600)
+            m_d, s_d = divmod(rem_d, 60)
+            ws_att.cell(row=row, column=14, value=f"{int(h_d)}h {int(m_d)}m {int(s_d)}s" if daily_sec > 0 else "")
+
+            # Cột 15: Tổng giờ từ đầu tháng
+            ws_att.cell(row=row, column=15, value=monthly_hours_map.get((emp_id, date_str), ""))
+
+            # Ghi checkin/checkout
+            checkin_counter = 0
+            for rec in sorted(records, key=lambda x: x.get("Timestamp") or datetime.min):
+                if rec.get("CheckType") == "checkin" and checkin_counter < 9:
+                    time_str = ""
+                    if rec.get("Timestamp"):
+                        try:
+                            ts = rec["Timestamp"]
+                            if isinstance(ts, str):
+                                ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                            time_str = ts.astimezone(VN_TZ).strftime("%H:%M:%S")
+                        except:
+                            time_str = ""
+                    tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
+                    cell_value = "; ".join(filter(None, [time_str, rec.get("ProjectId", ""), tasks_str, rec.get("Address", ""), rec.get("CheckinNote", "")]))
+                    ws_att.cell(row=row, column=4 + checkin_counter, value=cell_value)
+                    checkin_counter += 1
+                elif rec.get("CheckType") == "checkout":
+                    time_str = ""
+                    if rec.get("Timestamp"):
+                        try:
+                            ts = rec["Timestamp"]
+                            if isinstance(ts, str):
+                                ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                            time_str = ts.astimezone(VN_TZ).strftime("%H:%M:%S")
+                        except:
+                            time_str = ""
+                    tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
+                    cell_value = "; ".join(filter(None, [time_str, rec.get("ProjectId", ""), tasks_str, rec.get("Address", ""), rec.get("CheckinNote", "")]))
+                    ws_att.cell(row=row, column=13, value=cell_value)
+
+            for col in range(1, 16):
+                cell = ws_att.cell(row=row, column=col)
+                cell.border = border
+                cell.alignment = align_left
+
+        # ================= SHEET: NGHỈ PHÉP =================
         ws_leave = wb["Nghỉ phép"]
+
         headers = ["Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
                    "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối",
                    "Trạng thái Lần cuối", "Ghi chú"]
@@ -1133,12 +1267,9 @@ def export_combined_to_excel():
 
         for rec in leave_data:
             display_date_raw = rec.get("DisplayDate", "").strip()
-            if not display_date_raw:
-                continue
-
             leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
 
-            # Định dạng lại ngày
+            # Định dạng ngày: 2025-10-20 → 20/10/2025
             def reformat_date(match):
                 return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
             display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date, display_date_raw)
@@ -1148,6 +1279,7 @@ def export_combined_to_excel():
             ws_leave.cell(row=current_row_leave, column=3, value=display_date)
             ws_leave.cell(row=current_row_leave, column=4, value=leave_days if is_overlap else 0)
 
+            # Ngày tạo đơn
             timestamp_str = ""
             if rec.get("CreationTime"):
                 try:
@@ -1194,6 +1326,7 @@ def export_combined_to_excel():
         
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
