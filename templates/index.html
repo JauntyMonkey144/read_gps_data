@@ -104,7 +104,7 @@
     }
     .modal-content a:hover { text-decoration: underline; }
     
-    /* === CSS CẬP NHẬT === */
+    /* === CSS CẬP NHẬT (BẮT ĐẦU TỪ ĐÂY) === */
     .modal-content label {
         display: block;
         margin-bottom: 5px;
@@ -223,7 +223,7 @@
       <label><b>Đến ngày:</b></label><input type="date" id="leaveEndDate" />
       <button onclick="applyLeaveDateRange()">Áp dụng</button>
     </div>
-  x`  <div class="controls">
+    <div class="controls">
       <input type="text" id="leaveSearchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
       <button onclick="applyLeaveSearch()">Tìm kiếm</button>
       <select id="leaveRowsPerPage" onchange="updateLeaveRowsPerPage()">
@@ -247,7 +247,7 @@
             <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
             <th onclick="sortLeaveTable('CheckinTime')">Ngày tạo đơn</th>
             <th onclick="sortLeaveTable('Tasks')">Lý do</th>
-            <th onclick="sortLeaveTable('ApprovalDate1')">Ngày Duyệt/Từ chối Lần đầu</th>
+          _ <th onclick="sortLeaveTable('ApprovalDate1')">Ngày Duyệt/Từ chối Lần đầu</th>
             <th onclick="sortLeaveTable('Status1')">Trạng thái Lần đầu</th>
             <th onclick="sortLeaveTable('ApprovalDate2')">Ngày Duyệt/Từ chối Lần cuối</th>
             <th onclick="sortLeaveTable('Status2')">Trạng thái Lần cuối</th>
@@ -482,7 +482,7 @@
                 for (const day of sortedDays) {
                     let firstCheckin = null, lastCheckout = null;
                     daysData[day].forEach(rec => {
-              _             const recTime = parseTime(rec.CreationTime);
+                        const recTime = parseTime(rec.CreationTime);
                         if (!recTime) return;
                         if (rec.CheckType === 'checkin' && (!firstCheckin || recTime < firstCheckin)) {
                             firstCheckin = recTime;
@@ -494,7 +494,7 @@
                     if (firstCheckin && lastCheckout && lastCheckout > firstCheckin) {
                         dailySeconds = (lastCheckout - firstCheckin) / 1000;
                     }
-          _         monthlyTotalSeconds += dailySeconds;
+                    monthlyTotalSeconds += dailySeconds;
                     const dailyH = Math.floor(dailySeconds / 3600);
                     const dailyM = Math.floor((dailySeconds % 3600) / 60);
                     const monthlyH = Math.floor(monthlyTotalSeconds / 3600);
@@ -503,7 +503,7 @@
                         daily: `${dailyH}h ${dailyM}m`,
                         monthly: `${monthlyH}h ${monthlyM}m`,
                         _dailySeconds: dailySeconds,
-                        _monthlySeconds: monthlyTotalSeconds,
+content:                         _monthlySeconds: monthlyTotalSeconds,
                     };
                 }
                 monthRecords.forEach(rec => {
@@ -572,7 +572,7 @@
             <td>${checkTypeFormatted}</td>
             <td>${r.ProjectId||""}</td>
             <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
-            <td>${img}</td>
+content:             <td>${img}</td>
             <td>${r.Address||""}</td>
             <td>${mapLink}</td>
             <td>${r.CheckinNote||""}</td>
@@ -625,7 +625,7 @@
             <td>${r.ApprovalDate2||""}</td>
             <td>${r.Status2||""}</td>
             <td>${r.Note||""}</td>
-          </tr>
+  _       </tr>
         `;
       });
       renderLeavePagination(data.length);
@@ -655,7 +655,7 @@
       } else {
         currentSort.column = col;
         currentSort.order = "asc";
-    _   }
+      }
       document.querySelectorAll("#dataTable th").forEach(th => th.classList.remove("asc","desc"));
       if (currentSort.order)
         document.querySelector(`#dataTable th[onclick="sortTable('${col}')"]`).classList.add(currentSort.order);
@@ -676,7 +676,7 @@
     function applyFilter(f) {
       currentFilter = f;
       startDate = endDate = "";
-      document.getElementById("startDate").value = "";
+    D document.getElementById("startDate").value = "";
       document.getElementById("endDate").value = "";
       loadData();
     }
@@ -916,7 +916,7 @@
     }
     function refreshData() { loadData(); }
     function refreshLeaveData() { loadLeaveData(); }
-    function resetFilter() {
+content:     function resetFilter() {
       currentSearch = "";
       startDate = endDate = "";
       currentFilter = "hôm nay";
