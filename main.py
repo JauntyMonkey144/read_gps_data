@@ -658,24 +658,40 @@ def get_leaves():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-# ---- HÀM HỖ TRỢ XUẤT THEO KHOẢNG ----
 def get_export_date_range():
+    """
+    Lấy khoảng ngày từ:
+    - startDate + endDate (ngày cụ thể / khoảng ngày)
+    - month + year (xuất theo tháng)
+    """
     start_date = request.args.get("startDate")
     end_date = request.args.get("endDate")
     month = request.args.get("month")
     year = request.args.get("year")
 
+    # Trường hợp: Xuất theo tháng
     if month and year:
         try:
-            export_dt = datetime(int(year), int(month), 1)
-            _, last_day = calendar.monthrange(int(year), int(month))
-            start_date = export_dt.strftime("%Y-%m-%d")
-            end_date = export_dt.replace(day=last_day).strftime("%Y-%m-%d")
-        except:
+            month_int = int(month)
+            year_int = int(year)
+            start_dt = datetime(year_int, month_int, 1)
+            # Lấy ngày cuối tháng
+            _, last_day = calendar.monthrange(year_int, month_int)
+            end_dt = datetime(year_int, month_int, last_day)
+            return start_dt.strftime("%Y-%m-%d"), end_dt.strftime("%Y-%m-%d")
+        except (ValueError, OverflowError):
+            pass  # Nếu lỗi → bỏ qua
+
+    # Trường hợp: startDate + endDate
+    if start_date and end_date:
+        try:
+            datetime.strptime(start_date, "%Y-%m-%d")
+            datetime.strptime(end_date, "%Y-%m-%d")
+            return start_date, end_date
+        except ValueError:
             pass
-    if not start_date or not end_date:
-        return None, None
-    return start_date, end_date
+
+    return None, None
 
 def get_export_filename(prefix, start_date, end_date, export_date_str):
     """
@@ -717,15 +733,19 @@ def export_to_excel():
             return jsonify({"error": "Email không tồn tại"}), 403
         username = None if admin else user.get("username")
 
-        # === 1. XÁC ĐỊNH KHOẢNG XUẤT ===
+        # SỬA TẠI ĐÂY: DÙNG HÀM MỚI
         start_date, end_date = get_export_date_range()
         if not start_date or not end_date:
             return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
-        # === 2. XÁC ĐỊNH THÁNG ĐỂ TÍNH TỔNG GIỜ ===
+        # XÁC ĐỊNH NGÀY 1 CỦA THÁNG CUỐI ĐỂ TÍNH TỔNG GIỜ
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-        query_start_dt = end_dt.replace(day=1)  # NGÀY 1 CỦA THÁNG CUỐI
+        query_start_dt = end_dt.replace(day=1)
         query_start = query_start_dt.strftime("%Y-%m-%d")
+
+        search = request.args.get("search", "").strip()
+        query = build_attendance_query("custom", query_start, end_date, search, username=username)
+        data = list(collection.find(query, {"_id": 0}))
 
         # === 3. LẤY DỮ LIỆU TỪ ĐẦU THÁNG ĐẾN end_date ===
         search = request.args.get("search", "").strip()
@@ -1235,6 +1255,7 @@ def export_combined_to_excel():
 
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
