@@ -494,7 +494,6 @@ def export_to_excel():
         print(f"Lỗi export: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ---- API XUẤT EXCEL NGHỈ PHÉP (ĐÃ SỬA LỖI) ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
     try:
@@ -509,8 +508,16 @@ def export_leaves_to_excel():
         if not start_date or not end_date:
             return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
-        export_year = datetime.strptime(start_date, "%Y-%m-%d").year
-        export_month = datetime.strptime(start_date, "%Y-%m-%d").month
+        # --- SỬA LỖI: Kiểm tra và gán mặc định ---
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            export_year = start_dt.year
+            export_month = start_dt.month
+        except (ValueError, TypeError):
+            today = datetime.now(VN_TZ)
+            export_year = today.year
+            export_month = today.month
+        # -----------------------------------------
 
         regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
         conditions = [{"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}]
@@ -567,7 +574,7 @@ def export_leaves_to_excel():
                 ws.cell(row=current_row, column=6, value=rec.get("Reason") or tasks_str)
                 ws.cell(row=current_row, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate1")))
                 ws.cell(row=current_row, column=8, value=rec.get("Status1", ""))
-                ws.cell(row=current_row, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))  # ĐÃ SỬA LỖI
+                ws.cell(row=current_row, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
                 ws.cell(row=current_row, column=10, value=rec.get("Status2", ""))
                 ws.cell(row=current_row, column=11, value=rec.get("LeaveNote", ""))
 
@@ -589,7 +596,6 @@ def export_leaves_to_excel():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-# ---- API XUẤT EXCEL KẾT HỢP ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
@@ -603,6 +609,17 @@ def export_combined_to_excel():
         start_date, end_date = get_export_date_range()
         if not start_date or not end_date:
             return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
+
+        # --- SỬA LỖI: Gán mặc định export_year, export_month ---
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            export_year = start_dt.year
+            export_month = start_dt.month
+        except (ValueError, TypeError):
+            today = datetime.now(VN_TZ)
+            export_year = today.year
+            export_month = today.month
+        # -------------------------------------------------------
 
         search = request.args.get("search", "").strip()
         attendance_query = build_attendance_query("custom", start_date, end_date, search, username=username)
@@ -623,7 +640,7 @@ def export_combined_to_excel():
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-        # Sheet Điểm danh
+        # === Sheet Điểm danh (giữ nguyên) ===
         ws_att = wb["Điểm danh"]
         daily_hours_map = {}
         emp_data = {}
@@ -697,7 +714,7 @@ def export_combined_to_excel():
                 cell.border = border
                 cell.alignment = align_left
 
-        # Sheet Nghỉ phép
+        # === Sheet Nghỉ phép ===
         ws_leave = wb["Nghỉ phép"]
         ws_leave['A1'] = "Mã NV"; ws_leave['B1'] = "Tên NV"; ws_leave['C1'] = "Ngày Nghỉ"; ws_leave['D1'] = "Số ngày nghỉ"
         ws_leave['E1'] = "Ngày tạo đơn"; ws_leave['F1'] = "Lý do"; ws_leave['G1'] = "Ngày Duyệt/Từ chối Lần đầu"
@@ -765,3 +782,4 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
+
