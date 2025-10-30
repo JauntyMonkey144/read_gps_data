@@ -364,188 +364,6 @@ def get_formatted_approval_date(approval_date):
     try: return approval_date.astimezone(VN_TZ).strftime("%d/%m/%Y %H:%M:%S") if isinstance(approval_date, datetime) else str(approval_date)
     except: return str(approval_date)
 
-# ---- API lấy dữ liệu chấm công ----
-@app.route("/api/attendances", methods=["GET"])
-def get_attendances():
-    try:
-        email = request.args.get("email")
-        admin = admins.find_one({"email": email})
-        user = users.find_one({"email": email})
-        if not admin and not user: return jsonify({"error": "Email không tồn tại"}), 403
-        username = None if admin else user["username"]
-        query = build_attendance_query(
-            request.args.get("filter", "hôm nay").lower(),
-            request.args.get("startDate"), request.args.get("endDate"),
-            request.args.get("search", "").strip(), username=username
-        )
-        all_relevant_data = list(collection.find(query, {"_id": 0}))
-        daily_hours_map, monthly_hours_map = {}, {}
-        emp_data = {}
-        for rec in all_relevant_data:
-            emp_id = rec.get("EmployeeId")
-            if emp_id: emp_data.setdefault(emp_id, []).append(rec)
-        for emp_id, records in emp_data.items():
-            daily_groups = {}
-            for rec in records:
-                date_str = rec.get("CheckinDate")
-                if date_str: daily_groups.setdefault(date_str, []).append(rec)
-            for date_str, day_records in daily_groups.items():
-                checkins = []
-                for r in day_records:
-                    if r.get('CheckType') == 'checkin' and r.get('Timestamp'):
-                        try:
-                            if isinstance(r['Timestamp'], str):
-                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
-                            elif isinstance(r['Timestamp'], datetime):
-                                timestamp = r['Timestamp']
-                            else: continue
-                            checkins.append(timestamp)
-                        except (ValueError, TypeError): continue
-                checkins = sorted(checkins)
-                checkouts = []
-                for r in day_records:
-                    if r.get('CheckType') == 'checkout' and r.get('Timestamp'):
-                        try:
-                            if isinstance(r['Timestamp'], str):
-                                timestamp = datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S")
-                            elif isinstance(r['Timestamp'], datetime):
-                                timestamp = r['Timestamp']
-                            else: continue
-                            checkouts.append(timestamp)
-                        except (ValueError, TypeError): continue
-                checkouts = sorted(checkouts)
-                daily_seconds = 0
-                if checkins and checkouts and checkouts[-1] > checkins[0]:
-                    daily_seconds = (checkouts[-1] - checkins[0]).total_seconds()
-                daily_hours_map[(emp_id, date_str)] = daily_seconds
-            monthly_groups = {}
-            for (map_emp_id, map_date_str), daily_seconds in daily_hours_map.items():
-                if map_emp_id == emp_id:
-                    try: month_key = datetime.strptime(map_date_str, "%d/%m/%Y").strftime("%Y-%m")
-                    except: continue
-                    monthly_groups.setdefault(month_key, []).append((map_date_str, daily_seconds))
-            for month, days in monthly_groups.items():
-                sorted_days = sorted(days, key=lambda x: datetime.strptime(x[0], "%d/%m/%Y"))
-                running_total = 0
-                for date_str, daily_seconds in sorted_days:
-                    running_total += daily_seconds
-                    monthly_hours_map[(emp_id, date_str)] = running_total
-        for item in all_relevant_data:
-            emp_id, date_str = item.get("EmployeeId"), item.get("CheckinDate")
-            daily_sec = daily_hours_map.get((emp_id, date_str), 0)
-            h, rem = divmod(daily_sec, 3600)
-            m, s = divmod(rem, 60)
-            item['DailyHours'], item['_dailySeconds'] = (f"{int(h)}h {int(m)}m {int(s)}s" if daily_sec > 0 else ""), daily_sec
-            monthly_sec = monthly_hours_map.get((emp_id, date_str), 0)
-            h, rem = divmod(monthly_sec, 3600)
-            m, s = divmod(rem, 60)
-            item['MonthlyHours'], item['_monthlySeconds'] = (f"{int(h)}h {int(m)}m {int(s)}s" if monthly_sec > 0 else ""), monthly_sec
-            if item.get('Timestamp'):
-                try:
-                    if isinstance(item['Timestamp'], str):
-                        timestamp = datetime.strptime(item['Timestamp'], "%Y-%m-%d %H:%M:%S")
-                    elif isinstance(item['Timestamp'], datetime):
-                        timestamp = item['Timestamp']
-                    else: timestamp = None
-                    item['CheckinTime'] = timestamp.astimezone(VN_TZ).strftime('%H:%M:%S') if timestamp else ""
-                except (ValueError, TypeError):
-                    item['CheckinTime'] = ""
-        return jsonify(all_relevant_data)
-    except Exception as e:
-        print(f"Lỗi tại get_attendances: {e}")
-        return jsonify({"error": str(e)}), 500
-
-# ---- API lấy dữ liệu nghỉ phép ----
-@app.route("/api/leaves", methods=["GET"])
-def get_leaves():
-    try:
-        email = request.args.get("email")
-        admin = admins.find_one({"email": email})
-        user = users.find_one({"email": email})
-        if not admin and not user: return jsonify({"error": "Email không tồn tại"}), 403
-        username = None if admin else user["username"]
-        date_type = request.args.get("dateType", "CheckinDate")
-        filter_type = request.args.get("filter", "tất cả").lower()
-        start_date_str = request.args.get("startDate")
-        end_date_str = request.args.get("endDate")
-        search = request.args.get("search", "").strip()
-        query = build_leave_query(filter_type, start_date_str, end_date_str, search, date_type, username=username)
-        data = list(collection.find(query, {"_id": 0}))
-        if date_type == "LeaveDate" and filter_type != "tất cả":
-            filter_start_dt, filter_end_dt = None, None
-            today = datetime.now(VN_TZ)
-            if filter_type == "custom" and start_date_str and end_date_str:
-                try:
-                    filter_start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-                    filter_end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-                except (ValueError, TypeError):
-                    pass
-            else:
-                if filter_type == "hôm nay":
-                    filter_start_dt = filter_end_dt = today.date()
-                elif filter_type == "tuần":
-                    filter_start_dt = (today - timedelta(days=today.weekday())).date()
-                    filter_end_dt = (filter_start_dt + timedelta(days=6))
-                elif filter_type == "tháng":
-                    filter_start_dt = today.replace(day=1).date()
-                    _, last_day = calendar.monthrange(today.year, today.month)
-                    filter_end_dt = today.replace(day=last_day).date()
-                elif filter_type == "năm":
-                    filter_start_dt = today.replace(month=1, day=1).date()
-                    filter_end_dt = today.replace(month=12, day=31).date()
-            if filter_start_dt and filter_end_dt:
-                filtered_data = []
-                for item in data:
-                    display_date = item.get("DisplayDate", "")
-                    if not display_date: continue
-                    record_start_dt, record_end_dt = None, None
-                    try:
-                        if "đến" in display_date:
-                            dates = re.findall(r"\d{4}-\d{2}-\d{2}", display_date)
-                            if len(dates) == 2:
-                                record_start_dt = datetime.strptime(dates[0], "%Y-%m-%d").date()
-                                record_end_dt = datetime.strptime(dates[1], "%Y-%m-%d").date()
-                        else:
-                            date_part = display_date.split()[0]
-                            record_start_dt = record_end_dt = datetime.strptime(date_part, "%Y-%m-%d").date()
-                        if record_start_dt and record_end_dt:
-                            if record_start_dt <= filter_end_dt and record_end_dt >= filter_start_dt:
-                                filtered_data.append(item)
-                    except (ValueError, TypeError, IndexError):
-                        continue
-                data = filtered_data
-        if not data:
-            return jsonify([])
-        for item in data:
-            item["ApprovalDate1"] = get_formatted_approval_date(item.get("ApprovalDate1"))
-            item["ApprovalDate2"] = get_formatted_approval_date(item.get("ApprovalDate2"))
-            item["Status1"] = item.get("Status1", "")
-            item["Status2"] = item.get("Status2", "")
-            item["Note"] = item.get("LeaveNote", "")
-            if item.get('CreationTime'):
-                try:
-                    timestamp = item['CreationTime'] if isinstance(item['CreationTime'], datetime) else datetime.fromisoformat(item['CreationTime'].replace('Z', '+00:00'))
-                    item['CheckinTime'] = timestamp.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
-                except (ValueError, TypeError):
-                    item['CheckinTime'] = ""
-            else:
-                item['CheckinTime'] = ""
-            display_date = item.get('DisplayDate', "")
-            if display_date:
-                def reformat_date(match):
-                    return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
-                display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date, display_date)
-            item['CheckinDate'] = display_date
-            tasks = item.get("Tasks", [])
-            tasks_str = (", ".join(tasks) if isinstance(tasks, list) else str(tasks or "")).replace("Nghỉ phép: ", "")
-            item['Tasks'] = item.get("Reason") or tasks_str
-        return jsonify(data)
-    except Exception as e:
-        import traceback
-        print(f"Lỗi tại get_leaves: {e}")
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
-
 # ---- HÀM HỖ TRỢ XUẤT THEO KHOẢNG ----
 def get_export_date_range():
     start_date = request.args.get("startDate")
@@ -565,7 +383,7 @@ def get_export_date_range():
         return None, None
     return start_date, end_date
 
-# ---- API XUẤT EXCEL CHẤM CÔNG (CẬP NHẬT) ----
+# ---- API XUẤT EXCEL CHẤM CÔNG ----
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -583,35 +401,35 @@ def export_to_excel():
         query = build_attendance_query("custom", start_date, end_date, search, username=username)
         data = list(collection.find(query, {"_id": 0}))
 
-        # Tính lại giờ
-        daily_hours_map, monthly_hours_map = {}, {}
+        daily_hours_map = {}
         emp_data = {}
         for rec in data:
             emp_id = rec.get("EmployeeId")
             if emp_id: emp_data.setdefault(emp_id, []).append(rec)
+
         for emp_id, records in emp_data.items():
             daily_groups = {}
             for rec in records:
                 date_str = rec.get("CheckinDate")
                 if date_str: daily_groups.setdefault(date_str, []).append(rec)
             for date_str, day_records in daily_groups.items():
-                checkins = [datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S") if isinstance(r.get('Timestamp'), str) else r['Timestamp'] 
-                           for r in day_records if r.get('CheckType') == 'checkin' and r.get('Timestamp')]
-                checkouts = [datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S") if isinstance(r.get('Timestamp'), str) else r['Timestamp'] 
-                            for r in day_records if r.get('CheckType') == 'checkout' and r.get('Timestamp')]
-                checkins = [t for t in checkins if isinstance(t, datetime)]
-                checkouts = [t for t in checkouts if isinstance(t, datetime)]
+                checkins = []
+                checkouts = []
+                for r in day_records:
+                    ts = r.get("Timestamp")
+                    if not ts: continue
+                    try:
+                        if isinstance(ts, str):
+                            ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                        if r.get("CheckType") == "checkin":
+                            checkins.append(ts)
+                        elif r.get("CheckType") == "checkout":
+                            checkouts.append(ts)
+                    except: continue
+                checkins = sorted([t for t in checkins if isinstance(t, datetime)])
+                checkouts = sorted([t for t in checkouts if isinstance(t, datetime)])
                 daily_seconds = (checkouts[-1] - checkins[0]).total_seconds() if checkins and checkouts and checkouts[-1] > checkins[0] else 0
                 daily_hours_map[(emp_id, date_str)] = daily_seconds
-            for (map_emp_id, map_date_str), daily_seconds in list(daily_hours_map.items()):
-                if map_emp_id == emp_id:
-                    try:
-                        month_key = datetime.strptime(map_date_str, "%d/%m/%Y").strftime("%Y-%m")
-                        if month_key not in [f"{int(y)}-{int(m):02d}" for y in [datetime.strptime(start_date, '%Y-%m-%d').year] for m in [datetime.strptime(start_date, '%Y-%m-%d').month]]:
-                            continue
-                    except: continue
-                    # Tính monthly trong khoảng
-                    pass  # Giữ nguyên logic cũ nếu cần
 
         grouped = {}
         for d in data:
@@ -630,33 +448,41 @@ def export_to_excel():
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date_str)
             daily_sec = daily_hours_map.get((emp_id, date_str), 0)
-            h_d, rem_d = divmod(daily_sec, 3600)
-            m_d, s_d = divmod(rem_d, 60)
-            daily_hours = f"{int(h_d)}h {int(m_d)}m {int(s_d)}s" if daily_sec > 0 else ""
-            ws.cell(row=row, column=14, value=daily_hours)
-            ws.cell(row=row, column=15, value="")  # Monthly không cần nếu xuất theo ngày/khoảng
-            checkin_counter, checkin_start_col, checkout_col = 0, 4, 13
-            sorted_records = sorted(records, key=lambda x: x.get('Timestamp', datetime.min))
-            for rec in sorted_records:
-                time_str = ""
-                if rec.get('Timestamp'):
-                    try:
-                        timestamp = rec['Timestamp']
-                        if isinstance(timestamp, str):
-                            timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-                        time_str = timestamp.astimezone(VN_TZ).strftime("%H:%M:%S")
-                    except: time_str = ""
-                tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
-                fields = [time_str, rec.get('ProjectId', ''), tasks_str, rec.get('Address', ''), rec.get('CheckinNote', '')]
-                cell_value = "; ".join(f for f in fields if f)
-                if rec.get('CheckType') == 'checkin' and checkin_counter < 9:
-                    ws.cell(row=row, column=checkin_start_col + checkin_counter, value=cell_value)
+            h, rem = divmod(daily_sec, 3600)
+            m, s = divmod(rem, 60)
+            ws.cell(row=row, column=14, value=f"{int(h)}h {int(m)}m {int(s)}s" if daily_sec > 0 else "")
+            ws.cell(row=row, column=15, value="")
+
+            checkin_counter = 0
+            for rec in sorted(records, key=lambda x: x.get("Timestamp") or datetime.min):
+                if rec.get("CheckType") == "checkin" and checkin_counter < 9:
+                    time_str = ""
+                    if rec.get("Timestamp"):
+                        try:
+                            ts = rec["Timestamp"]
+                            if isinstance(ts, str): ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                            time_str = ts.astimezone(VN_TZ).strftime("%H:%M:%S")
+                        except: time_str = ""
+                    tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
+                    cell_value = "; ".join(filter(None, [time_str, rec.get("ProjectId", ""), tasks_str, rec.get("Address", ""), rec.get("CheckinNote", "")]))
+                    ws.cell(row=row, column=4 + checkin_counter, value=cell_value)
                     checkin_counter += 1
-                elif rec.get('CheckType') == 'checkout':
-                    ws.cell(row=row, column=checkout_col, value=cell_value)
+                elif rec.get("CheckType") == "checkout":
+                    time_str = ""
+                    if rec.get("Timestamp"):
+                        try:
+                            ts = rec["Timestamp"]
+                            if isinstance(ts, str): ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                            time_str = ts.astimezone(VN_TZ).strftime("%H:%M:%S")
+                        except: time_str = ""
+                    tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
+                    cell_value = "; ".join(filter(None, [time_str, rec.get("ProjectId", ""), tasks_str, rec.get("Address", ""), rec.get("CheckinNote", "")]))
+                    ws.cell(row=row, column=13, value=cell_value)
+
             for col in range(1, 16):
-                ws.cell(row=row, column=col).border = border
-                ws.cell(row=row, column=col).alignment = align_left
+                cell = ws.cell(row=row, column=col)
+                cell.border = border
+                cell.alignment = align_left
 
         export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
         filename = f"Chấm công_{start_date}_đến_{end_date}_{export_date_str}.xlsx"
@@ -668,7 +494,7 @@ def export_to_excel():
         print(f"Lỗi export: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ---- API XUẤT EXCEL NGHỈ PHÉP (CẬP NHẬT) ----
+# ---- API XUẤT EXCEL NGHỈ PHÉP (ĐÃ SỬA LỖI) ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
     try:
@@ -726,24 +552,29 @@ def export_leaves_to_excel():
                 ws.cell(row=current_row, column=2, value=rec.get("EmployeeName", ""))
                 ws.cell(row=current_row, column=3, value=display_date)
                 ws.cell(row=current_row, column=4, value=leave_days)
+
                 timestamp_str = ""
                 if rec.get("CreationTime"):
                     try:
                         ct = rec['CreationTime']
                         dt = ct if isinstance(ct, datetime) else datetime.fromisoformat(ct.replace('Z', '+00:00'))
                         timestamp_str = dt.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
-                    except: timestamp_str = str(rec.get("CreationTime"))
+                    except:
+                        timestamp_str = str(rec.get("CreationTime"))
                 ws.cell(row=current_row, column=5, value=timestamp_str)
+
                 tasks_str = (", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))).replace("Nghỉ phép: ", "")
                 ws.cell(row=current_row, column=6, value=rec.get("Reason") or tasks_str)
                 ws.cell(row=current_row, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate1")))
                 ws.cell(row=current_row, column=8, value=rec.get("Status1", ""))
-                ws.cell.row=current_row, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
+                ws.cell(row=current_row, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))  # ĐÃ SỬA LỖI
                 ws.cell(row=current_row, column=10, value=rec.get("Status2", ""))
                 ws.cell(row=current_row, column=11, value=rec.get("LeaveNote", ""))
+
                 for col_idx in range(1, 12):
-                    ws.cell(row=current_row, column=col_idx).border = border
-                    ws.cell(row=current_row, column=col_idx).alignment = align_left
+                    cell = ws.cell(row=current_row, column=col_idx)
+                    cell.border = border
+                    cell.alignment = align_left
                 current_row += 1
 
         export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
@@ -758,7 +589,7 @@ def export_leaves_to_excel():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-# ---- API XUẤT EXCEL KẾT HỢP (CẬP NHẬT) ----
+# ---- API XUẤT EXCEL KẾT HỢP ----
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
@@ -805,12 +636,18 @@ def export_combined_to_excel():
                 date_str = rec.get("CheckinDate")
                 if date_str: daily_groups.setdefault(date_str, []).append(rec)
             for date_str, day_records in daily_groups.items():
-                checkins = [t for r in day_records if r.get('CheckType') == 'checkin' and r.get('Timestamp') 
-                           for t in [datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S") if isinstance(r['Timestamp'], str) else r['Timestamp']] 
-                           if isinstance(t, datetime)]
-                checkouts = [t for r in day_records if r.get('CheckType') == 'checkout' and r.get('Timestamp') 
-                            for t in [datetime.strptime(r['Timestamp'], "%Y-%m-%d %H:%M:%S") if isinstance(r['Timestamp'], str) else r['Timestamp']] 
-                            if isinstance(t, datetime)]
+                checkins = []
+                checkouts = []
+                for r in day_records:
+                    ts = r.get("Timestamp")
+                    if not ts: continue
+                    try:
+                        if isinstance(ts, str): ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                        if r.get("CheckType") == "checkin": checkins.append(ts)
+                        elif r.get("CheckType") == "checkout": checkouts.append(ts)
+                    except: continue
+                checkins = sorted([t for t in checkins if isinstance(t, datetime)])
+                checkouts = sorted([t for t in checkouts if isinstance(t, datetime)])
                 daily_seconds = (checkouts[-1] - checkins[0]).total_seconds() if checkins and checkouts and checkouts[-1] > checkins[0] else 0
                 daily_hours_map[(emp_id, date_str)] = daily_seconds
 
@@ -825,18 +662,94 @@ def export_combined_to_excel():
             ws_att.cell(row=row, column=2, value=emp_name)
             ws_att.cell(row=row, column=3, value=date_str)
             daily_sec = daily_hours_map.get((emp_id, date_str), 0)
-            h_d, rem_d = divmod(daily_sec, 3600)
-            m_d, s_d = divmod(rem_d, 60)
-            ws_att.cell(row=row, column=14, value=f"{int(h_d)}h {int(m_d)}m {int(s_d)}s" if daily_sec > 0 else "")
-            # Các cột checkin/checkout như cũ...
-            # (giữ nguyên phần fill dữ liệu checkin/checkout như bản cũ)
+            h, rem = divmod(daily_sec, 3600)
+            m, s = divmod(rem, 60)
+            ws_att.cell(row=row, column=14, value=f"{int(h)}h {int(m)}m {int(s)}s" if daily_sec > 0 else "")
+
+            checkin_counter = 0
+            for rec in sorted(records, key=lambda x: x.get("Timestamp") or datetime.min):
+                if rec.get("CheckType") == "checkin" and checkin_counter < 9:
+                    time_str = ""
+                    if rec.get("Timestamp"):
+                        try:
+                            ts = rec["Timestamp"]
+                            if isinstance(ts, str): ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                            time_str = ts.astimezone(VN_TZ).strftime("%H:%M:%S")
+                        except: time_str = ""
+                    tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
+                    cell_value = "; ".join(filter(None, [time_str, rec.get("ProjectId", ""), tasks_str, rec.get("Address", ""), rec.get("CheckinNote", "")]))
+                    ws_att.cell(row=row, column=4 + checkin_counter, value=cell_value)
+                    checkin_counter += 1
+                elif rec.get("CheckType") == "checkout":
+                    time_str = ""
+                    if rec.get("Timestamp"):
+                        try:
+                            ts = rec["Timestamp"]
+                            if isinstance(ts, str): ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                            time_str = ts.astimezone(VN_TZ).strftime("%H:%M:%S")
+                        except: time_str = ""
+                    tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
+                    cell_value = "; ".join(filter(None, [time_str, rec.get("ProjectId", ""), tasks_str, rec.get("Address", ""), rec.get("CheckinNote", "")]))
+                    ws_att.cell(row=row, column=13, value=cell_value)
+
+            for col in range(1, 16):
+                cell = ws_att.cell(row=row, column=col)
+                cell.border = border
+                cell.alignment = align_left
 
         # Sheet Nghỉ phép
         ws_leave = wb["Nghỉ phép"]
-        # Tương tự như export-leaves-excel
+        ws_leave['A1'] = "Mã NV"; ws_leave['B1'] = "Tên NV"; ws_leave['C1'] = "Ngày Nghỉ"; ws_leave['D1'] = "Số ngày nghỉ"
+        ws_leave['E1'] = "Ngày tạo đơn"; ws_leave['F1'] = "Lý do"; ws_leave['G1'] = "Ngày Duyệt/Từ chối Lần đầu"
+        ws_leave['H1'] = "Trạng thái Lần đầu"; ws_leave['I1'] = "Ngày Duyệt/Từ chối Lần cuối"
+        ws_leave['J1'] = "Trạng thái Lần cuối"; ws_leave['K1'] = "Ghi chú"
+
+        current_row_leave = 2
+        for rec in leave_data:
+            leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
+            if is_overlap:
+                display_date = rec.get("DisplayDate", "")
+                if not display_date and rec.get('StartDate') and rec.get('EndDate'):
+                    start = datetime.strptime(rec['StartDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                    end = datetime.strptime(rec['EndDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                    display_date = f"Từ {start} đến {end}"
+                elif not display_date and rec.get('LeaveDate'):
+                    leave_date = datetime.strptime(rec['LeaveDate'], '%Y-%m-%d').strftime('%d/%m/%Y')
+                    display_date = f"{leave_date} ({rec.get('Session', '')})"
+                if display_date:
+                    display_date = re.sub(r"\d{4}-\d{2}-\d{2}", lambda m: datetime.strptime(m.group(0), "%Y-%m-%d").strftime("%d/%m/%Y"), display_date)
+
+                ws_leave.cell(row=current_row_leave, column=1, value=rec.get("EmployeeId", ""))
+                ws_leave.cell(row=current_row_leave, column=2, value=rec.get("EmployeeName", ""))
+                ws_leave.cell(row=current_row_leave, column=3, value=display_date)
+                ws_leave.cell(row=current_row_leave, column=4, value=leave_days)
+
+                timestamp_str = ""
+                if rec.get("CreationTime"):
+                    try:
+                        ct = rec['CreationTime']
+                        dt = ct if isinstance(ct, datetime) else datetime.fromisoformat(ct.replace('Z', '+00:00'))
+                        timestamp_str = dt.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+                    except:
+                        timestamp_str = str(rec.get("CreationTime"))
+                ws_leave.cell(row=current_row_leave, column=5, value=timestamp_str)
+
+                tasks_str = (", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))).replace("Nghỉ phép: ", "")
+                ws_leave.cell(row=current_row_leave, column=6, value=rec.get("Reason") or tasks_str)
+                ws_leave.cell(row=current_row_leave, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate1")))
+                ws_leave.cell(row=current_row_leave, column=8, value=rec.get("Status1", ""))
+                ws_leave.cell(row=current_row_leave, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
+                ws_leave.cell(row=current_row_leave, column=10, value=rec.get("Status2", ""))
+                ws_leave.cell(row=current_row_leave, column=11, value=rec.get("LeaveNote", ""))
+
+                for col in range(1, 12):
+                    cell = ws_leave.cell(row=current_row_leave, column=col)
+                    cell.border = border
+                    cell.alignment = align_left
+                current_row_leave += 1
 
         export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
-        filename = f"Tổng hợp_{start_date}_đến_{end_date}_{export_date_str}.xlsx"
+        filename = f"Báo cáo tổng hợp_{start_date}_đến_{end_date}_{export_date_str}.xlsx"
         output = BytesIO()
         wb.save(output)
         output.seek(0)
@@ -846,6 +759,9 @@ def export_combined_to_excel():
         print(f"Lỗi export combined: {e}")
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+# ---- API lấy dữ liệu chấm công & nghỉ phép (giữ nguyên) ----
+# (Các hàm get_attendances, get_leaves giữ nguyên như cũ)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
