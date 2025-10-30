@@ -409,21 +409,10 @@ def export_to_excel():
             return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
         search = request.args.get("search", "").strip()
-
-        # --- XỬ LÝ QUERY_START CHO NGÀY CỤ THỂ ---
-        query_start = start_date
-        if start_date == end_date:  # Ngày cụ thể: query từ đầu tháng đến ngày đó
-            try:
-                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-                month_start = start_dt.replace(day=1)
-                query_start = month_start.strftime("%Y-%m-%d")
-            except:
-                query_start = start_date
-        # Query dữ liệu từ query_start đến end_date
-        query = build_attendance_query("custom", query_start, end_date, search, username=username)
+        query = build_attendance_query("custom", start_date, end_date, search, username=username)
         data = list(collection.find(query, {"_id": 0}))
 
-        # --- TÍNH GIỜ THEO NGÀY ---
+        # --- Tính giờ làm theo ngày ---
         daily_hours_map = {}
         emp_data = {}
         for rec in data:
@@ -458,13 +447,18 @@ def export_to_excel():
                 daily_seconds = (checkouts[-1] - checkins[0]).total_seconds() if checkins and checkouts and checkouts[-1] > checkins[0] else 0
                 daily_hours_map[(emp_id, date_str)] = daily_seconds
 
-        # --- TÍNH GIỜ TÍCH LŨY THÁNG (TỪ ĐẦU THÁNG HOẶC ĐẦU KHOẢNG) ---
+        # --- Tính giờ tích lũy theo tháng/khoảng (cột 15) ---
         monthly_hours_map = {}
-        month_accum_start = query_start  # Bắt đầu tích lũy từ query_start (đầu tháng nếu ngày cụ thể)
+        try:
+            if request.args.get("month") and request.args.get("year"):
+                start_dt = datetime(int(request.args.get("year")), int(request.args.get("month")), 1)
+            else:
+                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        except:
+            start_dt = datetime.now(VN_TZ).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
         for emp_id, records in emp_data.items():
-            # Sắp xếp theo ngày để tích lũy
-            sorted_records = sorted(records, key=lambda r: datetime.strptime(r.get("CheckinDate", ""), "%d/%m/%Y") if r.get("CheckinDate") else datetime.min)
+            sorted_records = sorted(records, key=lambda r: r.get("CheckinDate", ""))
             running_total = 0
             for rec in sorted_records:
                 date_str = rec.get("CheckinDate")
@@ -474,7 +468,7 @@ def export_to_excel():
                 m, s = divmod(rem, 60)
                 monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
 
-        # --- GHI EXCEL (GIỮ NGUYÊN) ---
+        # --- Ghi dữ liệu vào Excel ---
         grouped = {}
         for d in data:
             key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), d.get("CheckinDate"))
@@ -493,16 +487,16 @@ def export_to_excel():
             ws.cell(row=row, column=2, value=emp_name)
             ws.cell(row=row, column=3, value=date_str)
 
-            # Daily Hours (cột 14)
+            # Giờ làm trong ngày
             daily_sec = daily_hours_map.get((emp_id, date_str), 0)
             h_d, rem_d = divmod(daily_sec, 3600)
             m_d, s_d = divmod(rem_d, 60)
             ws.cell(row=row, column=14, value=f"{int(h_d)}h {int(m_d)}m {int(s_d)}s" if daily_sec > 0 else "")
 
-            # Monthly Hours (cột 15: tích lũy từ đầu tháng)
+            # Giờ tích lũy (cột 15)
             ws.cell(row=row, column=15, value=monthly_hours_map.get((emp_id, date_str), ""))
 
-            # Checkin/Checkout (giữ nguyên)
+            # Ghi checkin/checkout
             checkin_counter = 0
             for rec in sorted(records, key=lambda x: x.get("Timestamp") or datetime.min):
                 if rec.get("CheckType") == "checkin" and checkin_counter < 9:
@@ -538,6 +532,7 @@ def export_to_excel():
                 cell.border = border
                 cell.alignment = align_left
 
+        # --- Tên file ---
         export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
         filename = get_export_filename("Chấm công", start_date, end_date, export_date_str)
 
@@ -916,6 +911,4 @@ def export_combined_to_excel():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
-
-
 
