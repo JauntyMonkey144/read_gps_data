@@ -677,16 +677,35 @@ def get_export_date_range():
         return None, None
     return start_date, end_date
 
-# ---- HÀM TẠO TÊN FILE XUẤT EXCEL ----
 def get_export_filename(prefix, start_date, end_date, export_date_str):
-    if start_date == end_date:
-        day_str = start_date.replace('-', '/')
-        file_prefix = f"Ngày_{day_str}"
-    else:
-        start_str = start_date.replace('-', '/')
-        end_str = end_date.replace('-', '/')
-        file_prefix = f"{start_str}_đến_{end_str}"
-    return f"{prefix}_{file_prefix}_{export_date_str}.xlsx"
+    """
+    Tạo tên file đẹp, dễ đọc cho mọi trường hợp:
+    - 1 ngày:   Chấm công_30-10-2025_30-10-2025.xlsx
+    - Nhiều ngày: Chấm công_01-10-2025_đến_30-10-2025_30-10-2025.xlsx
+    - Tháng:    Chấm công_Tháng_10-2025_30-10-2025.xlsx
+    """
+    try:
+        # Chuyển sang định dạng DD-MM-YYYY
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        start_str = start_dt.strftime("%d-%m-%Y")
+        end_str = end_dt.strftime("%d-%m-%Y")
+
+        if start_dt == end_dt:
+            # 1 ngày duy nhất
+            file_prefix = start_str
+        elif start_dt.replace(day=1) == end_dt.replace(day=1) and \
+             start_dt.day == 1 and end_dt.day == (end_dt.replace(day=28) + timedelta(days=4)).day:
+            # Cả tháng (từ ngày 1 đến cuối tháng)
+            file_prefix = f"Tháng_{end_dt.month:02d}-{end_dt.year}"
+        else:
+            # Khoảng ngày
+            file_prefix = f"{start_str}_đến_{end_str}"
+
+        return f"{prefix}_{file_prefix}_{export_date_str}.xlsx"
+    except:
+        # Dự phòng nếu lỗi định dạng
+        return f"{prefix}_{start_date}_đến_{end_date}_{export_date_str}.xlsx"
     
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
@@ -1216,6 +1235,7 @@ def export_combined_to_excel():
 
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
