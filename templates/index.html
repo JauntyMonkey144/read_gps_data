@@ -298,623 +298,601 @@
     </div>
   </div>
 
-<script>
-    let currentTab = "attendance";
-    let currentFilter = "hôm nay";
-    let currentSearch = "";
-    let currentSort = { column: 'CreationTime', order: 'desc' };
-    let startDate = "", endDate = "";
-    let rawData = [];
-    let displayData = [];
-    let currentPage = 1;
-    let rowsPerPage = 5;
-    let currentLeaveFilter = "hôm nay";
-    let currentLeaveSearch = "";
-    let currentLeaveSort = { column: 'CheckinTime', order: 'desc' };
-    let leaveStartDate = "", leaveEndDate = "";
-    let leaveDateType = "CheckinTime";
-    let rawLeaveData = [];
-    let currentLeavePage = 1;
-    let leaveRowsPerPage = 5;
+  <script>
+    let currentTab = "attendance";
+    let currentFilter = "hôm nay";
+    let currentSearch = "";
+    let currentSort = { column: 'CreationTime', order: 'desc' };
+    let startDate = "", endDate = "";
+    let rawData = [];
+    let displayData = [];
+    let currentPage = 1;
+    let rowsPerPage = 5;
+    let currentLeaveFilter = "hôm nay";
+    let currentLeaveSearch = "";
+    let currentLeaveSort = { column: 'CheckinTime', order: 'desc' };
+    let leaveStartDate = "", leaveEndDate = "";
+    let leaveDateType = "CheckinTime";
+    let rawLeaveData = [];
+    let currentLeavePage = 1;
+    let leaveRowsPerPage = 5;
 
-    function showMessage(msg, type="success", isModal=false) {
-      const el = isModal ? document.getElementById("modalMessage") : document.getElementById("messageArea");
-      el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
-      el.style.display = "block";
-      setTimeout(() => {
-        el.innerHTML = "";
-        el.style.display = "none";
-      }, 4000);
-    }
+    function showMessage(msg, type="success", isModal=false) {
+      const el = isModal ? document.getElementById("modalMessage") : document.getElementById("messageArea");
+      el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
+      el.style.display = "block";
+      setTimeout(() => {
+        el.innerHTML = "";
+        el.style.display = "none";
+      }, 4000);
+    }
 
-    function showDashboard() {
-      document.getElementById("loginModal").style.display = "none";
-      document.getElementById("greeting").style.display = "block";
-      document.getElementById("logoutBtn").style.display = "inline-block";
-      document.getElementById("dataTabs").style.display = "flex";
-      switchTab(currentTab);
-    }
+    function showDashboard() {
+      document.getElementById("loginModal").style.display = "none";
+      document.getElementById("greeting").style.display = "block";
+      document.getElementById("logoutBtn").style.display = "inline-block";
+      document.getElementById("dataTabs").style.display = "flex";
+      switchTab(currentTab);
+    }
 
-    function hideDashboard() {
-      document.getElementById("greeting").style.display = "none";
-      document.getElementById("logoutBtn").style.display = "none";
-      document.getElementById("dataTabs").style.display = "none";
-      document.getElementById("leaveSection").style.display = "none";
-      document.getElementById("filters").style.display = "none";
-      document.getElementById("dateFilter").style.display = "none";
-      document.getElementById("searchFilter").style.display = "none";
-      document.getElementById("tableContainer").style.display = "none";
-      document.getElementById("pagination").style.display = "none";
-      document.getElementById("dataBody").innerHTML = "";
-      document.getElementById("leaveDataBody").innerHTML = "";
-    }
+    function hideDashboard() {
+      document.getElementById("greeting").style.display = "none";
+      document.getElementById("logoutBtn").style.display = "none";
+      document.getElementById("dataTabs").style.display = "none";
+      document.getElementById("leaveSection").style.display = "none";
+      document.getElementById("filters").style.display = "none";
+      document.getElementById("dateFilter").style.display = "none";
+      document.getElementById("searchFilter").style.display = "none";
+      document.getElementById("tableContainer").style.display = "none";
+      document.getElementById("pagination").style.display = "none";
+      document.getElementById("dataBody").innerHTML = "";
+      document.getElementById("leaveDataBody").innerHTML = "";
+    }
 
-    function switchTab(tab) {
-      currentTab = tab;
-      document.getElementById("tabAttendance").classList.toggle("active", tab === "attendance");
-      document.getElementById("tabLeave").classList.toggle("active", tab === "leave");
-      if (tab === "attendance") {
-        document.getElementById("leaveSection").style.display = "none";
-        document.getElementById("filters").style.display = "flex";
-        document.getElementById("dateFilter").style.display = "flex";
-        document.getElementById("searchFilter").style.display = "flex";
-        document.getElementById("tableContainer").style.display = "block";
-        document.getElementById("pagination").style.display = "block";
-        if (!rawData.length) loadData(); else renderTable();
-      } else {
-        document.getElementById("filters").style.display = "none";
-        document.getElementById("dateFilter").style.display = "none";
-        document.getElementById("searchFilter").style.display = "none";
-        document.getElementById("tableContainer").style.display = "none";
-        document.getElementById("pagination").style.display = "none";
-        document.getElementById("leaveSection").style.display = "block";
-        if (!rawLeaveData.length) loadLeaveData(); else renderLeaveTable();
-      }
-    }
+    function switchTab(tab) {
+      currentTab = tab;
+      document.getElementById("tabAttendance").classList.toggle("active", tab === "attendance");
+      document.getElementById("tabLeave").classList.toggle("active", tab === "leave");
+      if (tab === "attendance") {
+        document.getElementById("leaveSection").style.display = "none";
+        document.getElementById("filters").style.display = "flex";
+        document.getElementById("dateFilter").style.display = "flex";
+        document.getElementById("searchFilter").style.display = "flex";
+        document.getElementById("tableContainer").style.display = "block";
+        document.getElementById("pagination").style.display = "block";
+        if (!rawData.length) loadData(); else renderTable();
+      } else {
+        document.getElementById("filters").style.display = "none";
+        document.getElementById("dateFilter").style.display = "none";
+        document.getElementById("searchFilter").style.display = "none";
+        document.getElementById("tableContainer").style.display = "none";
+        document.getElementById("pagination").style.display = "none";
+        document.getElementById("leaveSection").style.display = "block";
+        if (!rawLeaveData.length) loadLeaveData(); else renderLeaveTable();
+      }
+    }
 
-    async function login() {
-      const email = document.getElementById("loginEmail").value.trim();
-      const pass = document.getElementById("loginPass").value;
-      if (!email || !pass) return showMessage("Nhập email và mật khẩu", "error", true);
-      const formData = new FormData();
-      formData.append("email", email);
-      formData.append("password", pass);
-      const res = await fetch("/login", { method: "POST", body: formData });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        localStorage.setItem("adminEmail", email);
-        localStorage.setItem("adminUser", data.username || data.email);
-        document.getElementById("greeting").innerHTML = `Xin chào, ${data.username || email}!`;
-        showDashboard();
-        showMessage("Đăng nhập thành công", "success");
-        applyFilter("hôm nay");
-      } else {
-        showMessage(data.message || "Sai thông tin", "error", true);
-      }
-    }
+    async function login() {
+      const email = document.getElementById("loginEmail").value.trim();
+      const pass = document.getElementById("loginPass").value;
+      if (!email || !pass) return showMessage("Nhập email và mật khẩu", "error", true);
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("password", pass);
+      const res = await fetch("/login", { method: "POST", body: formData });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem("adminEmail", email);
+        localStorage.setItem("adminUser", data.username || data.email);
+        document.getElementById("greeting").innerHTML = `Xin chào, ${data.username || email}!`;
+        showDashboard();
+        showMessage("Đăng nhập thành công", "success");
+        applyFilter("hôm nay");
+      } else {
+        showMessage(data.message || "Sai thông tin", "error", true);
+      }
+    }
 
-    function logout() {
-      localStorage.clear();
-      document.getElementById("loginEmail").value = "";
-      document.getElementById("loginPass").value = "";
-      document.getElementById("loginModal").style.display = "flex";
-      hideDashboard();
-      showMessage("Đã đăng xuất", "success");
-    }
+    function logout() {
+      localStorage.clear();
+      document.getElementById("loginEmail").value = "";
+      document.getElementById("loginPass").value = "";
+      document.getElementById("loginModal").style.display = "flex";
+      hideDashboard();
+      showMessage("Đã đăng xuất", "success");
+    }
 
-    document.getElementById("loginBtn").onclick = login;
-    document.getElementById("logoutBtn").onclick = logout;
+    document.getElementById("loginBtn").onclick = login;
+    document.getElementById("logoutBtn").onclick = logout;
 
-    // === XỬ LÝ DỮ LIỆU GIỜ ===
-    function processDataWithHours(data) {
-      if (!data || data.length === 0) return [];
-      function parseTime(timeStr) {
-        if (!timeStr) return null;
-        const [datePart, timePart] = timeStr.split(' ');
-        if (!datePart || !timePart) return null;
-        const [day, month, year] = datePart.split('/');
-        const [hours, minutes, seconds] = timePart.split(':');
-        try {
-          return new Date(year, month - 1, day, hours, minutes, seconds);
-        } catch (e) {
-          return null;
-        }
-      }
-      const employeesData = data.reduce((acc, record) => {
-        acc[record.EmployeeId] = acc[record.EmployeeId] || [];
-        acc[record.EmployeeId].push(record);
-        return acc;
-      }, {});
-      const augmentedData = [];
-      for (const empId in employeesData) {
-        const records = employeesData[empId];
-        const monthsData = records.reduce((acc, record) => {
-          const date = record.CheckinDate;
-          if (!date) return acc;
-          const monthKey = date.substring(0, 7);
-          acc[monthKey] = acc[monthKey] || [];
-          acc[monthKey].push(record);
-          return acc;
-        }, {});
-        for (const monthKey in monthsData) {
-          let monthlyTotalSeconds = 0;
-          const monthRecords = monthsData[monthKey];
-          const daysData = monthRecords.reduce((acc, record) => {
-            acc[record.CheckinDate] = acc[record.CheckinDate] || [];
-            acc[record.CheckinDate].push(record);
-            return acc;
-          }, {});
-          const sortedDays = Object.keys(daysData).sort();
-          const dailyHoursMap = {};
-          for (const day of sortedDays) {
-            let firstCheckin = null, lastCheckout = null;
-            daysData[day].forEach(rec => {
-              const recTime = parseTime(rec.CreationTime);
-              if (!recTime) return;
-              if (rec.CheckType === 'checkin' && (!firstCheckin || recTime < firstCheckin)) {
-                firstCheckin = recTime;
-              } else if (rec.CheckType === 'checkout' && (!lastCheckout || recTime > lastCheckout)) {
-                lastCheckout = recTime;
-              }
-            });
-            let dailySeconds = 0;
-            if (firstCheckin && lastCheckout && lastCheckout > firstCheckin) {
-              dailySeconds = (lastCheckout - firstCheckin) / 1000;
-            }
-            monthlyTotalSeconds += dailySeconds;
-            const dailyH = Math.floor(dailySeconds / 3600);
-            const dailyM = Math.floor((dailySeconds % 3600) / 60);
-            const monthlyH = Math.floor(monthlyTotalSeconds / 3600);
-            const monthlyM = Math.floor((monthlyTotalSeconds % 3600) / 60);
-            dailyHoursMap[day] = {
-              daily: `${dailyH}h ${dailyM}m`,
-              monthly: `${monthlyH}h ${monthlyM}m`,
-              _dailySeconds: dailySeconds,
-              _monthlySeconds: monthlyTotalSeconds,
-            };
-          }
-          monthRecords.forEach(rec => {
-            const hours = dailyHoursMap[rec.CheckinDate];
-            augmentedData.push({
-              ...rec,
-              DailyHours: hours ? hours.daily : '0h 0m',
-              MonthlyHours: hours ? hours.monthly : 'N/A',
-              _dailySeconds: hours ? hours._dailySeconds : 0,
-              _monthlySeconds: hours ? hours._monthlySeconds : 0
-            });
-          });
-        }
-      }
-      return augmentedData;
-    }
+    // === XỬ LÝ DỮ LIỆU GIỜ ===
+    function processDataWithHours(data) {
+      if (!data || data.length === 0) return [];
+      function parseTime(timeStr) {
+        if (!timeStr) return null;
+        const [datePart, timePart] = timeStr.split(' ');
+        if (!datePart || !timePart) return null;
+        const [day, month, year] = datePart.split('/');
+        const [hours, minutes, seconds] = timePart.split(':');
+        try {
+          return new Date(year, month - 1, day, hours, minutes, seconds);
+        } catch (e) {
+          return null;
+        }
+      }
+      const employeesData = data.reduce((acc, record) => {
+        acc[record.EmployeeId] = acc[record.EmployeeId] || [];
+        acc[record.EmployeeId].push(record);
+        return acc;
+      }, {});
+      const augmentedData = [];
+      for (const empId in employeesData) {
+        const records = employeesData[empId];
+        const monthsData = records.reduce((acc, record) => {
+          const date = record.CheckinDate;
+          if (!date) return acc;
+          const monthKey = date.substring(0, 7);
+          acc[monthKey] = acc[monthKey] || [];
+          acc[monthKey].push(record);
+          return acc;
+        }, {});
+        for (const monthKey in monthsData) {
+          let monthlyTotalSeconds = 0;
+          const monthRecords = monthsData[monthKey];
+          const daysData = monthRecords.reduce((acc, record) => {
+            acc[record.CheckinDate] = acc[record.CheckinDate] || [];
+            acc[record.CheckinDate].push(record);
+            return acc;
+          }, {});
+          const sortedDays = Object.keys(daysData).sort();
+          const dailyHoursMap = {};
+          for (const day of sortedDays) {
+            let firstCheckin = null, lastCheckout = null;
+            daysData[day].forEach(rec => {
+              const recTime = parseTime(rec.CreationTime);
+              if (!recTime) return;
+              if (rec.CheckType === 'checkin' && (!firstCheckin || recTime < firstCheckin)) {
+                firstCheckin = recTime;
+              } else if (rec.CheckType === 'checkout' && (!lastCheckout || recTime > lastCheckout)) {
+                lastCheckout = recTime;
+              }
+            });
+            let dailySeconds = 0;
+            if (firstCheckin && lastCheckout && lastCheckout > firstCheckin) {
+              dailySeconds = (lastCheckout - firstCheckin) / 1000;
+            }
+            monthlyTotalSeconds += dailySeconds;
+            const dailyH = Math.floor(dailySeconds / 3600);
+            const dailyM = Math.floor((dailySeconds % 3600) / 60);
+            const monthlyH = Math.floor(monthlyTotalSeconds / 3600);
+            const monthlyM = Math.floor((monthlyTotalSeconds % 3600) / 60);
+            dailyHoursMap[day] = {
+              daily: `${dailyH}h ${dailyM}m`,
+              monthly: `${monthlyH}h ${monthlyM}m`,
+              _dailySeconds: dailySeconds,
+              _monthlySeconds: monthlyTotalSeconds,
+            };
+          }
+          monthRecords.forEach(rec => {
+            const hours = dailyHoursMap[rec.CheckinDate];
+            augmentedData.push({
+              ...rec,
+              DailyHours: hours ? hours.daily : '0h 0m',
+              MonthlyHours: hours ? hours.monthly : 'N/A',
+              _dailySeconds: hours ? hours._dailySeconds : 0,
+              _monthlySeconds: hours ? hours._monthlySeconds : 0
+            });
+          });
+        }
+      }
+      return augmentedData;
+    }
 
-    async function loadData() {
-      const email = localStorage.getItem("adminEmail");
-      if (!email) {
-        document.getElementById("loginModal").style.display = "flex";
-        return showMessage("Chưa đăng nhập!", "error");
-      }
-      let url = `/api/attendances?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
-      if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
-      if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!res.ok) return showMessage(data.error || "Lỗi tải dữ liệu", "error");
-      rawData = data;
-      displayData = processDataWithHours(rawData);
-      currentPage = 1;
-      renderTable();
-    }
+    async function loadData() {
+      const email = localStorage.getItem("adminEmail");
+      if (!email) {
+        document.getElementById("loginModal").style.display = "flex";
+        return showMessage("Chưa đăng nhập!", "error");
+      }
+      let url = `/api/attendances?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
+      if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
+      if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) return showMessage(data.error || "Lỗi tải dữ liệu", "error");
+      rawData = data;
+      displayData = processDataWithHours(rawData);
+      currentPage = 1;
+      renderTable();
+    }
 
-    function renderTable() {
-      const tbody = document.getElementById("dataBody");
-      tbody.innerHTML = "";
-      let data = [...displayData];
-      if (currentSort.column && currentSort.order) {
-        data.sort((a,b) => {
-          let col = currentSort.column;
-          if (col === 'DailyHours') col = '_dailySeconds';
-          if (col === 'MonthlyHours') col = '_monthlySeconds';
-          let A = a[col] ?? (typeof a[col] === 'number' ? 0 : "");
-          let B = b[col] ?? (typeof b[col] === 'number' ? 0 : "");
-          if (typeof A === 'string') A = A.toLowerCase();
-          if (typeof B === 'string') B = B.toLowerCase();
-          if (A < B) return currentSort.order === "asc" ? -1 : 1;
-          if (A > B) return currentSort.order === "asc" ? 1 : -1;
-          return 0;
-        });
-      }
-      const startIdx = (currentPage-1)*rowsPerPage;
-      const pageData = data.slice(startIdx, startIdx+rowsPerPage);
-      pageData.forEach(r => {
-        const img = r.FaceImage || r.PhotoURL ? `<img src="${r.FaceImage || r.PhotoURL}" class="checkin-photo">` : "";
-        const mapLink = (r.Latitude && r.Longitude)
-          ? `<a href="https://maps.google.com/?q=${r.Latitude},${r.Longitude}" target="_blank" class="map-link">Xem</a>`
-          : "";
-        const checkTypeFormatted = r.CheckType === 'checkin' ? 'Check In' : (r.CheckType === 'checkout' ? 'Check Out' : (r.CheckType || ""));
-        tbody.innerHTML += `
-          <tr>
-            <td>${r.EmployeeId||""}</td>
-            <td>${r.EmployeeName||""}</td>
-            <td>${r.CheckinDate||""}</td>
-            <td>${r.CheckinTime||""}</td>
-            <td>${checkTypeFormatted}</td>
-            <td>${r.ProjectId||""}</td>
-            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
-            <td>${img}</td>
-            <td>${r.Address||""}</td>
-            <td>${mapLink}</td>
-            <td>${r.CheckinNote||""}</td>
-          </tr>
-        `;
-      });
-      renderPagination(data.length);
-      highlightFilterButton();
-    }
+    function renderTable() {
+      const tbody = document.getElementById("dataBody");
+      tbody.innerHTML = "";
+      let data = [...displayData];
+      if (currentSort.column && currentSort.order) {
+        data.sort((a,b) => {
+          let col = currentSort.column;
+          if (col === 'DailyHours') col = '_dailySeconds';
+          if (col === 'MonthlyHours') col = '_monthlySeconds';
+          let A = a[col] ?? (typeof a[col] === 'number' ? 0 : "");
+          let B = b[col] ?? (typeof b[col] === 'number' ? 0 : "");
+          if (typeof A === 'string') A = A.toLowerCase();
+          if (typeof B === 'string') B = B.toLowerCase();
+          if (A < B) return currentSort.order === "asc" ? -1 : 1;
+          if (A > B) return currentSort.order === "asc" ? 1 : -1;
+          return 0;
+        });
+      }
+      const startIdx = (currentPage-1)*rowsPerPage;
+      const pageData = data.slice(startIdx, startIdx+rowsPerPage);
+      pageData.forEach(r => {
+        const img = r.FaceImage || r.PhotoURL ? `<img src="${r.FaceImage || r.PhotoURL}" class="checkin-photo">` : "";
+        const mapLink = (r.Latitude && r.Longitude)
+          ? `<a href="https://maps.google.com/?q=${r.Latitude},${r.Longitude}" target="_blank" class="map-link">Xem</a>`
+          : "";
+        const checkTypeFormatted = r.CheckType === 'checkin' ? 'Check In' : (r.CheckType === 'checkout' ? 'Check Out' : (r.CheckType || ""));
+        tbody.innerHTML += `
+          <tr>
+            <td>${r.EmployeeId||""}</td>
+            <td>${r.EmployeeName||""}</td>
+            <td>${r.CheckinDate||""}</td>
+            <td>${r.CheckinTime||""}</td>
+            <td>${checkTypeFormatted}</td>
+            <td>${r.ProjectId||""}</td>
+            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
+            <td>${img}</td>
+            <td>${r.Address||""}</td>
+            <td>${mapLink}</td>
+            <td>${r.CheckinNote||""}</td>
+          </tr>
+        `;
+      });
+      renderPagination(data.length);
+      highlightFilterButton();
+    }
 
-    async function loadLeaveData() {
-      const email = localStorage.getItem("adminEmail");
-      if (!email) {
-        document.getElementById("loginModal").style.display = "flex";
-        return showMessage("Chưa đăng nhập!", "error");
-      }
-      let url = `/api/leaves?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}&dateType=${encodeURIComponent(leaveDateType)}`;
-      if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
-      if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!res.ok) return showMessage(data.error || "Lỗi tải dữ liệu nghỉ phép", "error");
-      rawLeaveData = data;
-      currentLeavePage = 1;
-      renderLeaveTable();
-    }
+    async function loadLeaveData() {
+      const email = localStorage.getItem("adminEmail");
+      if (!email) {
+        document.getElementById("loginModal").style.display = "flex";
+        return showMessage("Chưa đăng nhập!", "error");
+      }
+      let url = `/api/leaves?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}&dateType=${encodeURIComponent(leaveDateType)}`;
+      if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
+      if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) return showMessage(data.error || "Lỗi tải dữ liệu nghỉ phép", "error");
+      rawLeaveData = data;
+      currentLeavePage = 1;
+      renderLeaveTable();
+    }
 
-    function renderLeaveTable() {
-      const tbody = document.getElementById("leaveDataBody");
-      tbody.innerHTML = "";
-      let data = [...rawLeaveData];
-      if (currentLeaveSort.column && currentLeaveSort.order) {
-        data.sort((a,b) => {
-          let A = a[currentLeaveSort.column]||"", B = b[currentLeaveSort.column]||"";
-          if (A<B) return currentLeaveSort.order==="asc" ? -1 : 1;
-          if (A>B) return currentLeaveSort.order==="asc" ? 1 : -1;
-          return 0;
-        });
-      }
-      const startIdx = (currentLeavePage-1)*leaveRowsPerPage;
-      const pageData = data.slice(startIdx, startIdx+leaveRowsPerPage);
-      pageData.forEach(r => {
-        tbody.innerHTML += `
-          <tr>
-            <td>${r.EmployeeId||""}</td>
-            <td>${r.EmployeeName||""}</td>
-           (<td>${r.CheckinDate||""}</td>
-            <td>${r.CheckinTime||""}</td>
-            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
-            <td>${r.ApprovalDate1||""}</td>
-            <td>${r.Status1||""}</td>
-            <td>${r.ApprovalDate2||""}</td>
-            <td>${r.Status2||""}</td>
-            <td>${r.Note||""}</td>
-          </tr>
-        `;
-      });
-      renderLeavePagination(data.length);
-      highlightLeaveFilterButton();
-    }
+    function renderLeaveTable() {
+      const tbody = document.getElementById("leaveDataBody");
+      tbody.innerHTML = "";
+      let data = [...rawLeaveData];
+      if (currentLeaveSort.column && currentLeaveSort.order) {
+        data.sort((a,b) => {
+          let A = a[currentLeaveSort.column]||"", B = b[currentLeaveSort.column]||"";
+          if (A<B) return currentLeaveSort.order==="asc" ? -1 : 1;
+          if (A>B) return currentLeaveSort.order==="asc" ? 1 : -1;
+          return 0;
+        });
+      }
+      const startIdx = (currentLeavePage-1)*leaveRowsPerPage;
+      const pageData = data.slice(startIdx, startIdx+leaveRowsPerPage);
+      pageData.forEach(r => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${r.EmployeeId||""}</td>
+            <td>${r.EmployeeName||""}</td>
+            <td>${r.CheckinDate||""}</td>
+            <td>${r.CheckinTime||""}</td>
+            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
+            <td>${r.ApprovalDate1||""}</td>
+            <td>${r.Status1||""}</td>
+            <td>${r.ApprovalDate2||""}</td>
+            <td>${r.Status2||""}</td>
+            <td>${r.Note||""}</td>
+          </tr>
+        `;
+      });
+      renderLeavePagination(data.length);
+      highlightLeaveFilterButton();
+    }
 
-    function renderPagination(total) {
-      const pages = Math.ceil(total / rowsPerPage);
-      const pagDiv = document.getElementById("pagination");
-      pagDiv.innerHTML = "";
-      for (let i=1; i<=pages; i++) {
-        pagDiv.innerHTML += `<button class="${i===currentPage?'active':''}" onclick="gotoPage(${i})">${i}</button>`;
-      }
-    }
+    function renderPagination(total) {
+      const pages = Math.ceil(total / rowsPerPage);
+      const pagDiv = document.getElementById("pagination");
+      pagDiv.innerHTML = "";
+      for (let i=1; i<=pages; i++) {
+        pagDiv.innerHTML += `<button class="${i===currentPage?'active':''}" onclick="gotoPage(${i})">${i}</button>`;
+      }
+    }
 
-    function renderLeavePagination(total) {
-      const pages = Math.ceil(total / leaveRowsPerPage);
-      const pagDiv = document.getElementById("leavePagination");
-      pagDiv.innerHTML = "";
-      for (let i=1; i<=pages; i++) {
-        pagDiv.innerHTML += `<button class="${i===currentLeavePage?'active':''}" onclick="gotoLeavePage(${i})">${i}</button>`;
-      }
-    }
+    function renderLeavePagination(total) {
+      const pages = Math.ceil(total / leaveRowsPerPage);
+      const pagDiv = document.getElementById("leavePagination");
+      pagDiv.innerHTML = "";
+      for (let i=1; i<=pages; i++) {
+        pagDiv.innerHTML += `<button class="${i===currentLeavePage?'active':''}" onclick="gotoLeavePage(${i})">${i}</button>`;
+      }
+    }
 
-    function gotoPage(page) { currentPage = page; renderTable(); }
-    function gotoLeavePage(page) { currentLeavePage = page; renderLeaveTable(); }
+    function gotoPage(page) { currentPage = page; renderTable(); }
+    function gotoLeavePage(page) { currentLeavePage = page; renderLeaveTable(); }
 
-    function sortTable(col) {
-      if (currentSort.column===col) {
-        currentSort.order = currentSort.order==="asc" ? "desc" : (currentSort.order==="desc"?null:"asc");
-      } else {
-        currentSort.column = col;
-        currentSort.order = "asc";
-      }
-      document.querySelectorAll("#dataTable th").forEach(th => th.classList.remove("asc","desc"));
-      if (currentSort.order)
-        document.querySelector(`#dataTable th[onclick="sortTable('${col}')"]`).classList.add(currentSort.order);
-      renderTable();
-    }
+    function sortTable(col) {
+      if (currentSort.column===col) {
+        currentSort.order = currentSort.order==="asc" ? "desc" : (currentSort.order==="desc"?null:"asc");
+      } else {
+        currentSort.column = col;
+        currentSort.order = "asc";
+      }
+      document.querySelectorAll("#dataTable th").forEach(th => th.classList.remove("asc","desc"));
+      if (currentSort.order)
+        document.querySelector(`#dataTable th[onclick="sortTable('${col}')"]`).classList.add(currentSort.order);
+      renderTable();
+    }
 
-    function sortLeaveTable(col) {
-      if (currentLeaveSort.column===col) {
-        currentLeaveSort.order = currentLeaveSort.order==="asc" ? "desc" : (currentLeaveSort.order==="desc"?null:"asc");
-      } else {
-        currentLeaveSort.column = col;
-        currentLeaveSort.order = "asc";
-      }
-      document.querySelectorAll("#leaveTable th").forEach(th => th.classList.remove("asc","desc"));
-      if (currentLeaveSort.order)
-        document.querySelector(`#leaveTable th[onclick="sortLeaveTable('${col}')"]`).classList.add(currentLeaveSort.order);
-      renderLeaveTable();
-    }
+    function sortLeaveTable(col) {
+      if (currentLeaveSort.column===col) {
+        currentLeaveSort.order = currentLeaveSort.order==="asc" ? "desc" : (currentLeaveSort.order==="desc"?null:"asc");
+      } else {
+        currentLeaveSort.column = col;
+        currentLeaveSort.order = "asc";
+      }
+      document.querySelectorAll("#leaveTable th").forEach(th => th.classList.remove("asc","desc"));
+      if (currentLeaveSort.order)
+        document.querySelector(`#leaveTable th[onclick="sortLeaveTable('${col}')"]`).classList.add(currentSort.order);
+      renderLeaveTable();
+    }
 
-    function applyFilter(f) {
-      currentFilter = f;
-      startDate = endDate = "";
-      document.getElementById("startDate").value = "";
-      document.getElementById("endDate").value = "";
-      loadData();
-    }
+    function applyFilter(f) {
+      currentFilter = f;
+      startDate = endDate = "";
+      document.getElementById("startDate").value = "";
+      document.getElementById("endDate").value = "";
+      loadData();
+    }
 
-    function applyLeaveFilter(f) {
-      currentLeaveFilter = f;
-      leaveStartDate = leaveEndDate = "";
-      document.getElementById("leaveStartDate").value = "";
-      document.getElementById("leaveEndDate").value = "";
-      loadLeaveData();
-    }
+    function applyLeaveFilter(f) {
+      currentLeaveFilter = f;
+      leaveStartDate = leaveEndDate = "";
+      document.getElementById("leaveStartDate").value = "";
+      document.getElementById("leaveEndDate").value = "";
+      loadLeaveData();
+    }
 
-    function applyLeaveDateTypeFilter() {
-      leaveDateType = document.getElementById("leaveDateTypeFilter").value;
-      loadLeaveData();
-    }
+    function applyLeaveDateTypeFilter() {
+      leaveDateType = document.getElementById("leaveDateTypeFilter").value;
+      loadLeaveData();
+    }
 
-    function applyDateRange() {
-      startDate = document.getElementById("startDate").value;
-      endDate = document.getElementById("endDate").value;
-      currentFilter = "custom";
-      loadData();
-    }
+    function applyDateRange() {
+      startDate = document.getElementById("startDate").value;
+      endDate = document.getElementById("endDate").value;
+      currentFilter = "custom";
+      loadData();
+    }
 
-    function applyLeaveDateRange() {
-      leaveStartDate = document.getElementById("leaveStartDate").value;
-      leaveEndDate = document.getElementById("leaveEndDate").value;
-  D    currentLeaveFilter = "custom";
-      loadLeaveData();
-    }
+    function applyLeaveDateRange() {
+      leaveStartDate = document.getElementById("leaveStartDate").value;
+      leaveEndDate = document.getElementById("leaveEndDate").value;
+      currentLeaveFilter = "custom";
+      loadLeaveData();
+    }
 
-    function applySearch() {
-      currentSearch = document.getElementById("searchBox").value.trim();
-      loadData();
-    }
+    function applySearch() {
+      currentSearch = document.getElementById("searchBox").value.trim();
+      loadData();
+    }
 
-    function applyLeaveSearch() {
-      currentLeaveSearch = document.getElementById("leaveSearchBox").value.trim();
-      loadLeaveData();
-    }
+    function applyLeaveSearch() {
+      currentLeaveSearch = document.getElementById("leaveSearchBox").value.trim();
+      loadLeaveData();
+    }
 
-    function updateRowsPerPage() {
-      rowsPerPage = parseInt(document.getElementById("rowsPerPage").value);
-      currentPage = 1;
-      renderTable();
-    }
+    function updateRowsPerPage() {
+      rowsPerPage = parseInt(document.getElementById("rowsPerPage").value);
+      currentPage = 1;
+      renderTable();
+    }
 
-    function updateLeaveRowsPerPage() {
-      leaveRowsPerPage = parseInt(document.getElementById("leaveRowsPerPage").value);
-      currentLeavePage = 1;
-      renderLeaveTable();
-    }
+    function updateLeaveRowsPerPage() {
+      leaveRowsPerPage = parseInt(document.getElementById("leaveRowsPerPage").value);
+      currentLeavePage = 1;
+      renderLeaveTable();
+    }
 
-    function refreshData() { loadData(); }
-    function refreshLeaveData() { loadLeaveData(); }
+    function refreshData() { loadData(); }
+    function refreshLeaveData() { loadLeaveData(); }
 
-    function resetFilter() {
-      currentSearch = "";
-      startDate = endDate = "";
-      currentFilter = "hôm nay";
-      document.getElementById("searchBox").value = "";
-      document.getElementById("startDate").value = "";
-      document.getElementById("endDate").value = "";
-      highlightFilterButton();
-      loadData();
-    }
+    function resetFilter() {
+      currentSearch = "";
+      startDate = endDate = "";
+      currentFilter = "hôm nay";
+      document.getElementById("searchBox").value = "";
+      document.getElementById("startDate").value = "";
+      document.getElementById("endDate").value = "";
+      highlightFilterButton();
+      loadData();
+    }
 
-    function resetLeaveFilter() {
-      currentLeaveSearch = "";
-      leaveStartDate = leaveEndDate = "";
-      currentLeaveFilter = "hôm nay";
-      leaveDateType = "CheckinTime";
-      document.getElementById("leaveSearchBox").value = "";
-      document.getElementById("leaveStartDate").value = "";
-      document.getElementById("leaveEndDate").value = "";
-      document.getElementById("leaveDateTypeFilter").value = "CheckinTime";
-      highlightLeaveFilterButton();
-      loadLeaveData();
-    }
+    function resetLeaveFilter() {
+      currentLeaveSearch = "";
+      leaveStartDate = leaveEndDate = "";
+      currentLeaveFilter = "hôm nay";
+      leaveDateType = "CheckinTime";
+      document.getElementById("leaveSearchBox").value = "";
+      document.getElementById("leaveStartDate").value = "";
+      document.getElementById("leaveEndDate").value = "";
+      document.getElementById("leaveDateTypeFilter").value = "CheckinTime";
+      highlightLeaveFilterButton();
+      loadLeaveData();
+    }
 
-    function highlightFilterButton() {
-      document.querySelectorAll("#filters button").forEach(btn => btn.classList.remove("active"));
-      const map = {
-        "hôm nay":"btn-homnay","tuần":"btn-tuan","tháng":"btn-thang",
-        "năm":"btn-nam","tất cả":"btn-tatca"
-      };
-      if (map[currentFilter]) document.getElementById(map[currentFilter]).classList.add("active");
-    }
+    function highlightFilterButton() {
+      document.querySelectorAll("#filters button").forEach(btn => btn.classList.remove("active"));
+      const map = {
+        "hôm nay":"btn-homnay","tuần":"btn-tuan","tháng":"btn-thang",
+        "năm":"btn-nam","tất cả":"btn-tatca"
+      };
+      if (map[currentFilter]) document.getElementById(map[currentFilter]).classList.add("active");
+    }
 
-    function highlightLeaveFilterButton() {
-      document.querySelectorAll("#leaveSection .controls:nth-child(1) button").forEach(btn => btn.classList.remove("active"));
-      const map = {
-        "hôm nay":"leave-btn-homnay","tuần":"leave-btn-tuan","tháng":"leave-btn-thang",
-        "năm":"leave-btn-nam","tất cả":"leave-btn-tatca"
-      };
-      if (map[currentLeaveFilter]) document.getElementById(map[currentLeaveFilter]).classList.add("active");
-    }
+    function highlightLeaveFilterButton() {
+      document.querySelectorAll("#leaveSection .controls:nth-child(1) button").forEach(btn => btn.classList.remove("active"));
+      const map = {
+        "hôm nay":"leave-btn-homnay","tuần":"leave-btn-tuan","tháng":"leave-btn-thang",
+        "năm":"leave-btn-nam","tất cả":"leave-btn-tatca"
+      };
+      if (map[currentLeaveFilter]) document.getElementById(map[currentLeaveFilter]).classList.add("active");
+    }
 
-    function populateYears() {
-      const currentYear = new Date().getFullYear();
-      const years = [];
-      for (let y = currentYear - 5; y <= currentYear + 1; y++) {
-        years.push(y);
-      }
-      const yearOptions = years.map(y => `<option value="${y}">${y}</option>`).join('');
-      document.getElementById('exportYear').innerHTML = yearOptions;
-    }
+    function populateYears() {
+      const currentYear = new Date().getFullYear();
+      const years = [];
+      for (let y = currentYear - 5; y <= currentYear + 1; y++) {
+        years.push(y);
+      }
+      const yearOptions = years.map(y => `<option value="${y}">${y}</option>`).join('');
+      document.getElementById('exportYear').innerHTML = yearOptions;
+    }
 
-    // === XUẤT DỮ LIỆU MỚI ===
-    function handleExportClick() {
-      const email = localStorage.getItem("adminEmail");
-      if (!email) {
-        document.getElementById("loginModal").style.display = "flex";
-        return showMessage("Chưa đăng nhập", "error");
-      }
-      resetExportModal();
-      const currentMonth = new Date().getMonth() + 1;
-      const currentYear = new Date().getFullYear();
-      document.getElementById('exportMonth').value = currentMonth;
-      document.getElementById('exportYear').value = currentYear;
-      document.getElementById("exportModal").style.display = "flex";
-    }
+    // === XUẤT DỮ LIỆU MỚI ===
+    function handleExportClick() {
+      const email = localStorage.getItem("adminEmail");
+      if (!email) {
+        document.getElementById("loginModal").style.display = "flex";
+        return showMessage("Chưa đăng nhập", "error");
+      }
+      resetExportModal();
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+      document.getElementById('exportMonth').value = currentMonth;
+      document.getElementById('exportYear').value = currentYear;
+      document.getElementById("exportModal").style.display = "flex";
+    }
 
-    function resetExportModal() {
-      document.getElementById("exportTypeSelect").value = "";
-      document.getElementById("exportRangeType").value = "month";
-      // *** DÒNG ĐƯỢC THÊM *** Đảm bảo combobox không bị vô hiệu hóa khi reset
-      document.getElementById("exportRangeType").disabled = false; 
-      document.getElementById("exportMonth").value = new Date().getMonth() + 1;
-      document.getElementById("exportYear").value = new Date().getFullYear();
-      document.getElementById("exportSingleDate").value = "";
-      document.getElementById("exportStartDate").value = "";
-      document.getElementById("exportEndDate").value = "";
-      document.getElementById("exportModalMessage").style.display = "none";
-      document.getElementById("exportModalMessage").innerHTML = "";
-      updateExportRangeOptions();
-    }
+    function resetExportModal() {
+      document.getElementById("exportTypeSelect").value = "";
+      document.getElementById("exportRangeType").value = "month";
+      document.getElementById("exportMonth").value = new Date().getMonth() + 1;
+      document.getElementById("exportYear").value = new Date().getFullYear();
+      document.getElementById("exportSingleDate").value = "";
+      document.getElementById("exportStartDate").value = "";
+      document.getElementById("exportEndDate").value = "";
+      document.getElementById("exportModalMessage").style.display = "none";
+      document.getElementById("exportModalMessage").innerHTML = "";
+      updateExportRangeOptions();
+    }
 
-    document.getElementById("cancelExportBtn").onclick = () => {
-      document.getElementById("exportModal").style.display = "none";
-    };
+    document.getElementById("cancelExportBtn").onclick = () => {
+      document.getElementById("exportModal").style.display = "none";
+    };
 
-    document.getElementById("resetExportBtn").onclick = resetExportModal;
+    document.getElementById("resetExportBtn").onclick = resetExportModal;
 
-    document.getElementById("exportRangeType").onchange = updateExportRangeOptions;
-    
-    // *** HÀM MỚI ĐƯỢC THÊM ***
-    // Xử lý khi người dùng thay đổi "Loại dữ liệu" (Điểm danh / Nghỉ phép)
-    document.getElementById("exportTypeSelect").onchange = function() {
-      const exportType = this.value;
-      const rangeSelect = document.getElementById("exportRangeType");
-      
-      if (exportType === 'leave') {
-        // Nếu là 'Nghỉ phép', buộc chọn 'Xuất theo tháng' và vô hiệu hóa combobox
-        rangeSelect.value = 'month';
-        rangeSelect.disabled = true;
-      } else {
-        // Nếu là loại khác, kích hoạt lại combobox
-        rangeSelect.disabled = false;
-      }
-      // Cập nhật các tùy chọn hiển thị (tháng, ngày, khoảng)
-      updateExportRangeOptions(); 
-    };
-    // *** KẾT THÚC HÀM MỚI ***
-    
-    function updateExportRangeOptions() {
-      const rangeType = document.getElementById("exportRangeType").value;
-      document.querySelectorAll(".export-range-option").forEach(el => el.classList.remove("active"));
-      document.getElementById(rangeType === "month" ? "monthRange" : rangeType === "date" ? "dateRange" : "rangeDates").classList.add("active");
-    }
+    document.getElementById("exportRangeType").onchange = updateExportRangeOptions;
+    function updateExportRangeOptions() {
+      const rangeType = document.getElementById("exportRangeType").value;
+      document.querySelectorAll(".export-range-option").forEach(el => el.classList.remove("active"));
+      document.getElementById(rangeType === "month" ? "monthRange" : rangeType === "date" ? "dateRange" : "rangeDates").classList.add("active");
+    }
 
-    function showModalMessage(msg, type = "error") {
-      const el = document.getElementById("exportModalMessage");
-      el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
-      el.style.display = "block";
-      setTimeout(() => {
-        el.innerHTML = "";
-        el.style.display = "none";
-      }, 4000);
-    }
+    function showModalMessage(msg, type = "error") {
+      const el = document.getElementById("exportModalMessage");
+      el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
+      el.style.display = "block";
+      setTimeout(() => {
+        el.innerHTML = "";
+        el.style.display = "none";
+      }, 4000);
+    }
 
-    document.getElementById("confirmExportBtn").onclick = async function() {
-      const email = localStorage.getItem("adminEmail");
-      const exportType = document.getElementById("exportTypeSelect").value;
-      const rangeType = document.getElementById("exportRangeType").value;
+    document.getElementById("confirmExportBtn").onclick = async function() {
+      const email = localStorage.getItem("adminEmail");
+      const exportType = document.getElementById("exportTypeSelect").value;
+      const rangeType = document.getElementById("exportRangeType").value;
 
-      if (!exportType) return showModalMessage("Vui lòng chọn loại dữ liệu!", "error");
+      if (!exportType) return showModalMessage("Vui lòng chọn loại dữ liệu!", "error");
 
-      let url = "";
-      let params = new URLSearchParams();
-      params.append("email", email);
+      let url = "";
+      let params = new URLSearchParams();
+      params.append("email", email);
 
-      let activeFilter, activeStartDate, activeEndDate, activeSearch, activeDateType;
-      if (currentTab === 'attendance') {
-        activeFilter = currentFilter;
-        activeStartDate = startDate;
-        activeEndDate = endDate;
-        activeSearch = currentSearch;
-        activeDateType = '';
-      } else {
-        activeFilter = currentLeaveFilter;
-        activeStartDate = leaveStartDate;
-        activeEndDate = leaveEndDate;
-        activeSearch = currentLeaveSearch;
-        activeDateType = leaveDateType;
-      }
+      let activeFilter, activeStartDate, activeEndDate, activeSearch, activeDateType;
+      if (currentTab === 'attendance') {
+        activeFilter = currentFilter;
+        activeStartDate = startDate;
+        activeEndDate = endDate;
+        activeSearch = currentSearch;
+        activeDateType = '';
+      } else {
+        activeFilter = currentLeaveFilter;
+        activeStartDate = leaveStartDate;
+        activeEndDate = leaveEndDate;
+        activeSearch = currentLeaveSearch;
+        activeDateType = leaveDateType;
+      }
 
-      params.append("filter", activeFilter);
-      if (activeSearch) params.append("search", activeSearch);
-      if (activeDateType) params.append("dateType", activeDateType);
+      params.append("filter", activeFilter);
+      if (activeSearch) params.append("search", activeSearch);
+      if (activeDateType) params.append("dateType", activeDateType);
 
-      if (exportType === "attendance") url = "/api/export-excel";
-      else if (exportType === "leave") url = "/api/export-leaves-excel";
-      else if (exportType === "combined") url = "/api/export-combined-excel";
+      if (exportType === "attendance") url = "/api/export-excel";
+      else if (exportType === "leave") url = "/api/export-leaves-excel";
+      else if (exportType === "combined") url = "/api/export-combined-excel";
 
-      if (rangeType === "month") {
-        const month = document.getElementById("exportMonth").value;
-        const year = document.getElementById("exportYear").value;
-        if (!month || !year) return showModalMessage("Chọn tháng và năm!", "error");
-        params.append("month", month);
-        params.append("year", year);
-      } else if (rangeType === "date") {
-        const date = document.getElementById("exportSingleDate").value;
-        if (!date) return showModalMessage("Chọn ngày cụ thể!", "error");
-        params.append("startDate", date);
-        params.append("endDate", date);
-      } else if (rangeType === "range") {
-        const start = document.getElementById("exportStartDate").value;
-        const end = document.getElementById("exportEndDate").value;
-        if (!start || !end) return showModalMessage("Chọn đầy đủ từ ngày đến ngày!", "error");
-        if (start > end) return showModalMessage("Ngày bắt đầu phải trước ngày kết thúc!", "error");
-        params.append("startDate", start);
-        params.append("endDate", end);
-      }
+      if (rangeType === "month") {
+        const month = document.getElementById("exportMonth").value;
+        const year = document.getElementById("exportYear").value;
+        if (!month || !year) return showModalMessage("Chọn tháng và năm!", "error");
+        params.append("month", month);
+        params.append("year", year);
+      } else if (rangeType === "date") {
+        const date = document.getElementById("exportSingleDate").value;
+        if (!date) return showModalMessage("Chọn ngày cụ thể!", "error");
+        params.append("startDate", date);
+        params.append("endDate", date);
+      } else if (rangeType === "range") {
+        const start = document.getElementById("exportStartDate").value;
+        const end = document.getElementById("exportEndDate").value;
+        if (!start || !end) return showModalMessage("Chọn đầy đủ từ ngày đến ngày!", "error");
+        if (start > end) return showModalMessage("Ngày bắt đầu phải trước ngày kết thúc!", "error");
+        params.append("startDate", start);
+        params.append("endDate", end);
+      }
 
-      try {
-        window.location.href = `${url}?${params.toString()}`;
-        document.getElementById("exportModal").style.display = "none";
-        showMessage("Đang xuất file...", "success");
-      } catch (err) {
-        showModalMessage("Lỗi khi xuất dữ liệu!", "error");
-      }
-    };
+      try {
+        window.location.href = `${url}?${params.toString()}`;
+        document.getElementById("exportModal").style.display = "none";
+        showMessage("Đang xuất file...", "success");
+      } catch (err) {
+        showModalMessage("Lỗi khi xuất dữ liệu!", "error");
+      }
+    };
 
-    window.onload = () => {
-      populateYears();
-      const email = localStorage.getItem("adminEmail");
-      if (email) {
-        const username = localStorage.getItem("adminUser");
-        document.getElementById("greeting").innerHTML = `Xin chào, ${username}!`;
-        showDashboard();
-        applyFilter("hôm nay");
-      } else {
-        hideDashboard();
-        document.getElementById("loginModal").style.display = "flex";
-      }
-    };
+    window.onload = () => {
+      populateYears();
+      const email = localStorage.getItem("adminEmail");
+      if (email) {
+        const username = localStorage.getItem("adminUser");
+        document.getElementById("greeting").innerHTML = `Xin chào, ${username}!`;
+        showDashboard();
+        applyFilter("hôm nay");
+      } else {
+        hideDashboard();
+        document.getElementById("loginModal").style.display = "flex";
+      }
+    };
 
-    document.getElementById("loginPass").addEventListener("keypress", (e) => {
-      if (e.key === "Enter") login();
-    });
-  </script>
+    document.getElementById("loginPass").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") login();
+    });
+  </script>
 </body>
 </html>
