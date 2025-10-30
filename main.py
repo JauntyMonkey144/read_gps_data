@@ -722,7 +722,30 @@ def get_export_filename(prefix, start_date, end_date, export_date_str):
     except:
         # Dự phòng nếu lỗi định dạng
         return f"{prefix} {start_date} đến {end_date}_{export_date_str}.xlsx"
-    
+        
+def add_leave_date_filter(conditions, start_date, end_date):
+    """
+    Thêm điều kiện lọc đơn nghỉ phép có ngày nghỉ giao với [start_date, end_date]
+    """
+    try:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        # Từ ngày 1 tháng của start_date để tính overlap
+        query_start = start_dt.replace(day=1).strftime("%Y-%m-%d")
+    except:
+        return
+
+    conditions.append({
+        "$or": [
+            {"LeaveDate": {"$gte": query_start, "$lte": end_date}},
+            {"StartDate": {"$gte": query_start, "$lte": end_date}},
+            {"EndDate": {"$gte": query_start, "$lte": end_date}},
+            {"$and": [
+                {"StartDate": {"$lte": end_date}},
+                {"EndDate": {"$gte": query_start}}
+            ]}
+        ]
+    })    
 @app.route("/api/export-excel", methods=["GET"])
 def export_to_excel():
     try:
@@ -903,13 +926,13 @@ def export_to_excel():
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
-# ---- API xuất Excel cho nghỉ phép ----
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
     try:
         email = request.args.get("email")
         if not email:
             return jsonify({"error": "Thiếu email"}), 400
+
         admin = admins.find_one({"email": email})
         user_doc = users.find_one({"email": email})
         username = None if admin else user_doc.get("username") if user_doc else None
@@ -920,7 +943,24 @@ def export_leaves_to_excel():
         if not start_date or not end_date:
             return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
-        # --- Xác định export_year, export_month ---
+        # === LỌC ĐÚNG THEO NGÀY NGHỈ ===
+        regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
+        conditions = [{"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}]
+
+        # Lọc theo ngày nghỉ (giao với khoảng xuất)
+        add_leave_date_filter(conditions, start_date, end_date)
+
+        search = request.args.get("search", "").strip()
+        if search:
+            regex = re.compile(search, re.IGNORECASE)
+            conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
+        if username:
+            conditions.append({"EmployeeName": username})
+
+        query = {"$and": conditions}
+        all_leaves_data = list(collection.find(query, {"_id": 0}))
+
+        # === Tính tháng từ start_date ===
         try:
             start_dt = datetime.strptime(start_date, "%Y-%m-%d")
             export_year = start_dt.year
@@ -930,24 +970,17 @@ def export_leaves_to_excel():
             export_year = today.year
             export_month = today.month
 
-        regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
-        conditions = [{"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}]
-        search = request.args.get("search", "").strip()
-        if search:
-            regex = re.compile(search, re.IGNORECASE)
-            conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
-        if username:
-            conditions.append({"EmployeeName": username})
-        query = {"$and": conditions}
-        all_leaves_data = list(collection.find(query, {"_id": 0}))
-
+        # === XUẤT EXCEL ===
         template_path = "templates/Copy of Form nghỉ phép.xlsx"
         wb = load_workbook(template_path)
         ws = wb.active
-        ws['A1'] = "Mã NV"; ws['B1'] = "Tên NV"; ws['C1'] = "Ngày Nghỉ"; ws['D1'] = "Số ngày nghỉ"
-        ws['E1'] = "Ngày tạo đơn"; ws['F1'] = "Lý do"; ws['G1'] = "Ngày Duyệt/Từ chối Lần đầu"
-        ws['H1'] = "Trạng thái Lần đầu"; ws['I1'] = "Ngày Duyệt/Từ chối Lần cuối"
-        ws['J1'] = "Trạng thái Lần cuối"; ws['K1'] = "Ghi chú"
+
+        # Header
+        headers = ["Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
+                   "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối",
+                   "Trạng thái Lần cuối", "Ghi chú"]
+        for i, h in enumerate(headers, 1):
+            ws.cell(row=1, column=i, value=h)
 
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
@@ -958,10 +991,9 @@ def export_leaves_to_excel():
             if not is_overlap:
                 continue
 
-            # --- XỬ LÝ HIỂN THỊ NGÀY NGHỈ ĐƠN ---
+            # --- Hiển thị ngày nghỉ ---
             start_dt = end_dt = None
             session = rec.get("Session", "").strip()
-
             if rec.get("StartDate"):
                 try: start_dt = datetime.strptime(rec["StartDate"], "%Y-%m-%d")
                 except: pass
@@ -973,10 +1005,8 @@ def export_leaves_to_excel():
                 except: pass
 
             if start_dt and end_dt and start_dt == end_dt:
-                day_str = start_dt.strftime("%d/%m/%Y")
-                if session:
-                    day_str += f" ({session})"
-                display_date = day_str
+                display_date = start_dt.strftime("%d/%m/%Y")
+                if session: display_date += f" ({session})"
             elif start_dt and end_dt:
                 display_date = f"Từ {start_dt.strftime('%d/%m/%Y')} đến {end_dt.strftime('%d/%m/%Y')}"
             else:
@@ -990,6 +1020,7 @@ def export_leaves_to_excel():
             ws.cell(row=current_row, column=3, value=display_date)
             ws.cell(row=current_row, column=4, value=leave_days)
 
+            # Ngày tạo đơn
             timestamp_str = ""
             if rec.get("CreationTime"):
                 try:
@@ -1008,21 +1039,27 @@ def export_leaves_to_excel():
             ws.cell(row=current_row, column=10, value=rec.get("Status2", ""))
             ws.cell(row=current_row, column=11, value=rec.get("LeaveNote", ""))
 
-            for col_idx in range(1, 12):
-                cell = ws.cell(row=current_row, column=col_idx)
+            # Định dạng
+            for col in range(1, 12):
+                cell = ws.cell(row=current_row, column=col)
                 cell.border = border
                 cell.alignment = align_left
             current_row += 1
 
-        # --- Tên file ---
+        # === TÊN FILE ===
         export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
         filename = get_export_filename("Nghỉ phép", start_date, end_date, export_date_str)
 
         output = BytesIO()
         wb.save(output)
         output.seek(0)
-        return send_file(output, as_attachment=True, download_name=filename,
-                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
     except Exception as e:
         print(f"Lỗi export leaves: {e}")
         import traceback
@@ -1032,47 +1069,53 @@ def export_leaves_to_excel():
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
     try:
+        # === 1. KIỂM TRA EMAIL & QUYỀN ===
         email = request.args.get("email")
         if not email:
             return jsonify({"error": "Thiếu email"}), 400
+
         admin = admins.find_one({"email": email})
         user = users.find_one({"email": email})
         if not admin and not user:
             return jsonify({"error": "Email không tồn tại"}), 403
         username = None if admin else user.get("username")
 
-        # === 1. XÁC ĐỊNH K0ẢNG XUẤT ===
+        # === 2. LẤY KHOẢNG NGÀY XUẤT ===
         start_date, end_date = get_export_date_range()
         if not start_date or not end_date:
             return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
-        # === 2. XÁC ĐỊNH NGÀY 1 CỦA THÁNG CUỐI ĐỂ TÍNH TỔNG GIỜ ===
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-        query_start_dt = end_dt.replace(day=1)  # Luôn lấy từ ngày 1 của tháng
-        query_start = query_start_dt.strftime("%Y-%m-%d")
-
-        # === 3. LẤY DỮ LIỆU TỪ ĐẦU THÁNG ĐẾN end_date ===
+        query_start = end_dt.replace(day=1).strftime("%Y-%m-%d")  # Từ ngày 1 tháng
         search = request.args.get("search", "").strip()
+
+        # === 3. LẤY DỮ LIỆU ĐIỂM DANH (từ đầu tháng đến end_date) ===
         attendance_query = build_attendance_query("custom", query_start, end_date, search, username=username)
+        attendance_data = list(collection.find(attendance_query, {"_id": 0}))
+
+        # === 4. LẤY DỮ LIỆU NGHỈ PHÉP (chỉ đơn có ngày nghỉ giao với khoảng) ===
         regex_leave = re.compile("Nghỉ phép", re.IGNORECASE)
         leave_conditions = [{"$or": [{"Tasks": regex_leave}, {"Reason": {"$exists": True}}]}]
+
+        # LỌC THEO NGÀY NGHỈ (giao với khoảng xuất)
+        add_leave_date_filter(leave_conditions, start_date, end_date)
+
         if search:
             regex = re.compile(search, re.IGNORECASE)
             leave_conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
         if username:
             leave_conditions.append({"EmployeeName": username})
-        leave_query = {"$and": leave_conditions}
 
-        attendance_data = list(collection.find(attendance_query, {"_id": 0}))
+        leave_query = {"$and": leave_conditions}
         leave_data = list(collection.find(leave_query, {"_id": 0}))
 
-        # === 4. TẠO WORKBOOK ===
+        # === 5. TẠO WORKBOOK ===
         template_path = "templates/Form kết hợp.xlsx"
         wb = load_workbook(template_path)
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-        # ================= SHEET: ĐIỂM DANH =================
+        # ==================== SHEET: ĐIỂM DANH ====================
         ws_att = wb["Điểm danh"]
 
         # --- Tính giờ làm theo ngày (Cột 14) ---
@@ -1108,6 +1151,7 @@ def export_combined_to_excel():
                         continue
                 checkins = [t for t in checkins if isinstance(t, datetime)]
                 checkouts = [t for t in checkouts if isinstance(t, datetime)]
+
                 daily_seconds = 0
                 if checkins and checkouts:
                     first_in = min(checkins)
@@ -1119,7 +1163,6 @@ def export_combined_to_excel():
         # --- Tính tổng giờ tích lũy từ đầu tháng (Cột 15) ---
         monthly_hours_map = {}
         for emp_id, records in emp_data.items():
-            # Sắp xếp theo ngày (CheckinDate)
             sorted_records = sorted(
                 records,
                 key=lambda r: datetime.strptime(r.get("CheckinDate", "01/01/1900"), "%d/%m/%Y")
@@ -1133,11 +1176,10 @@ def export_combined_to_excel():
                 m, s = divmod(rem, 60)
                 monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
 
-        # --- Ghi dữ liệu điểm danh (chỉ ngày trong khoảng xuất) ---
+        # --- GHI DỮ LIỆU ĐIỂM DANH (chỉ ngày trong khoảng start_date → end_date) ---
         grouped = {}
         for d in attendance_data:
             date_str = d.get("CheckinDate", "")
-            # Chỉ lấy các ngày nằm trong khoảng start_date → end_date
             try:
                 rec_date = datetime.strptime(date_str, "%d/%m/%Y")
                 start_dt = datetime.strptime(start_date, "%Y-%m-%d")
@@ -1161,7 +1203,7 @@ def export_combined_to_excel():
             m_d, s_d = divmod(rem_d, 60)
             ws_att.cell(row=row, column=14, value=f"{int(h_d)}h {int(m_d)}m {int(s_d)}s" if daily_sec > 0 else "")
 
-            # Cột 15: Tổng giờ từ đầu tháng đến ngày đó
+            # Cột 15: Tổng giờ tích lũy
             ws_att.cell(row=row, column=15, value=monthly_hours_map.get((emp_id, date_str), ""))
 
             # Ghi checkin/checkout
@@ -1173,7 +1215,9 @@ def export_combined_to_excel():
                         try:
                             ts = rec["Timestamp"]
                             if isinstance(ts, str):
-                                ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                                ts_ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+                            else:
+                                ts = rec["Timestamp"]
                             time_str = ts.astimezone(VN_TZ).strftime("%H:%M:%S")
                         except:
                             time_str = ""
@@ -1200,12 +1244,15 @@ def export_combined_to_excel():
                 cell.border = border
                 cell.alignment = align_left
 
-        # ================= SHEET: NGHỈ PHÉP =================
+        # ==================== SHEET: NGHỈ PHÉP ====================
         ws_leave = wb["Nghỉ phép"]
-        ws_leave['A1'] = "Mã NV"; ws_leave['B1'] = "Tên NV"; ws_leave['C1'] = "Ngày Nghỉ"; ws_leave['D1'] = "Số ngày nghỉ"
-        ws_leave['E1'] = "Ngày tạo đơn"; ws_leave['F1'] = "Lý do"; ws_leave['G1'] = "Ngày Duyệt/Từ chối Lần đầu"
-        ws_leave['H1'] = "Trạng thái Lần đầu"; ws_leave['I1'] = "Ngày Duyệt/Từ chối Lần cuối"
-        ws_leave['J1'] = "Trạng thái Lần cuối"; ws_leave['K1'] = "Ghi chú"
+
+        # Header
+        headers = ["Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
+                   "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối",
+                   "Trạng thái Lần cuối", "Ghi chú"]
+        for i, h in enumerate(headers, 1):
+            ws_leave.cell(row=1, column=i, value=h)
 
         current_row_leave = 2
         export_year = end_dt.year
@@ -1216,7 +1263,7 @@ def export_combined_to_excel():
             if not is_overlap:
                 continue
 
-            # Xử lý hiển thị ngày nghỉ
+            # --- Hiển thị ngày nghỉ ---
             start_dt = end_dt = None
             session = rec.get("Session", "").strip()
             if rec.get("StartDate"):
@@ -1230,10 +1277,8 @@ def export_combined_to_excel():
                 except: pass
 
             if start_dt and end_dt and start_dt == end_dt:
-                day_str = start_dt.strftime("%d/%m/%Y")
-                if session:
-                    day_str += f" ({session})"
-                display_date = day_str
+                display_date = start_dt.strftime("%d/%m/%Y")
+                if session: display_date += f" ({session})"
             elif start_dt and end_dt:
                 display_date = f"Từ {start_dt.strftime('%d/%m/%Y')} đến {end_dt.strftime('%d/%m/%Y')}"
             else:
@@ -1241,12 +1286,13 @@ def export_combined_to_excel():
                 if display_date:
                     display_date = re.sub(r"\d{4}-\d{2}-\d{2}", lambda m: datetime.strptime(m.group(0), "%Y-%m-%d").strftime("%d/%m/%Y"), display_date)
 
-            # Ghi dữ liệu
+            # --- Ghi dữ liệu ---
             ws_leave.cell(row=current_row_leave, column=1, value=rec.get("EmployeeId", ""))
             ws_leave.cell(row=current_row_leave, column=2, value=rec.get("EmployeeName", ""))
             ws_leave.cell(row=current_row_leave, column=3, value=display_date)
             ws_leave.cell(row=current_row_leave, column=4, value=leave_days)
 
+            # Ngày tạo đơn
             timestamp_str = ""
             if rec.get("CreationTime"):
                 try:
@@ -1269,14 +1315,13 @@ def export_combined_to_excel():
                 cell = ws_leave.cell(row=current_row_leave, column=col)
                 cell.border = border
                 cell.alignment = align_left
-
             current_row_leave += 1
 
-        # === TẠO TÊN FILE ===
+        # === 6. TẠO TÊN FILE ===
         export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
         filename = get_export_filename("Báo cáo tổng hợp", start_date, end_date, export_date_str)
 
-        # === XUẤT FILE ===
+        # === 7. XUẤT FILE ===
         output = BytesIO()
         wb.save(output)
         output.seek(0)
@@ -1295,6 +1340,7 @@ def export_combined_to_excel():
 
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
