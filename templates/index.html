@@ -787,7 +787,7 @@
       document.getElementById("exportEndDate").value = "";
       document.getElementById("exportModalMessage").style.display = "none";
       document.getElementById("exportModalMessage").innerHTML = "";
-      updateExportScopeOptions();
+      updateExportRangeOptions();
     }
 
     document.getElementById("cancelExportBtn").onclick = () => {
@@ -797,42 +797,12 @@
     document.getElementById("resetExportBtn").onclick = resetExportModal;
 
     document.getElementById("exportRangeType").onchange = updateExportRangeOptions;
-
-    // === THÊM DÒNG NÀY ===
-    document.getElementById("exportTypeSelect").onchange = updateExportScopeOptions;
-    // ======================
-    
     function updateExportRangeOptions() {
       const rangeType = document.getElementById("exportRangeType").value;
       document.querySelectorAll(".export-range-option").forEach(el => el.classList.remove("active"));
       document.getElementById(rangeType === "month" ? "monthRange" : rangeType === "date" ? "dateRange" : "rangeDates").classList.add("active");
     }
 
-// === HÀM MỚI ĐỂ CẬP NHẬT LỰA CHỌN PHẠM VI XUẤT ===
-    function updateExportScopeOptions() {
-      const exportType = document.getElementById("exportTypeSelect").value;
-      const rangeDropdown = document.getElementById("exportRangeType");
-      const optionDate = rangeDropdown.querySelector('option[value="date"]');
-      const optionRange = rangeDropdown.querySelector('option[value="range"]');
-
-      if (exportType === 'leave') {
-        // Nếu là 'Nghỉ Phép'
-        optionDate.style.display = 'none';  // Ẩn 'Xuất theo ngày cụ thể'
-        optionRange.style.display = 'none'; // Ẩn 'Xuất theo khoảng'
-        rangeDropdown.value = 'month';      // Tự động chọn 'Xuất theo tháng'
-        rangeDropdown.disabled = true;      // Vô hiệu hóa dropdown
-      } else {
-        // Cho các loại khác (Điểm danh, Combined, hoặc chưa chọn)
-        optionDate.style.display = '';   // Hiện lại
-        optionRange.style.display = '';  // Hiện lại
-        rangeDropdown.disabled = false;     // Kích hoạt lại dropdown
-      }
-
-      // Luôn gọi hàm này để cập nhật các ô input (tháng/ngày/khoảng)
-      updateExportRangeOptions(); 
-    }
-    // =======================================================
-    
     function showModalMessage(msg, type = "error") {
       const el = document.getElementById("exportModalMessage");
       el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
