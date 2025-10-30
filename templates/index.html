@@ -1,987 +1,898 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dữ liệu Chấm công & Nghỉ phép</title>
-  <style>
-    :root {
-      --bg: #f4f6f9;
-      --card: #fff;
-      --primary: #007bff;
-      --success: #28a745;
-      --danger: #dc3545;
-      --muted: #6c757d;
-      --shadow: 0 3px 12px rgba(0,0,0,0.08);
-    }
-    body {
-      font-family: "Segoe UI", Arial, sans-serif;
-      background: var(--bg);
-      margin: 0;
-      padding: 20px;
-      position: relative;
-    }
-    h1 { text-align: center; color: var(--primary); }
-    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
-    button {
-      background: var(--primary);
-      color: white;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: 0.2s;
-    }
-    button:hover { opacity: 0.9; }
-    button.active { background: var(--success); }
-    select, input[type="text"], input[type="email"], input[type="password"], input[type="date"] {
-      padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
-    }
-    table { width: 100%; border-collapse: collapse; background: white; box-shadow: var(--shadow); }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap;}
-    th { background: var(--primary); color: white; cursor: pointer; user-select: none; }
-    th.asc::after { content: " ↑"; font-size: 12px; }
-    th.desc::after { content: " ↓"; font-size: 12px; }
-    tr:nth-child(even) { background: #f8f9fa; }
-    .pagination { text-align: center; margin-top: 15px; }
-    .pagination button {
-      background: white; border: 1px solid #ccc; color: var(--primary);
-      margin: 2px; border-radius: 4px; padding: 5px 10px;
-    }
-    .pagination button.active { background: var(--primary); color: white; }
-    img.checkin-photo { height: 60px; width: auto; border-radius: 6px; object-fit: cover; }
-    .msg { margin: 10px 0; padding: 8px 10px; border-radius: 6px; }
-    .msg.error { background: #ffe6e6; color: var(--danger); }
-    .msg.success { background: #e8fbe8; color: var(--success); }
-    a.map-link { color: var(--primary); text-decoration: none; font-weight: 500; }
-    a.map-link:hover { text-decoration: underline; }
-    #greeting, #dataTabs, #filters, #dateFilter, #searchFilter, #tableContainer, #pagination, #logoutBtn { display: none; }
-    #greeting { text-align: center; margin: 10px 0; font-size: 18px; color: var(--primary); font-weight: bold; }
-    #dataTabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; }
-    #dataTabs button { padding: 8px 16px; font-size: 15px; min-width: 120px; }
-    #leaveSection { display: none; }
-    #leaveTableContainer table th:first-child { min-width: 100px; }
-    .export-group { display: flex; gap: 5px; align-items: center; }
-    .table-scroll { overflow-x: auto; }
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
-      z-index: 1000;
-      justify-content: center;
-      align-items: center;
-    }
-    .modal-content {
-      background: var(--card);
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: var(--shadow);
-      width: 90%;
-      max-width: 400px;
-      text-align: center;
-    }
-    .modal-content h2 { margin: 0 0 15px; color: var(--primary); }
-    .modal-content input {
-      width: calc(100% - 16px);
-      margin-bottom: 10px;
-    }
-    .modal-content button {
-      width: 100%;
-      padding: 10px;
-      margin: 10px 0 5px;
-    }
-    .modal-content a {
-      color: var(--muted);
-      font-size: 13px;
-      text-decoration: none;
-      display: inline-block;
-      margin-top: 10px;
-    }
-    .modal-content a:hover { text-decoration: underline; }
-    
-    /* === CSS CẬP NHẬT (BẮT ĐẦU TỪ ĐÂY) === */
-    .modal-content label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: 500;
-        text-align: left;
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dữ liệu Chấm công & Nghỉ phép</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #fff;
+      --primary: #007bff;
+      --success: #28a745;
+      --danger: #dc3545;
+      --muted: #6c757d;
+      --shadow: 0 3px 12px rgba(0,0,0,0.08);
     }
-    .modal-content .export-date-options {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        align-items: center;
-        background: #f4f4f4;
-        padding: 10px;
-        border-radius: 6px;
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: var(--bg);
+      margin: 0;
+      padding: 20px;
+      position: relative;
     }
-    .modal-content .export-date-options label {
-        margin-bottom: 0;
-        font-weight: normal;
+    h1 { text-align: center; color: var(--primary); }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items: center; }
+    button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: 0.2s;
     }
-    #exportDateType {
-        margin: 10px 0; 
-        display: flex; 
-        flex-wrap: wrap; 
-        gap: 15px;
-        padding: 5px 0;
+    button:hover { opacity: 0.9; }
+    button.active { background: var(--success); }
+    select, input[type="text"], input[type="email"], input[type="password"], input[type="date"] {
+      padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
     }
-    #exportDateType label {
-        font-weight: normal; /* Make radio labels normal */
-        margin-bottom: 0;
-        display: flex;
-        align-items: center;
-        gap: 4px;
+    table { width: 100%; border-collapse: collapse; background: white; box-shadow: var(--shadow); }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap;}
+    th { background: var(--primary); color: white; cursor: pointer; user-select: none; }
+    th.asc::after { content: " up"; font-size: 12px; }
+    th.desc::after { content: " down"; font-size: 12px; }
+    tr:nth-child(even) { background: #f8f9fa; }
+    .pagination { text-align: center; margin-top: 15px; }
+    .pagination button {
+      background: white; border: 1px solid #ccc; color: var(--primary);
+      margin: 2px; border-radius: 4px; padding: 5px 10px;
     }
-    .modal-content select {
-        width: 100%;
-        margin-bottom: 10px;
+    .pagination button.active { background: var(--primary); color: white; }
+    img.checkin-photo { height: 60px; width: auto; border-radius: 6px; object-fit: cover; }
+    .msg { margin: 10px 0; padding: 8px 10px; border-radius: 6px; }
+    .msg.error { background: #ffe6e6; color: var(--danger); }
+    .msg.success { background: #e8fbe8; color: var(--success); }
+    a.map-link { color: var(--primary); text-decoration: none; font-weight: 500; }
+    a.map-link:hover { text-decoration: underline; }
+    #greeting, #dataTabs, #filters, #dateFilter, #searchFilter, #tableContainer, #pagination, #logoutBtn { display: none; }
+    #greeting { text-align: center; margin: 10px 0; font-size: 18px; color: var(--primary); font-weight: bold; }
+    #dataTabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; }
+    #dataTabs button { padding: 8px 16px; font-size: 15px; min-width: 120px; }
+    #leaveSection { display: none; }
+    #leaveTableContainer table th:first-child { min-width: 100px; }
+    .export-group { display: flex; gap: 5px; align-items: center; }
+    .table-scroll { overflow-x: auto; }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
     }
-  </style>
+    .modal-content {
+      background: var(--card);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      width: 90%;
+      max-width: 500px;
+      text-align: center;
+    }
+    .modal-content h2 { margin: 0 0 15px; color: var(--primary); }
+    .modal-content input, .modal-content select {
+      width: calc(100% - 16px);
+      margin-bottom: 10px;
+    }
+    .modal-content button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0 5px;
+    }
+    .modal-content a {
+      color: var(--muted);
+      font-size: 13px;
+      text-decoration: none;
+      display: inline-block;
+      margin-top: 10px;
+    }
+    .modal-content a:hover { text-decoration: underline; }
+
+    /* THÊM CHO MODAL XUẤT */
+    .export-range-option {
+      margin-bottom: 15px;
+      display: none;
+    }
+    .export-range-option.active {
+      display: block;
+    }
+  </style>
 </head>
 <body>
-  <h1>📍Dữ liệu Chấm công & Nghỉ phép</h1>
-  <div id="messageArea"></div>
-  <div id="greeting"></div>
-  <button id="logoutBtn" style="background:var(--danger);">Đăng xuất</button>
-  <div id="dataTabs">
-    <button id="tabAttendance" class="active" onclick="switchTab('attendance')">Điểm danh</button>
-    <button id="tabLeave" onclick="switchTab('leave')">Nghỉ phép</button>
-  </div>
-  <div id="filters" class="controls">
-    <label><b>Bộ lọc:</b></label>
-    <button onclick="applyFilter('hôm nay')" id="btn-homnay">Hôm nay</button>
-    <button onclick="applyFilter('tuần')" id="btn-tuan">Tuần</button>
-    <button onclick="applyFilter('tháng')" id="btn-thang">Tháng</button>
-    <button onclick="applyFilter('năm')" id="btn-nam">Năm</button>
-    <button onclick="applyFilter('tất cả')" id="btn-tatca">Tất cả</button>
-  </div>
-  <div id="dateFilter" class="controls">
-    <label><b>Từ ngày:</b></label><input type="date" id="startDate" />
-    <label><b>Đến ngày:</b></label><input type="date" id="endDate" />
-    <button onclick="applyDateRange()">Áp dụng</button>
-  </div>
-  <div id="searchFilter" class="controls">
-    <input type="text" id="searchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
-    <button onclick="applySearch()">Tìm kiếm</button>
-    <select id="rowsPerPage" onchange="updateRowsPerPage()">
-      <option value="5" selected>5 dòng</option>
-      <option value="10">10 dòng</option>
-      <option value="20">20 dòng</option>
-      <option value="25">25 dòng</option>
-    </select>
-    <div class="export-group" id="exportGroupAttendance">
-            <button onclick="openExportModal()">📤 Xuất Dữ Liệu</button>
-    </div>
-    <button onclick="refreshData()">🔄 Làm mới</button>
-    <button onclick="resetFilter()">↻ Reset</button>
-  </div>
-  <div id="tableContainer" class="table-container table-scroll">
-    <table id="dataTable">
-      <thead>
-        <tr>
-          <th onclick="sortTable('EmployeeId')">Mã NV</th>
-          <th onclick="sortTable('EmployeeName')">Tên nhân viên</th>
-          <th onclick="sortTable('CheckinDate')">Ngày Chấm công</th>
-          <th onclick="sortTable('CreationTime')">Giờ Chấm công</th>
-          <th onclick="sortTable('CheckType')">Loại Chấm công</th>
-          <th onclick="sortTable('ProjectId')">Mã dự án</th>
-          <th onclick="sortTable('Tasks')">Công việc</th>
-          <th>Ảnh</th>
-          <th>Địa chỉ</th>
-          <th>Vị trí</th>
-          <th onclick="sortTable('CheckinNote')">Ghi chú</th>
-        </tr>
-      </thead>
-      <tbody id="dataBody"></tbody>
-    </table>
-  </div>
-  <div id="pagination" class="pagination"></div>
-
-  <div id="leaveSection">
-    <div class="controls">
-      <label><b>Bộ lọc:</b></label>
-      <button onclick="applyLeaveFilter('hôm nay')" id="leave-btn-homnay">Hôm nay</button>
-      <button onclick="applyLeaveFilter('tuần')" id="leave-btn-tuan">Tuần</button>
-      <button onclick="applyLeaveFilter('tháng')" id="leave-btn-thang">Tháng</button>
-      <button onclick="applyLeaveFilter('năm')" id="leave-btn-nam">Năm</button>
-      <button onclick="applyLeaveFilter('tất cả')" id="leave-btn-tatca">Tất cả</button>
-      <select id="leaveDateTypeFilter" onchange="applyLeaveDateTypeFilter()">
-        <option value="CheckinTime">Ngày tạo đơn</option>
-        <option value="ApprovalDate1">Ngày duyệt/từ chối lần đầu</option>
-        <option value="ApprovalDate2">Ngày duyệt/từ chối lần cuối</option>
-        <option value="LeaveDate">Ngày nghỉ</option>          
-      </select>
-    </div>
-    <div class="controls">
-      <label><b>Từ ngày:</b></label><input type="date" id="leaveStartDate" />
-      <label><b>Đến ngày:</b></label><input type="date" id="leaveEndDate" />
-      <button onclick="applyLeaveDateRange()">Áp dụng</button>
-    </div>
-    <div class="controls">
-      <input type="text" id="leaveSearchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
-      <button onclick="applyLeaveSearch()">Tìm kiếm</button>
-      <select id="leaveRowsPerPage" onchange="updateLeaveRowsPerPage()">
-        <option value="5" selected>5 dòng</option>
-        <option value="10">10 dòng</option>
-        <option value="20">20 dòng</option>
-        <option value="25">25 dòng</option>
-      </select>
-      <div class="export-group" id="exportGroupLeave">
-              <button onclick="openExportModal()">📤 Xuất Dữ Liệu</button>
-      </div>
-      <button onclick="refreshLeaveData()">🔄 Làm mới</button>
-      <button onclick="resetLeaveFilter()">↻ Reset</button>
-    </div>
-    <div id="leaveTableContainer" class="table-container table-scroll">
-      <table id="leaveTable">
-        <thead>
-          <tr>
-            <th onclick="sortLeaveTable('EmployeeId')">Mã NV</th>
-            <th onclick="sortLeaveTable('EmployeeName')">Tên nhân viên</th>
-            <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
-            <th onclick="sortLeaveTable('CheckinTime')">Ngày tạo đơn</th>
-            <th onclick="sortLeaveTable('Tasks')">Lý do</th>
-          _ <th onclick="sortLeaveTable('ApprovalDate1')">Ngày Duyệt/Từ chối Lần đầu</th>
-            <th onclick="sortLeaveTable('Status1')">Trạng thái Lần đầu</th>
-            <th onclick="sortLeaveTable('ApprovalDate2')">Ngày Duyệt/Từ chối Lần cuối</th>
-            <th onclick="sortLeaveTable('Status2')">Trạng thái Lần cuối</th>
-            <th onclick="sortLeaveTable('Note')">Ghi chú</th>
-          </tr>
-        </thead>
-        <tbody id="leaveDataBody"></tbody>
-      </table>
-    </div>
-    <div id="leavePagination" class="pagination"></div>
-  </div>
-
-  <div id="loginModal" class="modal">
-    <div class="modal-content">
-      <h2>Đăng nhập</h2>
-      <input type="email" id="loginEmail" placeholder="Nhập email admin..." />
-      <input type="password" id="loginPass" placeholder="Mật khẩu..." />
-      <button id="loginBtn">Đăng nhập</button>
-      <a href="/forgot-password">Quên mật khẩu?</a>
-      <div id="modalMessage" class="msg" style="display:none;"></div>
-    </div>
-  </div>
-
-<div id="exportModal" class="modal">
-  <div class="modal-content" style="max-width: 500px;">
-    <h2>Tùy chọn Xuất Dữ liệu</h2>
-    
-    <label for="exportType">Loại dữ liệu:</label>
-    <select id="exportType">
-      <option value="">-- Chọn loại file --</option>
-      <option value="attendance">Điểm Danh</option>
-      <option value="leave">Nghỉ Phép</option>
-      <option value="combined">Điểm danh & Nghỉ phép</option>
-    </select>
-
-    <label>Hình thức xuất:</label>
-    <div id="exportDateType">
-      <label><input type="radio" name="exportDateType" value="month" checked> Theo tháng</label>
-      <label><input type="radio" name="exportDateType" value="day"> Ngày cụ thể</label>
-      <label><input type="radio" name="exportDateType" value="range"> Khoảng ngày</label>
-    </div>
-
-    <div id="exportType-month" class="export-date-options">
-      <label>Tháng:</label>
-      <select id="exportMonth" style="width: auto;">
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
-        <option value="5">5</option>
-        <option value="6">6</option>
-        <option value="7">7</option>
-        <option value="8">8</option>
-        <option value="9">9</option>
-        <option value="10">10</option>
-        <option value="11">11</option>
-        <option value="12">12</option>
+  <h1>Dữ liệu Chấm công & Nghỉ phép</h1>
+  <div id="messageArea"></div>
+  <div id="greeting"></div>
+  <button id="logoutBtn" style="background:var(--danger);">Đăng xuất</button>
+  <div id="dataTabs">
+    <button id="tabAttendance" class="active" onclick="switchTab('attendance')">Điểm danh</button>
+    <button id="tabLeave" onclick="switchTab('leave')">Nghỉ phép</button>
+  </div>
+  <div id="filters" class="controls">
+    <label><b>Bộ lọc:</b></label>
+    <button onclick="applyFilter('hôm nay')" id="btn-homnay">Hôm nay</button>
+    <button onclick="applyFilter('tuần')" id="btn-tuan">Tuần</button>
+    <button onclick="applyFilter('tháng')" id="btn-thang">Tháng</button>
+    <button onclick="applyFilter('năm')" id="btn-nam">Năm</button>
+    <button onclick="applyFilter('tất cả')" id="btn-tatca">Tất cả</button>
+  </div>
+  <div id="dateFilter" class="controls">
+    <label><b>Từ ngày:</b></label><input type="date" id="startDate" />
+    <label><b>Đến ngày:</b></label><input type="date" id="endDate" />
+    <button onclick="applyDateRange()">Áp dụng</button>
+  </div>
+  <div id="searchFilter" class="controls">
+    <input type="text" id="searchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
+    <button onclick="applySearch()">Tìm kiếm</button>
+    <select id="rowsPerPage" onchange="updateRowsPerPage()">
+      <option value="5" selected>5 dòng</option>
+      <option value="10">10 dòng</option>
+      <option value="20">20 dòng</option>
+      <option value="25">25 dòng</option>
+    </select>
+    <button onclick="handleExportClick()">Xuất Dữ Liệu</button>
+    <button onclick="refreshData()">Làm mới</button>
+    <button onclick="resetFilter()">Reset</button>
+  </div>
+  <div id="tableContainer" class="table-container table-scroll">
+    <table id="dataTable">
+      <thead>
+        <tr>
+          <th onclick="sortTable('EmployeeId')">Mã NV</th>
+          <th onclick="sortTable('EmployeeName')">Tên nhân viên</th>
+          <th onclick="sortTable('CheckinDate')">Ngày Chấm công</th>
+          <th onclick="sortTable('CreationTime')">Giờ Chấm công</th>
+          <th onclick="sortTable('CheckType')">Loại Chấm công</th>
+          <th onclick="sortTable('ProjectId')">Mã dự án</th>
+          <th onclick="sortTable('Tasks')">Công việc</th>
+          <th>Ảnh</th>
+          <th>Địa chỉ</th>
+          <th>Vị trí</th>
+          <th onclick="sortTable('CheckinNote')">Ghi chú</th>
+        </tr>
+      </thead>
+      <tbody id="dataBody"></tbody>
+    </table>
+  </div>
+  <div id="pagination" class="pagination"></div>
+  <div id="leaveSection">
+    <div class="controls">
+      <label><b>Bộ lọc:</b></label>
+      <button onclick="applyLeaveFilter('hôm nay')" id="leave-btn-homnay">Hôm nay</button>
+      <button onclick="applyLeaveFilter('tuần')" id="leave-btn-tuan">Tuần</button>
+      <button onclick="applyLeaveFilter('tháng')" id="leave-btn-thang">Tháng</button>
+      <button onclick="applyLeaveFilter('năm')" id="leave-btn-nam">Năm</button>
+      <button onclick="applyLeaveFilter('tất cả')" id="leave-btn-tatca">Tất cả</button>
+      <select id="leaveDateTypeFilter" onchange="applyLeaveDateTypeFilter()">
+        <option value="CheckinTime">Ngày tạo đơn</option>
+        <option value="ApprovalDate1">Ngày duyệt/từ chối lần đầu</option>
+        <option value="ApprovalDate2">Ngày duyệt/từ chối lần cuối</option>
+        <option value="LeaveDate">Ngày nghỉ</option>       
       </select>
-      <label>Năm:</label>
-      <select id="exportYear" style="width: auto;">
-              </select>
-    </div>
+    </div>
+    <div class="controls">
+      <label><b>Từ ngày:</b></label><input type="date" id="leaveStartDate" />
+      <label><b>Đến ngày:</b></label><input type="date" id="leaveEndDate" />
+      <button onclick="applyLeaveDateRange()">Áp dụng</button>
+    </div>
+    <div class="controls">
+      <input type="text" id="leaveSearchBox" placeholder="Nhập tên hoặc mã nhân viên..." />
+      <button onclick="applyLeaveSearch()">Tìm kiếm</button>
+      <select id="leaveRowsPerPage" onchange="updateLeaveRowsPerPage()">
+        <option value="5" selected>5 dòng</option>
+        <option value="10">10 dòng</option>
+        <option value="20">20 dòng</option>
+        <option value="25">25 dòng</option>
+      </select>
+      <button onclick="handleExportClick()">Xuất Dữ Liệu</button>
+      <button onclick="refreshLeaveData()">Làm mới</button>
+      <button onclick="resetLeaveFilter()">Reset</button>
+    </div>
+    <div id="leaveTableContainer" class="table-container table-scroll">
+      <table id="leaveTable">
+        <thead>
+          <tr>
+            <th onclick="sortLeaveTable('EmployeeId')">Mã NV</th>
+            <th onclick="sortLeaveTable('EmployeeName')">Tên nhân viên</th>
+            <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
+            <th onclick="sortLeaveTable('CheckinTime')">Ngày tạo đơn</th>
+            <th onclick="sortLeaveTable('Tasks')">Lý do</th>
+            <th onclick="sortLeaveTable('ApprovalDate1')">Ngày Duyệt/Từ chối Lần đầu</th>
+            <th onclick="sortLeaveTable('Status1')">Trạng thái Lần đầu</th>
+            <th onclick="sortLeaveTable('ApprovalDate2')">Ngày Duyệt/Từ chối Lần cuối</th>
+            <th onclick="sortLeaveTable('Status2')">Trạng thái Lần cuối</th>
+            <th onclick="sortLeaveTable('Note')">Ghi chú</th>
+          </tr>
+        </thead>
+        <tbody id="leaveDataBody"></tbody>
+      </table>
+    </div>
+    <div id="leavePagination" class="pagination"></div>
+  </div>
 
-    <div id="exportType-day" class="export-date-options" style="display:none;">
-      <label>Ngày:</label>
-      <input type="date" id="exportSpecificDate" style="width: auto;">
-    </div>
+  <!-- MODAL ĐĂNG NHẬP -->
+  <div id="loginModal" class="modal">
+    <div class="modal-content">
+      <h2>Đăng nhập</h2>
+      <input type="email" id="loginEmail" placeholder="Nhập email admin..." />
+      <input type="password" id="loginPass" placeholder="Mật khẩu..." />
+      <button id="loginBtn">Đăng nhập</button>
+      <a href="/forgot-password">Quên mật khẩu?</a>
+      <div id="modalMessage" class="msg" style="display:none;"></div>
+    </div>
+  </div>
 
-    <div id="exportType-range" class="export-date-options" style="display:none;">
-      <label>Từ ngày:</label>
-      <input type="date" id="exportStartDate" style="width: auto;">
-      <label>Đến ngày:</label>
-      <input type="date" id="exportEndDate" style="width: auto;">
-    </div>
+  <!-- MODAL XUẤT DỮ LIỆU -->
+  <div id="exportModal" class="modal">
+    <div class="modal-content">
+      <h2>Xuất Dữ Liệu</h2>
+      <div style="margin-bottom: 15px;">
+        <label><b>Chọn loại dữ liệu:</b></label><br>
+        <select id="exportTypeSelect" style="width: 100%; margin-top: 8px;">
+          <option value="">-- Chọn loại file --</option>
+          <option value="attendance">Điểm Danh</option>
+          <option value="leave">Nghỉ Phép</option>
+          <option value="combined">Điểm danh & Nghỉ phép</option>
+        </select>
+      </div>
 
-    <div id="exportModalMessage" class="msg" style="display:none; margin-top: 15px;"></div>
+      <div style="margin-bottom: 15px;">
+        <label><b>Phạm vi xuất:</b></label><br>
+        <select id="exportRangeType" style="width: 100%; margin-top: 8px;">
+          <option value="month">Xuất theo tháng</option>
+          <option value="date">Xuất theo ngày cụ thể</option>
+          <option value="range">Xuất theo khoảng</option>
+        </select>
+      </div>
 
-    <div style="display: flex; justify-content: space-between; gap: 10px; margin-top: 20px;">
-      <button onclick="resetExportModal()" style="background: var(--muted); width: 30%; margin: 0;">↻ Reset</button>
-      <button onclick="closeExportModal()" style="background: var(--danger); width: 30%; margin: 0;">Hủy</button>
-      <button onclick="executeExport()" style="width: 40%; margin: 0;">📤 Xuất</button>
-    </div>
-  </div>
-</div>
-  <script>
-    let currentTab = "attendance";
-    let currentFilter = "hôm nay";
-    let currentSearch = "";
-    let currentSort = { column: 'CreationTime', order: 'desc' };
-    let startDate = "", endDate = "";
-    let rawData = [];
-    let displayData = [];
-    let currentPage = 1;
-    let rowsPerPage = 5;
-    let currentLeaveFilter = "hôm nay";
-    let currentLeaveSearch = "";
-    let currentLeaveSort = { column: 'CheckinTime', order: 'desc' };
-    let leaveStartDate = "", leaveEndDate = "";
-    let leaveDateType = "CheckinTime";
-    let rawLeaveData = [];
-    let currentLeavePage = 1;
-    let leaveRowsPerPage = 5;
+      <!-- Tháng + Năm -->
+      <div id="monthRange" class="export-range-option active">
+        <label>Tháng/Năm:</label>
+        <div style="display: flex; gap: 8px; margin-top: 5px;">
+          <select id="exportMonth" style="flex: 1;">
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+            <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+            <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+            <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+          </select>
+          <select id="exportYear" style="flex: 1;"></select>
+        </div>
+      </div>
 
-    function showMessage(msg, type="success", isModal=false) {
-      const el = isModal ? document.getElementById("modalMessage") : document.getElementById("messageArea");
-      el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
-      el.style.display = "block";
-      setTimeout(() => {
-        el.innerHTML = "";
-        el.style.display = "none";
-      }, 4000);
-    }
-    function showDashboard() {
-      document.getElementById("loginModal").style.display = "none";
-      document.getElementById("greeting").style.display = "block";
-      document.getElementById("logoutBtn").style.display = "inline-block";
-      document.getElementById("dataTabs").style.display = "flex";
-      switchTab(currentTab);
-    }
-    function hideDashboard() {
-      document.getElementById("greeting").style.display = "none";
-      document.getElementById("logoutBtn").style.display = "none";
-      document.getElementById("dataTabs").style.display = "none";
-      document.getElementById("leaveSection").style.display = "none";
-      document.getElementById("filters").style.display = "none";
-      document.getElementById("dateFilter").style.display = "none";
-      document.getElementById("searchFilter").style.display = "none";
-      document.getElementById("tableContainer").style.display = "none";
-      document.getElementById("pagination").style.display = "none";
-      document.getElementById("dataBody").innerHTML = "";
-      document.getElementById("leaveDataBody").innerHTML = "";
-    }
-    
-    // === JS BỊ LOẠI BỎ ===
-    // function resetExportOptions() { ... } (Hàm này không còn cần thiết)
+      <!-- Ngày cụ thể -->
+      <div id="dateRange" class="export-range-option">
+        <label>Chọn ngày:</label>
+        <input type="date" id="exportSingleDate" style="width: 100%; margin-top: 5px;" />
+      </div>
 
-    function switchTab(tab) {
-      currentTab = tab;
-      document.getElementById("tabAttendance").classList.toggle("active", tab === "attendance");
-      document.getElementById("tabLeave").classList.toggle("active", tab === "leave");
-      // resetExportOptions(); // Không còn cần thiết
-      if (tab === "attendance") {
-        document.getElementById("leaveSection").style.display = "none";
-        document.getElementById("filters").style.display = "flex";
-        document.getElementById("dateFilter").style.display = "flex";
-        document.getElementById("searchFilter").style.display = "flex";
-        document.getElementById("tableContainer").style.display = "block";
-        document.getElementById("pagination").style.display = "block";
-        if (!rawData.length) loadData(); else renderTable();
-      } else {
-        document.getElementById("filters").style.display = "none";
-        document.getElementById("dateFilter").style.display = "none";
-        document.getElementById("searchFilter").style.display = "none";
-        document.getElementById("tableContainer").style.display = "none";
-        document.getElementById("pagination").style.display = "none";
-        document.getElementById("leaveSection").style.display = "block";
-        if (!rawLeaveData.length) loadLeaveData(); else renderLeaveTable();
-      }
-    }
-    async function login() {
-      const email = document.getElementById("loginEmail").value.trim();
-      const pass = document.getElementById("loginPass").value;
-      if (!email || !pass) return showMessage("⚠️ Nhập email và mật khẩu", "error", true);
-      const formData = new FormData();
-      formData.append("email", email);
-      formData.append("password", pass);
-      const res = await fetch("/login", { method: "POST", body: formData });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        localStorage.setItem("adminEmail", email);
-        localStorage.setItem("adminUser", data.username || data.email);
-        document.getElementById("greeting").innerHTML = `Xin chào, ${data.username || email}!`;
-        showDashboard();
-        showMessage("✅ Đăng nhập thành công", "success");
-        applyFilter("hôm nay");
-      } else {
-        showMessage(data.message || "🚫 Sai thông tin", "error", true);
-      }
-    }
-    function logout() {
-      localStorage.clear();
-      document.getElementById("loginEmail").value = "";
-      document.getElementById("loginPass").value = "";
-      document.getElementById("loginModal").style.display = "flex";
-      hideDashboard();
-      showMessage("👋 Đã đăng xuất", "success");
-    }
-    document.getElementById("loginBtn").onclick = login;
-    document.getElementById("logoutBtn").onclick = logout;
-    
-    // ... (Các hàm processDataWithHours, loadData, renderTable, loadLeaveData, renderLeaveTable, v.v. giữ nguyên) ...
-    function processDataWithHours(data) {
-        if (!data || data.length === 0) return [];
-        function parseTime(timeStr) {
-            if (!timeStr) return null;
-            const [datePart, timePart] = timeStr.split(' ');
-            if (!datePart || !timePart) return null;
-            const [day, month, year] = datePart.split('/');
-            const [hours, minutes, seconds] = timePart.split(':');
-            try {
-                return new Date(year, month - 1, day, hours, minutes, seconds);
-            } catch (e) {
-                return null;
-            }
-        }
-        const employeesData = data.reduce((acc, record) => {
-            acc[record.EmployeeId] = acc[record.EmployeeId] || [];
-            acc[record.EmployeeId].push(record);
-            return acc;
-        }, {});
-        const augmentedData = [];
-        for (const empId in employeesData) {
-            const records = employeesData[empId];
-            const monthsData = records.reduce((acc, record) => {
-                const date = record.CheckinDate;
-                if (!date) return acc;
-                const monthKey = date.substring(0, 7);
-                acc[monthKey] = acc[monthKey] || [];
-                acc[monthKey].push(record);
-                return acc;
-            }, {});
-            for (const monthKey in monthsData) {
-                let monthlyTotalSeconds = 0;
-                const monthRecords = monthsData[monthKey];
-                const daysData = monthRecords.reduce((acc, record) => {
-                    acc[record.CheckinDate] = acc[record.CheckinDate] || [];
-                    acc[record.CheckinDate].push(record);
-                    return acc;
-                }, {});
-                const sortedDays = Object.keys(daysData).sort();
-                const dailyHoursMap = {};
-                for (const day of sortedDays) {
-                    let firstCheckin = null, lastCheckout = null;
-                    daysData[day].forEach(rec => {
-                        const recTime = parseTime(rec.CreationTime);
-                        if (!recTime) return;
-                        if (rec.CheckType === 'checkin' && (!firstCheckin || recTime < firstCheckin)) {
-                            firstCheckin = recTime;
-                        } else if (rec.CheckType === 'checkout' && (!lastCheckout || recTime > lastCheckout)) {
-                            lastCheckout = recTime;
-                        }
-                    });
-                    let dailySeconds = 0;
-                    if (firstCheckin && lastCheckout && lastCheckout > firstCheckin) {
-                        dailySeconds = (lastCheckout - firstCheckin) / 1000;
-                    }
-                    monthlyTotalSeconds += dailySeconds;
-                    const dailyH = Math.floor(dailySeconds / 3600);
-                    const dailyM = Math.floor((dailySeconds % 3600) / 60);
-                    const monthlyH = Math.floor(monthlyTotalSeconds / 3600);
-                    const monthlyM = Math.floor((monthlyTotalSeconds % 3600) / 60);
-                    dailyHoursMap[day] = {
-                        daily: `${dailyH}h ${dailyM}m`,
-                        monthly: `${monthlyH}h ${monthlyM}m`,
-                        _dailySeconds: dailySeconds,
-content:                         _monthlySeconds: monthlyTotalSeconds,
-                    };
-                }
-                monthRecords.forEach(rec => {
-                    const hours = dailyHoursMap[rec.CheckinDate];
-                    augmentedData.push({
-                        ...rec,
-                        DailyHours: hours ? hours.daily : '0h 0m',
-                        MonthlyHours: hours ? hours.monthly : 'N/A',
-                        _dailySeconds: hours ? hours._dailySeconds : 0,
-                        _monthlySeconds: hours ? hours._monthlySeconds : 0
-                    });
-                });
-            }
-        }
-        return augmentedData;
-    }
-    async function loadData() {
-      const email = localStorage.getItem("adminEmail");
-      if (!email) {
-        document.getElementById("loginModal").style.display = "flex";
-        return showMessage("🚫 Chưa đăng nhập!", "error");
-      }
-      let url = `/api/attendances?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
-      if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
-      if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!res.ok) return showMessage(data.error || "❌ Lỗi tải dữ liệu", "error");
-      rawData = data;
-      displayData = processDataWithHours(rawData);
-      currentPage = 1;
-      renderTable();
-    }
-    function renderTable() {
-      const tbody = document.getElementById("dataBody");
-      tbody.innerHTML = "";
-      let data = [...displayData];
-      if (currentSort.column && currentSort.order) {
-        data.sort((a,b) => {
-            let col = currentSort.column;
-            if (col === 'DailyHours') col = '_dailySeconds';
-            if (col === 'MonthlyHours') col = '_monthlySeconds';
-            let A = a[col] ?? (typeof a[col] === 'number' ? 0 : "");
-            let B = b[col] ?? (typeof b[col] === 'number' ? 0 : "");
-            if (typeof A === 'string') A = A.toLowerCase();
-            if (typeof B === 'string') B = B.toLowerCase();
-            if (A < B) return currentSort.order === "asc" ? -1 : 1;
-            if (A > B) return currentSort.order === "asc" ? 1 : -1;
-            return 0;
-        });
-      }
-      const startIdx = (currentPage-1)*rowsPerPage;
-      const pageData = data.slice(startIdx, startIdx+rowsPerPage);
-      pageData.forEach(r => {
-        const img = r.FaceImage || r.PhotoURL ? `<img src="${r.FaceImage || r.PhotoURL}" class="checkin-photo">` : "";
-        const mapLink = (r.Latitude && r.Longitude)
-          ? `<a href="https://maps.google.com/?q=${r.Latitude},${r.Longitude}" target="_blank" class="map-link">Xem</a>`
-          : "";
-        const checkTypeFormatted = r.CheckType === 'checkin' ? 'Check In' : (r.CheckType === 'checkout' ? 'Check Out' : (r.CheckType || ""));
-        tbody.innerHTML += `
-          <tr>
-            <td>${r.EmployeeId||""}</td>
-            <td>${r.EmployeeName||""}</td>
-            <td>${r.CheckinDate||""}</td>
-            <td>${r.CheckinTime||""}</td>
-            <td>${checkTypeFormatted}</td>
-            <td>${r.ProjectId||""}</td>
-            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
-content:             <td>${img}</td>
-            <td>${r.Address||""}</td>
-            <td>${mapLink}</td>
-            <td>${r.CheckinNote||""}</td>
-          </tr>
-        `;
-      });
-      renderPagination(data.length);
-      highlightFilterButton();
-    }
-    async function loadLeaveData() {
-      const email = localStorage.getItem("adminEmail");
-      if (!email) {
-        document.getElementById("loginModal").style.display = "flex";
-        return showMessage("🚫 Chưa đăng nhập!", "error");
-      }
-      let url = `/api/leaves?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}&dateType=${encodeURIComponent(leaveDateType)}`;
-      if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
-      if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!res.ok) return showMessage(data.error || "❌ Lỗi tải dữ liệu nghỉ phép", "error");
-      rawLeaveData = data;
-      currentLeavePage = 1;
-      renderLeaveTable();
-    }
-    function renderLeaveTable() {
-      const tbody = document.getElementById("leaveDataBody");
-      tbody.innerHTML = "";
-      let data = [...rawLeaveData];
-      if (currentLeaveSort.column && currentLeaveSort.order) {
-        data.sort((a,b) => {
-          let A = a[currentLeaveSort.column]||"", B = b[currentLeaveSort.column]||"";
-          if (A<B) return currentLeaveSort.order==="asc" ? -1 : 1;
-          if (A>B) return currentLeaveSort.order==="asc" ? 1 : -1;
-          return 0;
-        });
-      }
-      const startIdx = (currentLeavePage-1)*leaveRowsPerPage;
-      const pageData = data.slice(startIdx, startIdx+leaveRowsPerPage);
-      pageData.forEach(r => {
-        tbody.innerHTML += `
-          <tr>
-            <td>${r.EmployeeId||""}</td>
-            <td>${r.EmployeeName||""}</td>
-            <td>${r.CheckinDate||""}</td>
-            <td>${r.CheckinTime||""}</td>
-            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
-            <td>${r.ApprovalDate1||""}</td>
-            <td>${r.Status1||""}</td>
-            <td>${r.ApprovalDate2||""}</td>
-            <td>${r.Status2||""}</td>
-            <td>${r.Note||""}</td>
-  _       </tr>
-        `;
-      });
-      renderLeavePagination(data.length);
-      highlightLeaveFilterButton();
-    }
-    function renderPagination(total) {
-      const pages = Math.ceil(total / rowsPerPage);
-      const pagDiv = document.getElementById("pagination");
-      pagDiv.innerHTML = "";
-      for (let i=1; i<=pages; i++) {
-        pagDiv.innerHTML += `<button class="${i===currentPage?'active':''}" onclick="gotoPage(${i})">${i}</button>`;
-      }
-    }
-    function renderLeavePagination(total) {
-      const pages = Math.ceil(total / leaveRowsPerPage);
-      const pagDiv = document.getElementById("leavePagination");
-      pagDiv.innerHTML = "";
-      for (let i=1; i<=pages; i++) {
-        pagDiv.innerHTML += `<button class="${i===currentLeavePage?'active':''}" onclick="gotoLeavePage(${i})">${i}</button>`;
-      }
-    }
-    function gotoPage(page) { currentPage = page; renderTable(); }
-    function gotoLeavePage(page) { currentLeavePage = page; renderLeaveTable(); }
-    function sortTable(col) {
-      if (currentSort.column===col) {
-        currentSort.order = currentSort.order==="asc" ? "desc" : (currentSort.order==="desc"?null:"asc");
-      } else {
-        currentSort.column = col;
-        currentSort.order = "asc";
-      }
-      document.querySelectorAll("#dataTable th").forEach(th => th.classList.remove("asc","desc"));
-      if (currentSort.order)
-        document.querySelector(`#dataTable th[onclick="sortTable('${col}')"]`).classList.add(currentSort.order);
-      renderTable();
-    }
-    function sortLeaveTable(col) {
-      if (currentLeaveSort.column===col) {
-        currentLeaveSort.order = currentLeaveSort.order==="asc" ? "desc" : (currentLeaveSort.order==="desc"?null:"asc");
-      } else {
-        currentLeaveSort.column = col;
-        currentLeaveSort.order = "asc";
-      }
-      document.querySelectorAll("#leaveTable th").forEach(th => th.classList.remove("asc","desc"));
-      if (currentLeaveSort.order)
-        document.querySelector(`#leaveTable th[onclick="sortLeaveTable('${col}')"]`).classList.add(currentLeaveSort.order);
-      renderLeaveTable();
-    }
-    function applyFilter(f) {
-      currentFilter = f;
-      startDate = endDate = "";
-    D document.getElementById("startDate").value = "";
-      document.getElementById("endDate").value = "";
-      loadData();
-    }
-    function applyLeaveFilter(f) {
-      currentLeaveFilter = f;
-      leaveStartDate = leaveEndDate = "";
-      document.getElementById("leaveStartDate").value = "";
-      document.getElementById("leaveEndDate").value = "";
-      loadLeaveData();
-    }
-    function applyLeaveDateTypeFilter() {
-      leaveDateType = document.getElementById("leaveDateTypeFilter").value;
-      loadLeaveData();
-    }
-    function applyDateRange() {
-      startDate = document.getElementById("startDate").value;
-      endDate = document.getElementById("endDate").value;
-      currentFilter = "custom";
-      loadData();
-    }
-    function applyLeaveDateRange() {
-      leaveStartDate = document.getElementById("leaveStartDate").value;
-      leaveEndDate = document.getElementById("leaveEndDate").value;
-      currentLeaveFilter = "custom";
-      loadLeaveData();
-    }
-    function applySearch() {
-      currentSearch = document.getElementById("searchBox").value.trim();
-      loadData();
-    }
-    function applyLeaveSearch() {
-      currentLeaveSearch = document.getElementById("leaveSearchBox").value.trim();
-      loadLeaveData();
-    }
+      <!-- Khoảng ngày -->
+      <div id="rangeDates" class="export-range-option">
+        <label>Từ ngày:</label>
+        <input type="date" id="exportStartDate" style="width: 100%; margin-top: 5px; margin-bottom: 8px;" />
+        <label>Đến ngày:</label>
+        <input type="date" id="exportEndDate" style="width: 100%; margin-top: 5px;" />
+      </div>
 
-    // === JS CẬP NHẬT: Toàn bộ logic export ===
+      <div style="display: flex; gap: 8px; margin-top: 20px;">
+        <button id="confirmExportBtn" style="flex: 1; background: var(--success);">Xuất</button>
+        <button id="cancelExportBtn" style="flex: 1; background: var(--muted); color: white;">Hủy</button>
+        <button id="resetExportBtn" style="flex: 1; background: var(--danger);">Reset</button>
+      </div>
 
-    /**
-     * Hiển thị thông báo lỗi/thành công bên trong modal export
-     */
-    function showExportModalMessage(msg, type = "error") {
-        const el = document.getElementById("exportModalMessage");
-        el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
-        el.style.display = "block";
-        setTimeout(() => {
-            el.style.display = "none";
-            el.innerHTML = "";
-        }, 4000);
+      <div id="exportModalMessage" class="msg" style="display:none; margin-top: 10px;"></div>
+    </div>
+  </div>
+
+  <script>
+    let currentTab = "attendance";
+    let currentFilter = "hôm nay";
+    let currentSearch = "";
+    let currentSort = { column: 'CreationTime', order: 'desc' };
+    let startDate = "", endDate = "";
+    let rawData = [];
+    let displayData = [];
+    let currentPage = 1;
+    let rowsPerPage = 5;
+    let currentLeaveFilter = "hôm nay";
+    let currentLeaveSearch = "";
+    let currentLeaveSort = { column: 'CheckinTime', order: 'desc' };
+    let leaveStartDate = "", leaveEndDate = "";
+    let leaveDateType = "CheckinTime";
+    let rawLeaveData = [];
+    let currentLeavePage = 1;
+    let leaveRowsPerPage = 5;
+
+    function showMessage(msg, type="success", isModal=false) {
+      const el = isModal ? document.getElementById("modalMessage") : document.getElementById("messageArea");
+      el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
+      el.style.display = "block";
+      setTimeout(() => {
+        el.innerHTML = "";
+        el.style.display = "none";
+      }, 4000);
     }
 
-    /**
-     * Mở modal export và thiết lập trạng thái ban đầu
-     */
-    function openExportModal() {
-        resetExportModal(); // Đặt lại về trạng thái mặc định
-        
-        // Tự động chọn loại export dựa trên tab hiện tại
-        if (currentTab === 'attendance') {
-            document.getElementById('exportType').value = 'attendance';
-        } else if (currentTab === 'leave') {
-            document.getElementById('exportType').value = 'leave';
-        }
-        
-        document.getElementById('exportModal').style.display = 'flex';
+    function showDashboard() {
+      document.getElementById("loginModal").style.display = "none";
+      document.getElementById("greeting").style.display = "block";
+      document.getElementById("logoutBtn").style.display = "inline-block";
+      document.getElementById("dataTabs").style.display = "flex";
+      switchTab(currentTab);
     }
 
-    /**
-     * Đóng modal export
-     */
-    function closeExportModal() {
-        document.getElementById('exportModal').style.display = 'none';
-        showExportModalMessage("", "success"); // Xóa thông báo
-        document.getElementById("exportModalMessage").style.display = "none";
+    function hideDashboard() {
+      document.getElementById("greeting").style.display = "none";
+      document.getElementById("logoutBtn").style.display = "none";
+      document.getElementById("dataTabs").style.display = "none";
+      document.getElementById("leaveSection").style.display = "none";
+      document.getElementById("filters").style.display = "none";
+      document.getElementById("dateFilter").style.display = "none";
+      document.getElementById("searchFilter").style.display = "none";
+      document.getElementById("tableContainer").style.display = "none";
+      document.getElementById("pagination").style.display = "none";
+      document.getElementById("dataBody").innerHTML = "";
+      document.getElementById("leaveDataBody").innerHTML = "";
     }
 
-    /**
-     * Reset các lựa chọn trong modal về mặc định
-     */
-    function resetExportModal() {
-        document.getElementById('exportType').value = '';
-        
-        // Đặt lại radio button
-        document.querySelector('input[name="exportDateType"][value="month"]').checked = true;
-        
-        // Hiển thị/ẩn các mục
-        document.getElementById('exportType-month').style.display = 'flex';
-        document.getElementById('exportType-day').style.display = 'none';
-        document.getElementById('exportType-range').style.display = 'none';
-
-        // Đặt lại ngày tháng
-        const today = new Date();
-        const yyyy_mm_dd = today.toISOString().split('T')[0];
-        document.getElementById('exportMonth').value = today.getMonth() + 1;
-        document.getElementById('exportYear').value = today.getFullYear();
-        document.getElementById('exportSpecificDate').value = yyyy_mm_dd;
-        document.getElementById('exportStartDate').value = yyyy_mm_dd;
-        document.getElementById('exportEndDate').value = yyyy_mm_dd;
-        
-        // Xóa thông báo
-        document.getElementById("exportModalMessage").style.display = "none";
+    function switchTab(tab) {
+      currentTab = tab;
+      document.getElementById("tabAttendance").classList.toggle("active", tab === "attendance");
+      document.getElementById("tabLeave").classList.toggle("active", tab === "leave");
+      if (tab === "attendance") {
+        document.getElementById("leaveSection").style.display = "none";
+        document.getElementById("filters").style.display = "flex";
+        document.getElementById("dateFilter").style.display = "flex";
+        document.getElementById("searchFilter").style.display = "flex";
+        document.getElementById("tableContainer").style.display = "block";
+        document.getElementById("pagination").style.display = "block";
+        if (!rawData.length) loadData(); else renderTable();
+      } else {
+        document.getElementById("filters").style.display = "none";
+        document.getElementById("dateFilter").style.display = "none";
+        document.getElementById("searchFilter").style.display = "none";
+        document.getElementById("tableContainer").style.display = "none";
+        document.getElementById("pagination").style.display = "none";
+        document.getElementById("leaveSection").style.display = "block";
+        if (!rawLeaveData.length) loadLeaveData(); else renderLeaveTable();
+      }
     }
 
-    /**
-     * Xây dựng URL và thực thi export
-     */
-    async function executeExport() {
-        const email = localStorage.getItem("adminEmail");
-        if (!email) {
-            document.getElementById("loginModal").style.display = "flex";
-            return showMessage("⚠️ Chưa đăng nhập", "error");
-        }
-
-        const exportType = document.getElementById('exportType').value;
-        if (!exportType) {
-            return showExportModalMessage("⚠️ Vui lòng chọn loại dữ liệu!", "error");
-        }
-
-        const dateType = document.querySelector('input[name="exportDateType"]:checked').value;
-        let url = "";
-        let params = new URLSearchParams();
-        params.append('email', email);
-
-        // 1. Thêm tham số ngày tháng dựa trên lựa chọn trong modal
-        if (dateType === 'month') {
-            const month = document.getElementById('exportMonth').value;
-            const year = document.getElementById('exportYear').value;
-            if (!month || !year) return showExportModalMessage("⚠️ Vui lòng chọn tháng và năm!", "error");
-            params.append('month', month);
-            params.append('year', year);
-            // Vẫn gửi filter của trang, tương tự logic code cũ
-            if (currentTab === 'attendance') params.append('filter', currentFilter);
-            else params.append('filter', currentLeaveFilter);
-
-        } else if (dateType === 'day') {
-            const day = document.getElementById('exportSpecificDate').value;
-            if (!day) return showExportModalMessage("⚠️ Vui lòng chọn ngày!", "error");
-            params.append('startDate', day);
-            params.append('endDate', day);
-            params.append('filter', 'custom'); // Báo cho backend đây là 1 khoảng tùy chọn
-        } else if (dateType === 'range') {
-            const startDate = document.getElementById('exportStartDate').value;
-            const endDate = document.getElementById('exportEndDate').value;
-            if (!startDate || !endDate) return showExportModalMessage("⚠️ Vui lòng chọn khoảng ngày!", "error");
-            if (startDate > endDate) return showExportModalMessage("⚠️ Ngày bắt đầu phải trước ngày kết thúc!", "error");
-            params.append('startDate', startDate);
-            params.append('endDate', endDate);
-            params.append('filter', 'custom'); // Báo cho backend đây là 1 khoảng tùy chọn
-        }
-
-        // 2. Thêm các tham số theo ngữ cảnh (search, leave-date-type)
-        let activeSearch = '';
-        let activeDateType = ''; // (chỉ cho tab leave)
-        
-        if (currentTab === 'attendance') {
-            activeSearch = currentSearch;
-        } else { // 'leave'
-            activeSearch = currentLeaveSearch;
-            activeDateType = leaveDateType;
-        }
-
-        // 3. Xây dựng URL chính dựa trên loại export
-        if (exportType === "attendance") {
-            url = '/api/export-excel';
-            if (activeSearch) params.append('search', activeSearch);
-        } else if (exportType === "leave") {
-            url = '/api/export-leaves-excel';
-            if (activeSearch) params.append('search', activeSearch);
-            if (activeDateType) params.append('dateType', activeDateType);
-        } else if (exportType === "combined") {
-            url = '/api/export-combined-excel';
-            if (activeSearch) params.append('search', activeSearch);
-            // Đối với combined, chỉ pass dateType nếu đang ở tab leave
-            if (activeDateType && currentTab === 'leave') {
-                params.append('dateType', activeDateType);
-            }
-        }
-
-        // 4. Thực thi
-        if (url) {
-            console.log("Exporting URL: ", `${url}?${params.toString()}`);
-            window.location.href = `${url}?${params.toString()}`;
-            closeExportModal();
-        }
+    async function login() {
+      const email = document.getElementById("loginEmail").value.trim();
+      const pass = document.getElementById("loginPass").value;
+      if (!email || !pass) return showMessage("Nhập email và mật khẩu", "error", true);
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("password", pass);
+      const res = await fetch("/login", { method: "POST", body: formData });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem("adminEmail", email);
+        localStorage.setItem("adminUser", data.username || data.email);
+        document.getElementById("greeting").innerHTML = `Xin chào, ${data.username || email}!`;
+        showDashboard();
+        showMessage("Đăng nhập thành công", "success");
+        applyFilter("hôm nay");
+      } else {
+        showMessage(data.message || "Sai thông tin", "error", true);
+      }
     }
 
-    /**
-     * Thiết lập các event listener cho modal
-     */
-    function setupExportModal() {
-        // Populate năm
-        const yearSelect = document.getElementById('exportYear');
-        const currentYear = new Date().getFullYear();
-        let yearOptions = '';
-        for (let y = currentYear - 5; y <= currentYear + 1; y++) {
-            yearOptions += `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`;
+    function logout() {
+      localStorage.clear();
+      document.getElementById("loginEmail").value = "";
+      document.getElementById("loginPass").value = "";
+      document.getElementById("loginModal").style.display = "flex";
+      hideDashboard();
+      showMessage("Đã đăng xuất", "success");
+    }
+
+    document.getElementById("loginBtn").onclick = login;
+    document.getElementById("logoutBtn").onclick = logout;
+
+    // === XỬ LÝ DỮ LIỆU GIỜ ===
+    function processDataWithHours(data) {
+      if (!data || data.length === 0) return [];
+      function parseTime(timeStr) {
+        if (!timeStr) return null;
+        const [datePart, timePart] = timeStr.split(' ');
+        if (!datePart || !timePart) return null;
+        const [day, month, year] = datePart.split('/');
+        const [hours, minutes, seconds] = timePart.split(':');
+        try {
+          return new Date(year, month - 1, day, hours, minutes, seconds);
+        } catch (e) {
+          return null;
         }
-        yearSelect.innerHTML = yearOptions;
-
-        // Đặt tháng hiện tại
-        document.getElementById('exportMonth').value = new Date().getMonth() + 1;
-
-        // Đặt ngày hôm nay
-        const today = new Date().toISOString().split('T')[0];
-        document.getElementById('exportSpecificDate').value = today;
-        document.getElementById('exportStartDate').value = today;
-        document.getElementById('exportEndDate').value = today;
-
-        // Thêm event listeners cho radio buttons
-        document.querySelectorAll('input[name="exportDateType"]').forEach(radio => {
-            radio.addEventListener('change', function() {
-                document.getElementById('exportType-month').style.display = 'none';
-                document.getElementById('exportType-day').style.display = 'none';
-                document.getElementById('exportType-range').style.display = 'none';
-                
-                if (this.value === 'month') {
-                    document.getElementById('exportType-month').style.display = 'flex';
-                } else if (this.value === 'day') {
-                    document.getElementById('exportType-day').style.display = 'flex';
-                } else if (this.value === 'range') {
-                    document.getElementById('exportType-range').style.display = 'flex';
-                }
+      }
+      const employeesData = data.reduce((acc, record) => {
+        acc[record.EmployeeId] = acc[record.EmployeeId] || [];
+        acc[record.EmployeeId].push(record);
+        return acc;
+      }, {});
+      const augmentedData = [];
+      for (const empId in employeesData) {
+        const records = employeesData[empId];
+        const monthsData = records.reduce((acc, record) => {
+          const date = record.CheckinDate;
+          if (!date) return acc;
+          const monthKey = date.substring(0, 7);
+          acc[monthKey] = acc[monthKey] || [];
+          acc[monthKey].push(record);
+          return acc;
+        }, {});
+        for (const monthKey in monthsData) {
+          let monthlyTotalSeconds = 0;
+          const monthRecords = monthsData[monthKey];
+          const daysData = monthRecords.reduce((acc, record) => {
+            acc[record.CheckinDate] = acc[record.CheckinDate] || [];
+            acc[record.CheckinDate].push(record);
+            return acc;
+          }, {});
+          const sortedDays = Object.keys(daysData).sort();
+          const dailyHoursMap = {};
+          for (const day of sortedDays) {
+            let firstCheckin = null, lastCheckout = null;
+            daysData[day].forEach(rec => {
+              const recTime = parseTime(rec.CreationTime);
+              if (!recTime) return;
+              if (rec.CheckType === 'checkin' && (!firstCheckin || recTime < firstCheckin)) {
+                firstCheckin = recTime;
+              } else if (rec.CheckType === 'checkout' && (!lastCheckout || recTime > lastCheckout)) {
+                lastCheckout = recTime;
+              }
             });
-        });
+            let dailySeconds = 0;
+            if (firstCheckin && lastCheckout && lastCheckout > firstCheckin) {
+              dailySeconds = (lastCheckout - firstCheckin) / 1000;
+            }
+            monthlyTotalSeconds += dailySeconds;
+            const dailyH = Math.floor(dailySeconds / 3600);
+            const dailyM = Math.floor((dailySeconds % 3600) / 60);
+            const monthlyH = Math.floor(monthlyTotalSeconds / 3600);
+            const monthlyM = Math.floor((monthlyTotalSeconds % 3600) / 60);
+            dailyHoursMap[day] = {
+              daily: `${dailyH}h ${dailyM}m`,
+              monthly: `${monthlyH}h ${monthlyM}m`,
+              _dailySeconds: dailySeconds,
+              _monthlySeconds: monthlyTotalSeconds,
+            };
+          }
+          monthRecords.forEach(rec => {
+            const hours = dailyHoursMap[rec.CheckinDate];
+            augmentedData.push({
+              ...rec,
+              DailyHours: hours ? hours.daily : '0h 0m',
+              MonthlyHours: hours ? hours.monthly : 'N/A',
+              _dailySeconds: hours ? hours._dailySeconds : 0,
+              _monthlySeconds: hours ? hours._monthlySeconds : 0
+            });
+          });
+        }
+      }
+      return augmentedData;
     }
 
-    // === KẾT THÚC JS CẬP NHẬT ===
+    async function loadData() {
+      const email = localStorage.getItem("adminEmail");
+      if (!email) {
+        document.getElementById("loginModal").style.display = "flex";
+        return showMessage("Chưa đăng nhập!", "error");
+      }
+      let url = `/api/attendances?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentFilter)}`;
+      if (startDate && endDate) url += `&startDate=${startDate}&endDate=${endDate}`;
+      if (currentSearch) url += `&search=${encodeURIComponent(currentSearch)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) return showMessage(data.error || "Lỗi tải dữ liệu", "error");
+      rawData = data;
+      displayData = processDataWithHours(rawData);
+      currentPage = 1;
+      renderTable();
+    }
 
-    function updateRowsPerPage() {
-      rowsPerPage = parseInt(document.getElementById("rowsPerPage").value);
-      currentPage = 1;
-      renderTable();
-    }
-    function updateLeaveRowsPerPage() {
-      leaveRowsPerPage = parseInt(document.getElementById("leaveRowsPerPage").value);
-      currentLeavePage = 1;
-      renderLeaveTable();
-    }
-    function refreshData() { loadData(); }
-    function refreshLeaveData() { loadLeaveData(); }
-content:     function resetFilter() {
-      currentSearch = "";
-      startDate = endDate = "";
-      currentFilter = "hôm nay";
-      document.getElementById("searchBox").value = "";
-      document.getElementById("startDate").value = "";
-      document.getElementById("endDate").value = "";
-      highlightFilterButton();
-      loadData();
-      // resetExportOptions(); // Không còn cần thiết
-    }
-    function resetLeaveFilter() {
-      currentLeaveSearch = "";
-      leaveStartDate = leaveEndDate = "";
-      currentLeaveFilter = "hôm nay";
-      leaveDateType = "CheckinTime"; // Thay đổi default
-      document.getElementById("leaveSearchBox").value = "";
-      document.getElementById("leaveStartDate").value = "";
-      document.getElementById("leaveEndDate").value = "";
-      document.getElementById("leaveDateTypeFilter").value = "CheckinTime"; // Thay đổi default
-      highlightLeaveFilterButton();
-      loadLeaveData();
-      // resetExportOptions(); // Không còn cần thiết
-    }
-    function highlightFilterButton() {
-      document.querySelectorAll("#filters button").forEach(btn => btn.classList.remove("active"));
-      const map = {
-        "hôm nay":"btn-homnay","tuần":"btn-tuan","tháng":"btn-thang",
-        "năm":"btn-nam","tất cả":"btn-tatca"
-      };
-      if (map[currentFilter]) document.getElementById(map[currentFilter]).classList.add("active");
-    }
-    function highlightLeaveFilterButton() {
-      document.querySelectorAll("#leaveSection .controls:nth-child(1) button").forEach(btn => btn.classList.remove("active"));
-      const map = {
-        "hôm nay":"leave-btn-homnay","tuần":"leave-btn-tuan","tháng":"leave-btn-thang",
-        "năm":"leave-btn-nam","tất cả":"leave-btn-tatca"
-      };
-      if (map[currentLeaveFilter]) document.getElementById(map[currentLeaveFilter]).classList.add("active");
-    }
+    function renderTable() {
+      const tbody = document.getElementById("dataBody");
+      tbody.innerHTML = "";
+      let data = [...displayData];
+      if (currentSort.column && currentSort.order) {
+        data.sort((a,b) => {
+          let col = currentSort.column;
+          if (col === 'DailyHours') col = '_dailySeconds';
+          if (col === 'MonthlyHours') col = '_monthlySeconds';
+          let A = a[col] ?? (typeof a[col] === 'number' ? 0 : "");
+          let B = b[col] ?? (typeof b[col] === 'number' ? 0 : "");
+          if (typeof A === 'string') A = A.toLowerCase();
+          if (typeof B === 'string') B = B.toLowerCase();
+          if (A < B) return currentSort.order === "asc" ? -1 : 1;
+          if (A > B) return currentSort.order === "asc" ? 1 : -1;
+          return 0;
+        });
+      }
+      const startIdx = (currentPage-1)*rowsPerPage;
+      const pageData = data.slice(startIdx, startIdx+rowsPerPage);
+      pageData.forEach(r => {
+        const img = r.FaceImage || r.PhotoURL ? `<img src="${r.FaceImage || r.PhotoURL}" class="checkin-photo">` : "";
+        const mapLink = (r.Latitude && r.Longitude)
+          ? `<a href="https://maps.google.com/?q=${r.Latitude},${r.Longitude}" target="_blank" class="map-link">Xem</a>`
+          : "";
+        const checkTypeFormatted = r.CheckType === 'checkin' ? 'Check In' : (r.CheckType === 'checkout' ? 'Check Out' : (r.CheckType || ""));
+        tbody.innerHTML += `
+          <tr>
+            <td>${r.EmployeeId||""}</td>
+            <td>${r.EmployeeName||""}</td>
+            <td>${r.CheckinDate||""}</td>
+            <td>${r.CheckinTime||""}</td>
+            <td>${checkTypeFormatted}</td>
+            <td>${r.ProjectId||""}</td>
+            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
+            <td>${img}</td>
+            <td>${r.Address||""}</td>
+            <td>${mapLink}</td>
+            <td>${r.CheckinNote||""}</td>
+          </tr>
+        `;
+      });
+      renderPagination(data.length);
+      highlightFilterButton();
+    }
 
-    // === JS BỊ LOẠI BỎ ===
-    // function populateYears() { ... } (Đã chuyển logic vào setupExportModal)
-    
-    window.onload = () => {
-      // === JS CẬP NHẬT ===
-      setupExportModal(); // Thiết lập modal export
-      // === KẾT THÚC CẬP NHẬT ===
+    async function loadLeaveData() {
+      const email = localStorage.getItem("adminEmail");
+      if (!email) {
+        document.getElementById("loginModal").style.display = "flex";
+        return showMessage("Chưa đăng nhập!", "error");
+      }
+      let url = `/api/leaves?email=${encodeURIComponent(email)}&filter=${encodeURIComponent(currentLeaveFilter)}&dateType=${encodeURIComponent(leaveDateType)}`;
+      if (leaveStartDate && leaveEndDate) url += `&startDate=${leaveStartDate}&endDate=${leaveEndDate}`;
+      if (currentLeaveSearch) url += `&search=${encodeURIComponent(currentLeaveSearch)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) return showMessage(data.error || "Lỗi tải dữ liệu nghỉ phép", "error");
+      rawLeaveData = data;
+      currentLeavePage = 1;
+      renderLeaveTable();
+    }
 
-      const email = localStorage.getItem("adminEmail");
-      if (email) {
-        const username = localStorage.getItem("adminUser");
-        document.getElementById("greeting").innerHTML = `Xin chào, ${username}!`;
-        showDashboard();
-        applyFilter("hôm nay");
-      } else {
-        hideDashboard();
-        document.getElementById("loginModal").style.display = "flex";
-      }
-    };
-    document.getElementById("loginPass").addEventListener("keypress", (e) => {
-      if (e.key === "Enter") login();
-    });
+    function renderLeaveTable() {
+      const tbody = document.getElementById("leaveDataBody");
+      tbody.innerHTML = "";
+      let data = [...rawLeaveData];
+      if (currentLeaveSort.column && currentLeaveSort.order) {
+        data.sort((a,b) => {
+          let A = a[currentLeaveSort.column]||"", B = b[currentLeaveSort.column]||"";
+          if (A<B) return currentLeaveSort.order==="asc" ? -1 : 1;
+          if (A>B) return currentLeaveSort.order==="asc" ? 1 : -1;
+          return 0;
+        });
+      }
+      const startIdx = (currentLeavePage-1)*leaveRowsPerPage;
+      const pageData = data.slice(startIdx, startIdx+leaveRowsPerPage);
+      pageData.forEach(r => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${r.EmployeeId||""}</td>
+            <td>${r.EmployeeName||""}</td>
+            <td>${r.CheckinDate||""}</td>
+            <td>${r.CheckinTime||""}</td>
+            <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
+            <td>${r.ApprovalDate1||""}</td>
+            <td>${r.Status1||""}</td>
+            <td>${r.ApprovalDate2||""}</td>
+            <td>${r.Status2||""}</td>
+            <td>${r.Note||""}</td>
+          </tr>
+        `;
+      });
+      renderLeavePagination(data.length);
+      highlightLeaveFilterButton();
+    }
 
-    // === JS BỊ LOẠI BỎ ===
-    // (Các event listener cho exportOptionsAttendance/Leave đã bị xóa vì các element đó không còn)
-  </script>
+    function renderPagination(total) {
+      const pages = Math.ceil(total / rowsPerPage);
+      const pagDiv = document.getElementById("pagination");
+      pagDiv.innerHTML = "";
+      for (let i=1; i<=pages; i++) {
+        pagDiv.innerHTML += `<button class="${i===currentPage?'active':''}" onclick="gotoPage(${i})">${i}</button>`;
+      }
+    }
+
+    function renderLeavePagination(total) {
+      const pages = Math.ceil(total / leaveRowsPerPage);
+      const pagDiv = document.getElementById("leavePagination");
+      pagDiv.innerHTML = "";
+      for (let i=1; i<=pages; i++) {
+        pagDiv.innerHTML += `<button class="${i===currentLeavePage?'active':''}" onclick="gotoLeavePage(${i})">${i}</button>`;
+      }
+    }
+
+    function gotoPage(page) { currentPage = page; renderTable(); }
+    function gotoLeavePage(page) { currentLeavePage = page; renderLeaveTable(); }
+
+    function sortTable(col) {
+      if (currentSort.column===col) {
+        currentSort.order = currentSort.order==="asc" ? "desc" : (currentSort.order==="desc"?null:"asc");
+      } else {
+        currentSort.column = col;
+        currentSort.order = "asc";
+      }
+      document.querySelectorAll("#dataTable th").forEach(th => th.classList.remove("asc","desc"));
+      if (currentSort.order)
+        document.querySelector(`#dataTable th[onclick="sortTable('${col}')"]`).classList.add(currentSort.order);
+      renderTable();
+    }
+
+    function sortLeaveTable(col) {
+      if (currentLeaveSort.column===col) {
+        currentLeaveSort.order = currentLeaveSort.order==="asc" ? "desc" : (currentLeaveSort.order==="desc"?null:"asc");
+      } else {
+        currentLeaveSort.column = col;
+        currentLeaveSort.order = "asc";
+      }
+      document.querySelectorAll("#leaveTable th").forEach(th => th.classList.remove("asc","desc"));
+      if (currentLeaveSort.order)
+        document.querySelector(`#leaveTable th[onclick="sortLeaveTable('${col}')"]`).classList.add(currentSort.order);
+      renderLeaveTable();
+    }
+
+    function applyFilter(f) {
+      currentFilter = f;
+      startDate = endDate = "";
+      document.getElementById("startDate").value = "";
+      document.getElementById("endDate").value = "";
+      loadData();
+    }
+
+    function applyLeaveFilter(f) {
+      currentLeaveFilter = f;
+      leaveStartDate = leaveEndDate = "";
+      document.getElementById("leaveStartDate").value = "";
+      document.getElementById("leaveEndDate").value = "";
+      loadLeaveData();
+    }
+
+    function applyLeaveDateTypeFilter() {
+      leaveDateType = document.getElementById("leaveDateTypeFilter").value;
+      loadLeaveData();
+    }
+
+    function applyDateRange() {
+      startDate = document.getElementById("startDate").value;
+      endDate = document.getElementById("endDate").value;
+      currentFilter = "custom";
+      loadData();
+    }
+
+    function applyLeaveDateRange() {
+      leaveStartDate = document.getElementById("leaveStartDate").value;
+      leaveEndDate = document.getElementById("leaveEndDate").value;
+      currentLeaveFilter = "custom";
+      loadLeaveData();
+    }
+
+    function applySearch() {
+      currentSearch = document.getElementById("searchBox").value.trim();
+      loadData();
+    }
+
+    function applyLeaveSearch() {
+      currentLeaveSearch = document.getElementById("leaveSearchBox").value.trim();
+      loadLeaveData();
+    }
+
+    function updateRowsPerPage() {
+      rowsPerPage = parseInt(document.getElementById("rowsPerPage").value);
+      currentPage = 1;
+      renderTable();
+    }
+
+    function updateLeaveRowsPerPage() {
+      leaveRowsPerPage = parseInt(document.getElementById("leaveRowsPerPage").value);
+      currentLeavePage = 1;
+      renderLeaveTable();
+    }
+
+    function refreshData() { loadData(); }
+    function refreshLeaveData() { loadLeaveData(); }
+
+    function resetFilter() {
+      currentSearch = "";
+      startDate = endDate = "";
+      currentFilter = "hôm nay";
+      document.getElementById("searchBox").value = "";
+      document.getElementById("startDate").value = "";
+      document.getElementById("endDate").value = "";
+      highlightFilterButton();
+      loadData();
+    }
+
+    function resetLeaveFilter() {
+      currentLeaveSearch = "";
+      leaveStartDate = leaveEndDate = "";
+      currentLeaveFilter = "hôm nay";
+      leaveDateType = "CheckinTime";
+      document.getElementById("leaveSearchBox").value = "";
+      document.getElementById("leaveStartDate").value = "";
+      document.getElementById("leaveEndDate").value = "";
+      document.getElementById("leaveDateTypeFilter").value = "CheckinTime";
+      highlightLeaveFilterButton();
+      loadLeaveData();
+    }
+
+    function highlightFilterButton() {
+      document.querySelectorAll("#filters button").forEach(btn => btn.classList.remove("active"));
+      const map = {
+        "hôm nay":"btn-homnay","tuần":"btn-tuan","tháng":"btn-thang",
+        "năm":"btn-nam","tất cả":"btn-tatca"
+      };
+      if (map[currentFilter]) document.getElementById(map[currentFilter]).classList.add("active");
+    }
+
+    function highlightLeaveFilterButton() {
+      document.querySelectorAll("#leaveSection .controls:nth-child(1) button").forEach(btn => btn.classList.remove("active"));
+      const map = {
+        "hôm nay":"leave-btn-homnay","tuần":"leave-btn-tuan","tháng":"leave-btn-thang",
+        "năm":"leave-btn-nam","tất cả":"leave-btn-tatca"
+      };
+      if (map[currentLeaveFilter]) document.getElementById(map[currentLeaveFilter]).classList.add("active");
+    }
+
+    function populateYears() {
+      const currentYear = new Date().getFullYear();
+      const years = [];
+      for (let y = currentYear - 5; y <= currentYear + 1; y++) {
+        years.push(y);
+      }
+      const yearOptions = years.map(y => `<option value="${y}">${y}</option>`).join('');
+      document.getElementById('exportYear').innerHTML = yearOptions;
+    }
+
+    // === XUẤT DỮ LIỆU MỚI ===
+    function handleExportClick() {
+      const email = localStorage.getItem("adminEmail");
+      if (!email) {
+        document.getElementById("loginModal").style.display = "flex";
+        return showMessage("Chưa đăng nhập", "error");
+      }
+      resetExportModal();
+      const currentMonth = new Date().getMonth() + 1;
+      const currentYear = new Date().getFullYear();
+      document.getElementById('exportMonth').value = currentMonth;
+      document.getElementById('exportYear').value = currentYear;
+      document.getElementById("exportModal").style.display = "flex";
+    }
+
+    function resetExportModal() {
+      document.getElementById("exportTypeSelect").value = "";
+      document.getElementById("exportRangeType").value = "month";
+      document.getElementById("exportMonth").value = new Date().getMonth() + 1;
+      document.getElementById("exportYear").value = new Date().getFullYear();
+      document.getElementById("exportSingleDate").value = "";
+      document.getElementById("exportStartDate").value = "";
+      document.getElementById("exportEndDate").value = "";
+      document.getElementById("exportModalMessage").style.display = "none";
+      document.getElementById("exportModalMessage").innerHTML = "";
+      updateExportRangeOptions();
+    }
+
+    document.getElementById("cancelExportBtn").onclick = () => {
+      document.getElementById("exportModal").style.display = "none";
+    };
+
+    document.getElementById("resetExportBtn").onclick = resetExportModal;
+
+    document.getElementById("exportRangeType").onchange = updateExportRangeOptions;
+    function updateExportRangeOptions() {
+      const rangeType = document.getElementById("exportRangeType").value;
+      document.querySelectorAll(".export-range-option").forEach(el => el.classList.remove("active"));
+      document.getElementById(rangeType === "month" ? "monthRange" : rangeType === "date" ? "dateRange" : "rangeDates").classList.add("active");
+    }
+
+    function showModalMessage(msg, type = "error") {
+      const el = document.getElementById("exportModalMessage");
+      el.innerHTML = `<div class="msg ${type}">${msg}</div>`;
+      el.style.display = "block";
+      setTimeout(() => {
+        el.innerHTML = "";
+        el.style.display = "none";
+      }, 4000);
+    }
+
+    document.getElementById("confirmExportBtn").onclick = async function() {
+      const email = localStorage.getItem("adminEmail");
+      const exportType = document.getElementById("exportTypeSelect").value;
+      const rangeType = document.getElementById("exportRangeType").value;
+
+      if (!exportType) return showModalMessage("Vui lòng chọn loại dữ liệu!", "error");
+
+      let url = "";
+      let params = new URLSearchParams();
+      params.append("email", email);
+
+      let activeFilter, activeStartDate, activeEndDate, activeSearch, activeDateType;
+      if (currentTab === 'attendance') {
+        activeFilter = currentFilter;
+        activeStartDate = startDate;
+        activeEndDate = endDate;
+        activeSearch = currentSearch;
+        activeDateType = '';
+      } else {
+        activeFilter = currentLeaveFilter;
+        activeStartDate = leaveStartDate;
+        activeEndDate = leaveEndDate;
+        activeSearch = currentLeaveSearch;
+        activeDateType = leaveDateType;
+      }
+
+      params.append("filter", activeFilter);
+      if (activeSearch) params.append("search", activeSearch);
+      if (activeDateType) params.append("dateType", activeDateType);
+
+      if (exportType === "attendance") url = "/api/export-excel";
+      else if (exportType === "leave") url = "/api/export-leaves-excel";
+      else if (exportType === "combined") url = "/api/export-combined-excel";
+
+      if (rangeType === "month") {
+        const month = document.getElementById("exportMonth").value;
+        const year = document.getElementById("exportYear").value;
+        if (!month || !year) return showModalMessage("Chọn tháng và năm!", "error");
+        params.append("month", month);
+        params.append("year", year);
+      } else if (rangeType === "date") {
+        const date = document.getElementById("exportSingleDate").value;
+        if (!date) return showModalMessage("Chọn ngày cụ thể!", "error");
+        params.append("startDate", date);
+        params.append("endDate", date);
+      } else if (rangeType === "range") {
+        const start = document.getElementById("exportStartDate").value;
+        const end = document.getElementById("exportEndDate").value;
+        if (!start || !end) return showModalMessage("Chọn đầy đủ từ ngày đến ngày!", "error");
+        if (start > end) return showModalMessage("Ngày bắt đầu phải trước ngày kết thúc!", "error");
+        params.append("startDate", start);
+        params.append("endDate", end);
+      }
+
+      try {
+        window.location.href = `${url}?${params.toString()}`;
+        document.getElementById("exportModal").style.display = "none";
+        showMessage("Đang xuất file...", "success");
+      } catch (err) {
+        showModalMessage("Lỗi khi xuất dữ liệu!", "error");
+      }
+    };
+
+    window.onload = () => {
+      populateYears();
+      const email = localStorage.getItem("adminEmail");
+      if (email) {
+        const username = localStorage.getItem("adminUser");
+        document.getElementById("greeting").innerHTML = `Xin chào, ${username}!`;
+        showDashboard();
+        applyFilter("hôm nay");
+      } else {
+        hideDashboard();
+        document.getElementById("loginModal").style.display = "flex";
+      }
+    };
+
+    document.getElementById("loginPass").addEventListener("keypress", (e) => {
+      if (e.key === "Enter") login();
+    });
+  </script>
 </body>
 </html>
