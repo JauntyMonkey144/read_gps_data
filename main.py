@@ -788,7 +788,7 @@ def export_to_excel():
         if not start_date or not end_date:
             return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
-        # === SỬA LỖI 1: LẤY DỮ LIỆU TỪ NGÀY 1 CỦA THÁNG BẮT ĐẦU ===
+        # === 1. LẤY DỮ LIỆU TỪ NGÀY 1 CỦA THÁNG BẮT ĐẦU ===
         try:
             start_dt_for_query = datetime.strptime(start_date, "%Y-%m-%d")
             query_start = start_dt_for_query.replace(day=1).strftime("%Y-%m-%d")
@@ -797,7 +797,6 @@ def export_to_excel():
             return jsonify({"error": "Lỗi định dạng ngày"}), 400
         
         search = request.args.get("search", "").strip()
-        # Truy vấn này đã đúng, nó lấy theo Timestamp (đã bao gồm data 17:00 UTC của ngày hôm trước)
         attendance_query = build_attendance_query("custom", query_start, end_date, search, username=username)
         data = list(collection.find(attendance_query, {"_id": 0}))
 
@@ -865,42 +864,48 @@ def export_to_excel():
                     last_out = max(checkouts)
                     if last_out > first_in:
                         daily_seconds = (last_out - first_in).total_seconds()
-                # Key là (emp_id, ngày_VN)
                 daily_hours_map[(emp_id, date_str)] = daily_seconds
 
-        # --- 3. Tính tổng giờ tích lũy (MonthlyHours) ---
+        # <<< SỬA LỖI 3: LOGIC TÍNH TỔNG GIỜ MỚI (CHỐNG LẶP LẠI) >>>
         monthly_hours_map = {}
-        for emp_id, records in emp_data.items():
+        for emp_id in emp_data.keys():
+            # 1. Lấy tất cả giờ hàng ngày của nhân viên này
+            emp_daily_totals = { 
+                date_str: secs 
+                for (e_id, date_str), secs in daily_hours_map.items() 
+                if e_id == emp_id 
+            }
+            
+            # 2. Nhóm các ngày đó theo tháng
             monthly_groups = {}
-            for rec in records:
-                date_str = rec.get("_vn_date_str")
-                if not date_str: continue
+            for date_str, secs in emp_daily_totals.items():
                 try:
                     month_key = datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m")
-                    monthly_groups.setdefault(month_key, []).append(rec)
+                    monthly_groups.setdefault(month_key, []).append((date_str, secs))
                 except ValueError:
                     continue
-            
-            # Sắp xếp các tháng (ví dụ: "2025-10" trước "2025-11")
+
+            # 3. Sắp xếp các tháng
             sorted_month_keys = sorted(monthly_groups.keys())
             
+            # 4. Lặp qua từng tháng
             for month_key in sorted_month_keys:
-                month_records = monthly_groups[month_key]
-                sorted_records = sorted(
-                    month_records,
-                    key=lambda r: datetime.strptime(r.get("_vn_date_str"), "%d/%m/%Y")
+                month_days = monthly_groups[month_key]
+                # Sắp xếp các ngày trong tháng
+                sorted_days = sorted(
+                    month_days, 
+                    key=lambda x: datetime.strptime(x[0], "%d/%m/%Y")
                 )
                 
                 running_total = 0 # Reset tổng khi bắt đầu tháng mới
                 
-                for rec in sorted_records:
-                    date_str = rec.get("_vn_date_str")
-                    daily_sec = daily_hours_map.get((emp_id, date_str), 0)
+                # 5. Lặp qua TỪNG NGÀY (chỉ 1 lần/ngày)
+                for date_str, daily_sec in sorted_days:
                     running_total += daily_sec
-                    
                     h, rem = divmod(running_total, 3600)
                     m, s = divmod(rem, 60)
                     monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
+        # <<< KẾT THÚC SỬA LỖI 3 >>>
 
         # --- 4. Ghi dữ liệu vào Excel ---
         grouped = {}
@@ -909,7 +914,6 @@ def export_to_excel():
             if not date_str:
                 continue
             try:
-                # Lọc hiển thị: Chỉ hiển thị các ngày trong khoảng yêu cầu
                 rec_date = datetime.strptime(date_str, "%d/%m/%Y")
                 start_dt_obj = datetime.strptime(start_date, "%Y-%m-%d")
                 end_dt_obj = datetime.strptime(end_date, "%Y-%m-%d")
@@ -925,7 +929,7 @@ def export_to_excel():
             row = start_row + i
             ws.cell(row=row, column=1, value=emp_id)
             ws.cell(row=row, column=2, value=emp_name)
-            ws.cell(row=row, column=3, value=date_str) # Ghi ngày VN
+            ws.cell(row=row, column=3, value=date_str) 
 
             daily_sec = daily_hours_map.get((emp_id, date_str), 0)
             h_d, rem_d = divmod(daily_sec, 3600)
@@ -935,7 +939,6 @@ def export_to_excel():
             ws.cell(row=row, column=15, value=monthly_hours_map.get((emp_id, date_str), ""))
 
             checkin_counter = 0
-            # Sắp xếp theo Timestamp (thời gian)
             for rec in sorted(records, key=lambda x: x.get("Timestamp") or datetime.min):
                 if rec.get("CheckType") == "checkin" and checkin_counter < 9:
                     time_str = ""
@@ -1229,38 +1232,46 @@ def export_combined_to_excel():
                         daily_seconds = (last_out - first_in).total_seconds()
                 daily_hours_map[(emp_id, date_str)] = daily_seconds
 
-        # --- 3. Tính tổng giờ tích lũy (MonthlyHours) ---
+        # <<< SỬA LỖI 3: LOGIC TÍNH TỔNG GIỜ MỚI (CHỐNG LẶP LẠI) >>>
         monthly_hours_map = {}
-        for emp_id, records in emp_data.items():
+        for emp_id in emp_data.keys():
+            # 1. Lấy tất cả giờ hàng ngày của nhân viên này
+            emp_daily_totals = { 
+                date_str: secs 
+                for (e_id, date_str), secs in daily_hours_map.items() 
+                if e_id == emp_id 
+            }
+            
+            # 2. Nhóm các ngày đó theo tháng
             monthly_groups = {}
-            for rec in records:
-                date_str = rec.get("_vn_date_str")
-                if not date_str: continue
+            for date_str, secs in emp_daily_totals.items():
                 try:
                     month_key = datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m")
-                    monthly_groups.setdefault(month_key, []).append(rec)
+                    monthly_groups.setdefault(month_key, []).append((date_str, secs))
                 except ValueError:
                     continue
-            
+
+            # 3. Sắp xếp các tháng
             sorted_month_keys = sorted(monthly_groups.keys())
             
+            # 4. Lặp qua từng tháng
             for month_key in sorted_month_keys:
-                month_records = monthly_groups[month_key]
-                sorted_records = sorted(
-                    month_records,
-                    key=lambda r: datetime.strptime(r.get("_vn_date_str"), "%d/%m/%Y")
+                month_days = monthly_groups[month_key]
+                # Sắp xếp các ngày trong tháng
+                sorted_days = sorted(
+                    month_days, 
+                    key=lambda x: datetime.strptime(x[0], "%d/%m/%Y")
                 )
                 
-                running_total = 0 # Reset
+                running_total = 0 # Reset tổng khi bắt đầu tháng mới
                 
-                for rec in sorted_records:
-                    date_str = rec.get("_vn_date_str")
-                    daily_sec = daily_hours_map.get((emp_id, date_str), 0)
+                # 5. Lặp qua TỪNG NGÀY (chỉ 1 lần/ngày)
+                for date_str, daily_sec in sorted_days:
                     running_total += daily_sec
-                    
                     h, rem = divmod(running_total, 3600)
                     m, s = divmod(rem, 60)
                     monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
+        # <<< KẾT THÚC SỬA LỖI 3 >>>
 
         # --- 4. Ghi dữ liệu vào Sheet Điểm danh ---
         grouped = {}
@@ -1397,5 +1408,6 @@ def export_combined_to_excel():
         
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
