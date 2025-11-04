@@ -790,11 +790,11 @@ def export_to_excel():
             return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
         # <<< SỬA LỖI 1: LẤY TỪ NGÀY 1 CỦA THÁNG BẮT ĐẦU (start_date) >>>
-        # Thay vì lấy từ ngày 1 của tháng kết thúc (end_date)
         try:
+            # Chuyển start_date (chuỗi YYYY-MM-DD) thành đối tượng datetime
             start_dt_for_query = datetime.strptime(start_date, "%Y-%m-%d")
             # Lấy ngày 1 của tháng trong start_date
-            query_start = start_dt_for_query.replace(day=1).strftime("%Y-%m-%d") 
+            query_start = start_dt_for_query.replace(day=1).strftime("%Y-%m-%d")
         except Exception as e:
             print(f"Lỗi khi parse start_date: {e}")
             return jsonify({"error": "Lỗi định dạng ngày"}), 400
@@ -812,7 +812,7 @@ def export_to_excel():
         border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
         align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-        # ================= PHẦN ĐIỂM DANH (LẤY TỪ API KẾT HỢP – ĐÃ CHẠY TỐT) =================
+        # ================= PHẦN ĐIỂM DANH =================
 
         # --- Tính giờ làm theo ngày (Cột 14) ---
         daily_hours_map = {}
@@ -858,19 +858,19 @@ def export_to_excel():
         # <<< SỬA LỖI 2: TÍNH TỔNG GIỜ RESET THEO TỪNG THÁNG >>>
         monthly_hours_map = {}
         for emp_id, records in emp_data.items():
-            # Nhóm các bản ghi theo tháng
+            # Nhóm các bản ghi theo tháng (ví dụ: "2025-10", "2025-11")
             monthly_groups = {}
             for rec in records:
                 date_str = rec.get("CheckinDate")
                 if not date_str: continue
                 try:
-                    # Key là Năm-Tháng, ví dụ: "2025-10"
+                    # Key là Năm-Tháng
                     month_key = datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m")
                     monthly_groups.setdefault(month_key, []).append(rec)
-                except:
-                    continue
+                except ValueError:
+                    continue # Bỏ qua nếu định dạng ngày sai
             
-            # Tính running_total cho từng tháng
+            # Lặp qua từng tháng để tính tổng
             for month_key, month_records in monthly_groups.items():
                 # Sắp xếp các bản ghi trong tháng theo ngày
                 sorted_records = sorted(
@@ -878,7 +878,7 @@ def export_to_excel():
                     key=lambda r: datetime.strptime(r.get("CheckinDate"), "%d/%m/%Y")
                 )
                 
-                running_total = 0 # Reset tổng về 0 khi bắt đầu tháng mới
+                running_total = 0 # QUAN TRỌNG: Reset tổng về 0 khi bắt đầu tháng mới
                 
                 for rec in sorted_records:
                     date_str = rec.get("CheckinDate")
@@ -891,7 +891,6 @@ def export_to_excel():
                     m, s = divmod(rem, 60)
                     monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
         # <<< KẾT THÚC SỬA LỖI 2 >>>
-
 
         # --- Ghi dữ liệu điểm danh (chỉ ngày trong khoảng start_date → end_date) ---
         grouped = {}
@@ -1128,10 +1127,15 @@ def export_combined_to_excel():
             start_dt = end_dt = today
 
         # <<< SỬA LỖI 1: LẤY TỪ NGÀY 1 CỦA THÁNG BẮT ĐẦU (start_date) >>>
-        query_start = start_dt.replace(day=1).strftime("%Y-%m-%d")
+        try:
+            start_dt_for_query = datetime.strptime(start_date, "%Y-%m-%d")
+            query_start = start_dt_for_query.replace(day=1).strftime("%Y-%m-%d")
+        except Exception as e:
+            print(f"Lỗi khi parse start_date: {e}")
+            return jsonify({"error": "Lỗi định dạng ngày"}), 400
         # <<< KẾT THÚC SỬA LỖI 1 >>>
         
-        search = request.args.get("search", "").strip()  # ĐÃ KHAI BÁO search
+        search = request.args.get("search", "").strip()
 
         # === LẤY DỮ LIỆU ĐIỂM DANH (TỪ ĐẦU THÁNG (CỦA start_date) ĐẾN end_date) ===
         attendance_query = build_attendance_query("custom", query_start, end_date, search, username=username)
@@ -1151,8 +1155,7 @@ def export_combined_to_excel():
         leave_data = []
         for rec in all_leave_data:
             display_date = rec.get("DisplayDate", "").strip()
-            # Lọc này chỉ lấy các đơn nghỉ phép có ngày nghỉ nằm trong [start_dt, end_dt]
-            if is_leave_in_range(display_date, start_dt, end_dt): 
+            if is_leave_in_range(display_date, start_dt, end_dt):
                 leave_data.append(rec)
 
         # === TẠO EXCEL ===
@@ -1208,7 +1211,7 @@ def export_combined_to_excel():
         # <<< SỬA LỖI 2: TÍNH TỔNG GIỜ RESET THEO TỪNG THÁNG >>>
         monthly_hours_map = {}
         for emp_id, records in emp_data.items():
-            # Nhóm các bản ghi theo tháng
+            # Nhóm các bản ghi theo tháng (ví dụ: "2025-10", "2025-11")
             monthly_groups = {}
             for rec in records:
                 date_str = rec.get("CheckinDate")
@@ -1216,16 +1219,16 @@ def export_combined_to_excel():
                 try:
                     month_key = datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m")
                     monthly_groups.setdefault(month_key, []).append(rec)
-                except:
+                except ValueError:
                     continue
             
-            # Tính running_total cho từng tháng
+            # Lặp qua từng tháng để tính tổng
             for month_key, month_records in monthly_groups.items():
                 sorted_records = sorted(
                     month_records,
                     key=lambda r: datetime.strptime(r.get("CheckinDate"), "%d/%m/%Y")
                 )
-                running_total = 0 # Reset tổng về 0 khi bắt đầu tháng mới
+                running_total = 0 # QUAN TRỌNG: Reset tổng về 0 khi bắt đầu tháng mới
                 for rec in sorted_records:
                     date_str = rec.get("CheckinDate")
                     daily_sec = daily_hours_map.get((emp_id, date_str), 0)
@@ -1243,7 +1246,6 @@ def export_combined_to_excel():
             date_str = d.get("CheckinDate", "")
             try:
                 rec_date = datetime.strptime(date_str, "%d/%m/%Y")
-                # Chỉ lọc lấy các ngày trong khoảng [start_dt, end_dt] để hiển thị
                 if start_dt <= rec_date <= end_dt:
                     key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), date_str)
                     grouped.setdefault(key, []).append(d)
@@ -1315,7 +1317,7 @@ def export_combined_to_excel():
         export_year = end_dt.year
         export_month = end_dt.month
 
-        for rec in leave_data: # Sử dụng leave_data đã lọc
+        for rec in leave_data:
             display_date_raw = rec.get("DisplayDate", "").strip()
             leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
 
@@ -1376,3 +1378,4 @@ def export_combined_to_excel():
         
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
