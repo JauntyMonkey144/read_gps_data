@@ -789,12 +789,18 @@ def export_to_excel():
         if not start_date or not end_date:
             return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
-        # === 2. XÁC ĐỊNH NGÀY 1 CỦA THÁNG CUỐI ĐỂ TÍNH TỔNG GIỜ ===
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-        query_start_dt = end_dt.replace(day=1)  # Luôn lấy từ ngày 1 của tháng
-        query_start = query_start_dt.strftime("%Y-%m-%d")
+        # <<< SỬA LỖI 1: LẤY TỪ NGÀY 1 CỦA THÁNG BẮT ĐẦU (start_date) >>>
+        # Thay vì lấy từ ngày 1 của tháng kết thúc (end_date)
+        try:
+            start_dt_for_query = datetime.strptime(start_date, "%Y-%m-%d")
+            # Lấy ngày 1 của tháng trong start_date
+            query_start = start_dt_for_query.replace(day=1).strftime("%Y-%m-%d") 
+        except Exception as e:
+            print(f"Lỗi khi parse start_date: {e}")
+            return jsonify({"error": "Lỗi định dạng ngày"}), 400
+        # <<< KẾT THÚC SỬA LỖI 1 >>>
 
-        # === 3. LẤY DỮ LIỆU TỪ ĐẦU THÁNG ĐẾN end_date ===
+        # === 3. LẤY DỮ LIỆU TỪ ĐẦU THÁNG (CỦA start_date) ĐẾN end_date ===
         search = request.args.get("search", "").strip()
         attendance_query = build_attendance_query("custom", query_start, end_date, search, username=username)
         data = list(collection.find(attendance_query, {"_id": 0}))
@@ -849,21 +855,43 @@ def export_to_excel():
                         daily_seconds = (last_out - first_in).total_seconds()
                 daily_hours_map[(emp_id, date_str)] = daily_seconds
 
-        # --- Tính tổng giờ tích lũy từ đầu tháng (Cột 15) ---
+        # <<< SỬA LỖI 2: TÍNH TỔNG GIỜ RESET THEO TỪNG THÁNG >>>
         monthly_hours_map = {}
         for emp_id, records in emp_data.items():
-            sorted_records = sorted(
-                records,
-                key=lambda r: datetime.strptime(r.get("CheckinDate", "01/01/1900"), "%d/%m/%Y")
-            )
-            running_total = 0
-            for rec in sorted_records:
+            # Nhóm các bản ghi theo tháng
+            monthly_groups = {}
+            for rec in records:
                 date_str = rec.get("CheckinDate")
-                daily_sec = daily_hours_map.get((emp_id, date_str), 0)
-                running_total += daily_sec
-                h, rem = divmod(running_total, 3600)
-                m, s = divmod(rem, 60)
-                monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
+                if not date_str: continue
+                try:
+                    # Key là Năm-Tháng, ví dụ: "2025-10"
+                    month_key = datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m")
+                    monthly_groups.setdefault(month_key, []).append(rec)
+                except:
+                    continue
+            
+            # Tính running_total cho từng tháng
+            for month_key, month_records in monthly_groups.items():
+                # Sắp xếp các bản ghi trong tháng theo ngày
+                sorted_records = sorted(
+                    month_records,
+                    key=lambda r: datetime.strptime(r.get("CheckinDate"), "%d/%m/%Y")
+                )
+                
+                running_total = 0 # Reset tổng về 0 khi bắt đầu tháng mới
+                
+                for rec in sorted_records:
+                    date_str = rec.get("CheckinDate")
+                    # Lấy số giờ làm của ngày đó (đã tính ở trên)
+                    daily_sec = daily_hours_map.get((emp_id, date_str), 0)
+                    running_total += daily_sec # Cộng dồn
+                    
+                    # Lưu kết quả tổng lũy kế cho ngày đó
+                    h, rem = divmod(running_total, 3600)
+                    m, s = divmod(rem, 60)
+                    monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
+        # <<< KẾT THÚC SỬA LỖI 2 >>>
+
 
         # --- Ghi dữ liệu điểm danh (chỉ ngày trong khoảng start_date → end_date) ---
         grouped = {}
@@ -873,6 +901,7 @@ def export_to_excel():
                 rec_date = datetime.strptime(date_str, "%d/%m/%Y")
                 start_dt = datetime.strptime(start_date, "%Y-%m-%d")
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+                # Chỉ lọc lấy các ngày trong khoảng [start_date, end_date] để hiển thị
                 if start_dt <= rec_date <= end_dt:
                     key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), date_str)
                     grouped.setdefault(key, []).append(d)
@@ -1098,10 +1127,13 @@ def export_combined_to_excel():
             today = datetime.now(VN_TZ)
             start_dt = end_dt = today
 
-        query_start = end_dt.replace(day=1).strftime("%Y-%m-%d")
+        # <<< SỬA LỖI 1: LẤY TỪ NGÀY 1 CỦA THÁNG BẮT ĐẦU (start_date) >>>
+        query_start = start_dt.replace(day=1).strftime("%Y-%m-%d")
+        # <<< KẾT THÚC SỬA LỖI 1 >>>
+        
         search = request.args.get("search", "").strip()  # ĐÃ KHAI BÁO search
 
-        # === LẤY DỮ LIỆU ĐIỂM DANH (TỪ ĐẦU THÁNG ĐẾN end_date) ===
+        # === LẤY DỮ LIỆU ĐIỂM DANH (TỪ ĐẦU THÁNG (CỦA start_date) ĐẾN end_date) ===
         attendance_query = build_attendance_query("custom", query_start, end_date, search, username=username)
         attendance_data = list(collection.find(attendance_query, {"_id": 0}))
 
@@ -1119,7 +1151,8 @@ def export_combined_to_excel():
         leave_data = []
         for rec in all_leave_data:
             display_date = rec.get("DisplayDate", "").strip()
-            if is_leave_in_range(display_date, start_dt, end_dt):
+            # Lọc này chỉ lấy các đơn nghỉ phép có ngày nghỉ nằm trong [start_dt, end_dt]
+            if is_leave_in_range(display_date, start_dt, end_dt): 
                 leave_data.append(rec)
 
         # === TẠO EXCEL ===
@@ -1172,21 +1205,37 @@ def export_combined_to_excel():
                         daily_seconds = (last_out - first_in).total_seconds()
                 daily_hours_map[(emp_id, date_str)] = daily_seconds
 
-        # Tính tổng giờ tích lũy
+        # <<< SỬA LỖI 2: TÍNH TỔNG GIỜ RESET THEO TỪNG THÁNG >>>
         monthly_hours_map = {}
         for emp_id, records in emp_data.items():
-            sorted_records = sorted(
-                records,
-                key=lambda r: datetime.strptime(r.get("CheckinDate", "01/01/1900"), "%d/%m/%Y")
-            )
-            running_total = 0
-            for rec in sorted_records:
+            # Nhóm các bản ghi theo tháng
+            monthly_groups = {}
+            for rec in records:
                 date_str = rec.get("CheckinDate")
-                daily_sec = daily_hours_map.get((emp_id, date_str), 0)
-                running_total += daily_sec
-                h, rem = divmod(running_total, 3600)
-                m, s = divmod(rem, 60)
-                monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
+                if not date_str: continue
+                try:
+                    month_key = datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m")
+                    monthly_groups.setdefault(month_key, []).append(rec)
+                except:
+                    continue
+            
+            # Tính running_total cho từng tháng
+            for month_key, month_records in monthly_groups.items():
+                sorted_records = sorted(
+                    month_records,
+                    key=lambda r: datetime.strptime(r.get("CheckinDate"), "%d/%m/%Y")
+                )
+                running_total = 0 # Reset tổng về 0 khi bắt đầu tháng mới
+                for rec in sorted_records:
+                    date_str = rec.get("CheckinDate")
+                    daily_sec = daily_hours_map.get((emp_id, date_str), 0)
+                    running_total += daily_sec
+                    
+                    h, rem = divmod(running_total, 3600)
+                    m, s = divmod(rem, 60)
+                    monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
+        # <<< KẾT THÚC SỬA LỖI 2 >>>
+
 
         # Ghi điểm danh (chỉ ngày trong khoảng start_date → end_date)
         grouped = {}
@@ -1194,6 +1243,7 @@ def export_combined_to_excel():
             date_str = d.get("CheckinDate", "")
             try:
                 rec_date = datetime.strptime(date_str, "%d/%m/%Y")
+                # Chỉ lọc lấy các ngày trong khoảng [start_dt, end_dt] để hiển thị
                 if start_dt <= rec_date <= end_dt:
                     key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), date_str)
                     grouped.setdefault(key, []).append(d)
@@ -1265,7 +1315,7 @@ def export_combined_to_excel():
         export_year = end_dt.year
         export_month = end_dt.month
 
-        for rec in leave_data:
+        for rec in leave_data: # Sử dụng leave_data đã lọc
             display_date_raw = rec.get("DisplayDate", "").strip()
             leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
 
@@ -1326,17 +1376,3 @@ def export_combined_to_excel():
         
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
