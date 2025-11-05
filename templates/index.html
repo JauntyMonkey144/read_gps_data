@@ -179,11 +179,10 @@
       <button onclick="applyLeaveFilter('năm')" id="leave-btn-nam">Năm</button>
       <button onclick="applyLeaveFilter('tất cả')" id="leave-btn-tatca">Tất cả</button>
       <select id="leaveDateTypeFilter" onchange="applyLeaveDateTypeFilter()">
-        <option value="CheckinTime">Ngày tạo đơn</option>
-        <option value="ApprovalDate1">Ngày duyệt/từ chối lần đầu</option>
-        <option value="ApprovalDate2">Ngày duyệt/từ chối lần cuối</option>
-        <option value="LeaveDate">Ngày nghỉ</option>       
-      </select>
+        <option value="CheckinTime">Ngày tạo đơn</option>
+        <option value="ApprovalDate2">Ngày duyệt/từ chối</option> 
+        <option value="LeaveDate">Ngày nghỉ</option>       
+      </select>
     </div>
     <div class="controls">
       <label><b>Từ ngày:</b></label><input type="date" id="leaveStartDate" />
@@ -212,10 +211,8 @@
             <th onclick="sortLeaveTable('CheckinDate')">Ngày nghỉ</th>
             <th onclick="sortLeaveTable('CheckinTime')">Ngày tạo đơn</th>
             <th onclick="sortLeaveTable('Tasks')">Lý do</th>
-            <th onclick="sortLeaveTable('ApprovalDate1')">Ngày Duyệt/Từ chối Lần đầu</th>
-            <th onclick="sortLeaveTable('Status1')">Trạng thái Lần đầu</th>
-            <th onclick="sortLeaveTable('ApprovalDate2')">Ngày Duyệt/Từ chối Lần cuối</th>
-            <th onclick="sortLeaveTable('Status2')">Trạng thái Lần cuối</th>
+            <th onclick="sortLeaveTable('ApprovalDate2')">Ngày Duyệt/Từ chối</th>
+            <th onclick="sortLeaveTable('Status2')">Trạng thái</th>
             <th onclick="sortLeaveTable('Note')">Ghi chú</th>
           </tr>
         </thead>
@@ -591,8 +588,6 @@
             <td>${r.CheckinDate||""}</td>
             <td>${r.CheckinTime||""}</td>
             <td>${Array.isArray(r.Tasks) ? r.Tasks.join(', ') : (r.Tasks || "")}</td>
-            <td>${r.ApprovalDate1||""}</td>
-            <td>${r.Status1||""}</td>
             <td>${r.ApprovalDate2||""}</td>
             <td>${r.Status2||""}</td>
             <td>${r.Note||""}</td>
