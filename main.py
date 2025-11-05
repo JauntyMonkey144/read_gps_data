@@ -994,420 +994,412 @@ def export_to_excel():
 
 @app.route("/api/export-leaves-excel", methods=["GET"])
 def export_leaves_to_excel():
-    try:
-        email = request.args.get("email")
-        if not email:
-            return jsonify({"error": "Thiếu email"}), 400
+    try:
+        email = request.args.get("email")
+        if not email:
+            return jsonify({"error": "Thiếu email"}), 400
 
-        admin = admins.find_one({"email": email})
-        user_doc = users.find_one({"email": email})
-        username = None if admin else user_doc.get("username") if user_doc else None
-        if not admin and not user_doc:
-            return jsonify({"error": "Email không tồn tại"}), 403
+        admin = admins.find_one({"email": email})
+        user_doc = users.find_one({"email": email})
+        username = None if admin else user_doc.get("username") if user_doc else None
+        if not admin and not user_doc:
+            return jsonify({"error": "Email không tồn tại"}), 403
 
-        start_date, end_date = get_export_date_range()
-        if not start_date or not end_date:
-            return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
+        start_date, end_date = get_export_date_range()
+        if not start_date or not end_date:
+            return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
-        # === CHUYỂN ĐỔI NGÀY ===
-        try:
-            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-            export_year = start_dt.year
-            export_month = start_dt.month
-        except:
-            today = datetime.now(VN_TZ)
-            start_dt = end_dt = today
-            export_year = today.year
-            export_month = today.month
+        # === CHUYỂN ĐỔI NGÀY ===
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            export_year = start_dt.year
+            export_month = start_dt.month
+        except:
+            today = datetime.now(VN_TZ)
+            start_dt = end_dt = today
+            export_year = today.year
+            export_month = today.month
 
-        # === LẤY TẤT CẢ ĐƠN CÓ DisplayDate ===
-        search = request.args.get("search", "").strip()  # ĐÃ KHAI BÁO search
-        base_conditions = [{"DisplayDate": {"$exists": True, "$ne": ""}}]
-        if search:
-            regex = re.compile(search, re.IGNORECASE)
-            base_conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
-        if username:
-            base_conditions.append({"EmployeeName": username})
+        # === LẤY TẤT CẢ ĐƠN CÓ DisplayDate ===
+        search = request.args.get("search", "").strip()
+        base_conditions = [{"DisplayDate": {"$exists": True, "$ne": ""}}]
+        if search:
+            regex = re.compile(search, re.IGNORECASE)
+            base_conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
+        if username:
+            base_conditions.append({"EmployeeName": username})
 
-        query = {"$and": base_conditions}
-        all_leaves_data = list(collection.find(query, {"_id": 0}))
+        query = {"$and": base_conditions}
+        all_leaves_data = list(collection.find(query, {"_id": 0}))
 
-        # === LỌC THEO NGÀY NGHỈ ===
-        filtered_leaves = []
-        for rec in all_leaves_data:
-            display_date = rec.get("DisplayDate", "").strip()
-            if is_leave_in_range(display_date, start_dt, end_dt):
-                filtered_leaves.append(rec)
+        # === LỌC THEO NGÀY NGHỈ ===
+        filtered_leaves = []
+        for rec in all_leaves_data:
+            display_date = rec.get("DisplayDate", "").strip()
+            if is_leave_in_range(display_date, start_dt, end_dt):
+                filtered_leaves.append(rec)
 
-        # === XUẤT EXCEL ===
-        template_path = "templates/Copy of Form nghỉ phép.xlsx"
-        wb = load_workbook(template_path)
-        ws = wb.active
+        # === XUẤT EXCEL ===
+        template_path = "templates/Copy of Form nghỉ phép.xlsx" # Đảm bảo file template này đã được cập nhật
+        wb = load_workbook(template_path)
+        ws = wb.active
 
-        headers = ["Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
-                   "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối",
-                   "Trạng thái Lần cuối", "Ghi chú"]
-        for i, h in enumerate(headers, 1):
-            ws.cell(row=1, column=i, value=h)
+        # <<< THAY ĐỔI 1: CẬP NHẬT HEADERS >>>
+        headers = ["Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
+                   "Ngày Duyệt/Từ chối", "Trạng thái", "Ghi chú"]
+        for i, h in enumerate(headers, 1):
+            ws.cell(row=1, column=i, value=h)
 
-        border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        current_row = 2
+        border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        current_row = 2
 
-        for rec in filtered_leaves:
-            display_date_raw = rec.get("DisplayDate", "").strip()
-            leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
+        for rec in filtered_leaves:
+            display_date_raw = rec.get("DisplayDate", "").strip()
+            leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
 
-            def reformat_date(match):
-                return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
-            display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date, display_date_raw)
+            def reformat_date(match):
+                return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
+            display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date, display_date_raw)
 
-            ws.cell(row=current_row, column=1, value=rec.get("EmployeeId", ""))
-            ws.cell(row=current_row, column=2, value=rec.get("EmployeeName", ""))
-            ws.cell(row=current_row, column=3, value=display_date)
-            ws.cell(row=current_row, column=4, value=leave_days if is_overlap else 0)
+            ws.cell(row=current_row, column=1, value=rec.get("EmployeeId", ""))
+            ws.cell(row=current_row, column=2, value=rec.get("EmployeeName", ""))
+            ws.cell(row=current_row, column=3, value=display_date)
+            ws.cell(row=current_row, column=4, value=leave_days if is_overlap else 0)
 
-            timestamp_str = ""
-            if rec.get("CreationTime"):
-                try:
-                    ct = rec['CreationTime']
-                    dt = ct if isinstance(ct, datetime) else datetime.fromisoformat(ct.replace('Z', '+00:00'))
-                    timestamp_str = dt.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
-                except:
-                    timestamp_str = str(rec.get("CreationTime"))
-            ws.cell(row=current_row, column=5, value=timestamp_str)
+            timestamp_str = ""
+            if rec.get("CreationTime"):
+                try:
+                    ct = rec['CreationTime']
+                    dt = ct if isinstance(ct, datetime) else datetime.fromisoformat(ct.replace('Z', '+00:00'))
+                    timestamp_str = dt.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+                except:
+                    timestamp_str = str(rec.get("CreationTime"))
+            ws.cell(row=current_row, column=5, value=timestamp_str)
 
-            tasks_str = (", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))).replace("Nghỉ phép: ", "")
-            ws.cell(row=current_row, column=6, value=rec.get("Reason") or tasks_str)
-            ws.cell(row=current_row, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate1")))
-            ws.cell(row=current_row, column=8, value=rec.get("Status1", ""))
-            ws.cell(row=current_row, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
-            ws.cell(row=current_row, column=10, value=rec.get("Status2", ""))
-            ws.cell(row=current_row, column=11, value=rec.get("LeaveNote", ""))
+            tasks_str = (", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))).replace("Nghỉ phép: ", "")
+            ws.cell(row=current_row, column=6, value=rec.get("Reason") or tasks_str)
+            
+            # <<< THAY ĐỔI 2: CẬP NHẬT CỘT DỮ LIỆU >>>
+            # Bỏ cột 7 (ApprovalDate1) và 8 (Status1)
+            ws.cell(row=current_row, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate2"))) # Cột 7 mới
+            ws.cell(row=current_row, column=8, value=rec.get("Status2", ""))                            # Cột 8 mới
+            ws.cell(row=current_row, column=9, value=rec.get("LeaveNote", ""))                         # Cột 9 mới
 
-            for col in range(1, 12):
-                cell = ws.cell(row=current_row, column=col)
-                cell.border = border
-                cell.alignment = align_left
-            current_row += 1
+            # <<< THAY ĐỔI 3: CẬP NHẬT VÒNG LẶP BORDER >>>
+            for col in range(1, 10): # Chỉ còn 9 cột
+                cell = ws.cell(row=current_row, column=col)
+                cell.border = border
+                cell.alignment = align_left
+            current_row += 1
 
-        export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
-        filename = get_export_filename("Nghỉ phép", start_date, end_date, export_date_str)
+        export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
+        filename = get_export_filename("Nghỉ phép", start_date, end_date, export_date_str)
 
-        output = BytesIO()
-        wb.save(output)
-        output.seek(0)
-        return send_file(
-            output,
-            as_attachment=True,
-            download_name=filename,
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
-    except Exception as e:
-        print(f"Lỗi export leaves: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        print(f"Lỗi export leaves: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/export-combined-excel", methods=["GET"])
 def export_combined_to_excel():
-    try:
-        # === KIỂM TRA EMAIL ===
-        email = request.args.get("email")
-        if not email:
-            return jsonify({"error": "Thiếu email"}), 400
+    try:
+        # === KIỂM TRA EMAIL ===
+        email = request.args.get("email")
+        if not email:
+            return jsonify({"error": "Thiếu email"}), 400
 
-        admin = admins.find_one({"email": email})
-        user = users.find_one({"email": email})
-        if not admin and not user:
-            return jsonify({"error": "Email không tồn tại"}), 403
-        username = None if admin else user.get("username")
+        admin = admins.find_one({"email": email})
+        user = users.find_one({"email": email})
+        if not admin and not user:
+            return jsonify({"error": "Email không tồn tại"}), 403
+        username = None if admin else user.get("username")
 
-        # === LẤY KHOẢNG NGÀY ===
-        start_date, end_date = get_export_date_range()
-        if not start_date or not end_date:
-            return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
+        # === LẤY KHOẢNG NGÀY ===
+        start_date, end_date = get_export_date_range()
+        if not start_date or not end_date:
+            return jsonify({"error": "Thiếu thông tin ngày xuất"}), 400
 
-        # === CHUYỂN ĐỔI NGÀY ===
-        try:
-            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-        except:
-            today = datetime.now(VN_TZ)
-            start_dt = end_dt = today
+        # === CHUYỂN ĐỔI NGÀY ===
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        except:
+            today = datetime.now(VN_TZ)
+            start_dt = end_dt = today
 
-        # === SỬA LỖI 1: LẤY DỮ LIỆU TỪ NGÀY 1 CỦA THÁNG BẮT ĐẦU ===
-        try:
-            start_dt_for_query = datetime.strptime(start_date, "%Y-%m-%d")
-            query_start = start_dt_for_query.replace(day=1).strftime("%Y-%m-%d")
-        except Exception as e:
-            print(f"Lỗi khi parse start_date: {e}")
-            return jsonify({"error": "Lỗi định dạng ngày"}), 400
-        
-        search = request.args.get("search", "").strip()
+        # === SỬA LỖI 1: LẤY DỮ LIỆU TỪ NGÀY 1 CỦA THÁNG BẮT ĐẦU ===
+        try:
+            start_dt_for_query = datetime.strptime(start_date, "%Y-%m-%d")
+            query_start = start_dt_for_query.replace(day=1).strftime("%Y-%m-%d")
+        except Exception as e:
+            print(f"Lỗi khi parse start_date: {e}")
+            return jsonify({"error": "Lỗi định dạng ngày"}), 400
+        
+        search = request.args.get("search", "").strip()
 
-        # === LẤY DỮ LIỆU ĐIỂM DANH (THEO TIMESTAMP) ===
-        attendance_query = build_attendance_query("custom", query_start, end_date, search, username=username)
-        attendance_data = list(collection.find(attendance_query, {"_id": 0}))
+        # === LẤY DỮ LIỆU ĐIỂM DANH (THEO TIMESTAMP) ===
+        attendance_query = build_attendance_query("custom", query_start, end_date, search, username=username)
+        attendance_data = list(collection.find(attendance_query, {"_id": 0}))
 
-        # === LẤY DỮ LIỆU NGHỈ PHÉP (LOGIC CŨ VẪN GIỮ NGUYÊN) ===
-        base_conditions = [{"DisplayDate": {"$exists": True, "$ne": ""}}]
-        if search:
-            regex = re.compile(search, re.IGNORECASE)
-            base_conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
-        if username:
-            base_conditions.append({"EmployeeName": username})
+        # === LẤY DỮ LIỆU NGHỈ PHÉP (LOGIC CŨ VẪN GIỮ NGUYÊN) ===
+        base_conditions = [{"DisplayDate": {"$exists": True, "$ne": ""}}]
+        if search:
+            regex = re.compile(search, re.IGNORECASE)
+            base_conditions.append({"$or": [{"EmployeeId": regex}, {"EmployeeName": regex}]})
+        if username:
+            base_conditions.append({"EmployeeName": username})
 
-        leave_query = {"$and": base_conditions}
-        all_leave_data = list(collection.find(leave_query, {"_id": 0}))
+        leave_query = {"$and": base_conditions}
+        all_leave_data = list(collection.find(leave_query, {"_id": 0}))
 
-        leave_data = []
-        for rec in all_leave_data:
-            display_date = rec.get("DisplayDate", "").strip()
-            if is_leave_in_range(display_date, start_dt, end_dt):
-                leave_data.append(rec)
+        leave_data = []
+        for rec in all_leave_data:
+            display_date = rec.get("DisplayDate", "").strip()
+            if is_leave_in_range(display_date, start_dt, end_dt):
+                leave_data.append(rec)
 
-        # === TẠO EXCEL ===
-        template_path = "templates/Form kết hợp.xlsx"
-        wb = load_workbook(template_path)
-        border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
-        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        # === TẠO EXCEL ===
+        template_path = "templates/Form kết hợp.xlsx" # Đảm bảo file template này đã được cập nhật
+        wb = load_workbook(template_path)
+        border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-        # ================= SHEET: ĐIỂM DANH (LOGIC MỚI) =================
-        ws_att = wb["Điểm danh"]
+        # ================= SHEET: ĐIỂM DANH (LOGIC MỚI - GIỮ NGUYÊN) =================
+        ws_att = wb["Điểm danh"]
 
-        # --- Helper: Lấy chuỗi ngày VN (DD/MM/YYYY) từ Timestamp ---
-        def get_vn_date_str_att(rec):
-            ts = rec.get("Timestamp")
-            if not ts: return None
-            try:
-                if isinstance(ts, str):
-                    ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                ts_vn = ts.astimezone(VN_TZ)
-                return ts_vn.strftime("%d/%m/%Y")
-            except Exception:
-                return None
+        # --- Helper: Lấy chuỗi ngày VN (DD/MM/YYYY) từ Timestamp ---
+        def get_vn_date_str_att(rec):
+            ts = rec.get("Timestamp")
+            if not ts: return None
+            try:
+                if isinstance(ts, str):
+                    ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                ts_vn = ts.astimezone(VN_TZ)
+                return ts_vn.strftime("%d/%m/%Y")
+            except Exception:
+                return None
 
-        # --- 1. Nhóm nhân viên và tính toán _vn_date_str ---
-        daily_hours_map = {}
-        emp_data = {}
-        for rec in attendance_data:
-            emp_id = rec.get("EmployeeId")
-            if emp_id:
-                rec["_vn_date_str"] = get_vn_date_str_att(rec)
-                if rec["_vn_date_str"]:
-                    emp_data.setdefault(emp_id, []).append(rec)
+        # --- 1. Nhóm nhân viên và tính toán _vn_date_str ---
+        daily_hours_map = {}
+        emp_data = {}
+        for rec in attendance_data:
+            emp_id = rec.get("EmployeeId")
+            if emp_id:
+                rec["_vn_date_str"] = get_vn_date_str_att(rec)
+                if rec["_vn_date_str"]:
+                    emp_data.setdefault(emp_id, []).append(rec)
 
-        # --- 2. Tính giờ làm theo ngày (DailyHours) ---
-        for emp_id, records in emp_data.items():
-            daily_groups = {}
-            for rec in records:
-                date_str = rec.get("_vn_date_str")
-                if date_str:
-                    daily_groups.setdefault(date_str, []).append(rec)
+        # --- 2. Tính giờ làm theo ngày (DailyHours) ---
+        for emp_id, records in emp_data.items():
+            daily_groups = {}
+            for rec in records:
+                date_str = rec.get("_vn_date_str")
+                if date_str:
+                    daily_groups.setdefault(date_str, []).append(rec)
 
-            for date_str, day_records in daily_groups.items():
-                checkins = []
-                checkouts = []
-                for r in day_records:
-                    ts = r.get("Timestamp")
-                    if not ts: continue
-                    try:
-                        if isinstance(ts, str):
-                            ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                        if r.get("CheckType") == "checkin":
-                            checkins.append(ts)
-                        elif r.get("CheckType") == "checkout":
-                            checkouts.append(ts)
-                    except:
-                        continue
-                
-                daily_seconds = 0
-                if checkins and checkouts:
-                    first_in = min(checkins)
-                    last_out = max(checkouts)
-                    if last_out > first_in:
-                        daily_seconds = (last_out - first_in).total_seconds()
-                daily_hours_map[(emp_id, date_str)] = daily_seconds
+            for date_str, day_records in daily_groups.items():
+                checkins = []
+                checkouts = []
+                for r in day_records:
+                    ts = r.get("Timestamp")
+                    if not ts: continue
+                    try:
+                        if isinstance(ts, str):
+                            ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                        if r.get("CheckType") == "checkin":
+                            checkins.append(ts)
+                        elif r.get("CheckType") == "checkout":
+                            checkouts.append(ts)
+                    except:
+                         continue
+                
+                daily_seconds = 0
+                if checkins and checkouts:
+                    first_in = min(checkins)
+                    last_out = max(checkouts)
+                    if last_out > first_in:
+                        daily_seconds = (last_out - first_in).total_seconds()
+                daily_hours_map[(emp_id, date_str)] = daily_seconds
 
-        # <<< SỬA LỖI 3: LOGIC TÍNH TỔNG GIỜ MỚI (CHỐNG LẶP LẠI) >>>
-        monthly_hours_map = {}
-        for emp_id in emp_data.keys():
-            # 1. Lấy tất cả giờ hàng ngày của nhân viên này
-            emp_daily_totals = { 
-                date_str: secs 
-                for (e_id, date_str), secs in daily_hours_map.items() 
-                if e_id == emp_id 
-            }
+        # --- 3. Tính tổng giờ (MonthlyHours) ---
+        monthly_hours_map = {}
+        for emp_id in emp_data.keys():
+            emp_daily_totals = { 
+                date_str: secs 
+                for (e_id, date_str), secs in daily_hours_map.items() 
+                if e_id == emp_id 
+            }
+            monthly_groups = {}
+            for date_str, secs in emp_daily_totals.items():
+                try:
+                    month_key = datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m")
+                    monthly_groups.setdefault(month_key, []).append((date_str, secs))
+                except ValueError:
+                    continue
+            sorted_month_keys = sorted(monthly_groups.keys())
+            for month_key in sorted_month_keys:
+                month_days = monthly_groups[month_key]
+                sorted_days = sorted(
+                    month_days, 
+                    key=lambda x: datetime.strptime(x[0], "%d/%m/%Y")
+                )
+                running_total = 0
+                for date_str, daily_sec in sorted_days:
+                    running_total += daily_sec
+                    h, rem = divmod(running_total, 3600)
+                    m, s = divmod(rem, 60)
+                    monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
+
+        # --- 4. Ghi dữ liệu vào Sheet Điểm danh ---
+        grouped = {}
+        for d in attendance_data:
+            date_str = d.get("_vn_date_str", "")
+            if not date_str:
+                continue
+            try:
+                rec_date = datetime.strptime(date_str, "%d/%m/%Y")
+                if start_dt.date() <= rec_date.date() <= end_dt.date():
+                    key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), date_str)
+                    grouped.setdefault(key, []).append(d)
+            except:
+                continue
+
+        start_row = 2
+        for i, ((emp_id, emp_name, date_str), records) in enumerate(grouped.items()):
+            row = start_row + i
+            ws_att.cell(row=row, column=1, value=emp_id)
+            ws_att.cell(row=row, column=2, value=emp_name)
+            ws_att.cell(row=row, column=3, value=date_str)
+
+            daily_sec = daily_hours_map.get((emp_id, date_str), 0)
+            h_d, rem_d = divmod(daily_sec, 3600)
+            m_d, s_d = divmod(rem_d, 60)
+            ws_att.cell(row=row, column=14, value=f"{int(h_d)}h {int(m_d)}m {int(s_d)}s" if daily_sec > 0 else "")
+
+            ws_att.cell(row=row, column=15, value=monthly_hours_map.get((emp_id, date_str), ""))
+
+            checkin_counter = 0
+            for rec in sorted(records, key=lambda x: x.get("Timestamp") or datetime.min):
+                if rec.get("CheckType") == "checkin" and checkin_counter < 9:
+                    time_str = ""
+                    if rec.get("Timestamp"):
+                        try:
+                            ts = rec["Timestamp"]
+                            if isinstance(ts, str):
+                                ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                            time_str = ts.astimezone(VN_TZ).strftime("%H:%M:%S")
+                        except:
+                            time_str = ""
+                    tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
+                    cell_value = "; ".join(filter(None, [time_str, rec.get("ProjectId", ""), tasks_str, rec.get("Address", ""), rec.get("CheckinNote", "")]))
+                    ws_att.cell(row=row, column=4 + checkin_counter, value=cell_value)
+                    checkin_counter += 1
+                elif rec.get("CheckType") == "checkout":
+                    time_str = ""
+                    if rec.get("Timestamp"):
+                       try:
+                            ts = rec["Timestamp"]
+                            if isinstance(ts, str):
+                                ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                            time_str = ts.astimezone(VN_TZ).strftime("%H:%M:%S")
+                        except:
+                            time_str = ""
+                    tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
+                    cell_value = "; ".join(filter(None, [time_str, rec.get("ProjectId", ""), tasks_str, rec.get("Address", ""), rec.get("CheckinNote", "")]))
+                    ws_att.cell(row=row, column=13, value=cell_value)
+
+            for col in range(1, 16):
+                cell = ws_att.cell(row=row, column=col)
+                cell.border = border
+                cell.alignment = align_left
+
+        # ================= SHEET: NGHỈ PHÉP (ĐÃ CẬP NHẬT) =================
+        ws_leave = wb["Nghỉ phép"]
+
+        # <<< THAY ĐỔI 1: CẬP NHẬT HEADERS >>>
+        headers = ["Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
+                   "Ngày Duyệt/Từ chối", "Trạng thái", "Ghi chú"]
+        for i, h in enumerate(headers, 1):
+            ws_leave.cell(row=1, column=i, value=h)
+
+        current_row_leave = 2
+        export_year = end_dt.year
+        export_month = end_dt.month
+
+        for rec in leave_data: # Sử dụng leave_data đã lọc
+            display_date_raw = rec.get("DisplayDate", "").strip()
+            leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
+
+            def reformat_date(match):
+                return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
+            display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date, display_date_raw)
+
+            ws_leave.cell(row=current_row_leave, column=1, value=rec.get("EmployeeId", ""))
+            ws_leave.cell(row=current_row_leave, column=2, value=rec.get("EmployeeName", ""))
+            ws_leave.cell(row=current_row_leave, column=3, value=display_date)
+            ws_leave.cell(row=current_row_leave, column=4, value=leave_days if is_overlap else 0)
+
+            timestamp_str = ""
+            if rec.get("CreationTime"):
+                try:
+                    ct = rec['CreationTime']
+                  S dt = ct if isinstance(ct, datetime) else datetime.fromisoformat(ct.replace('Z', '+00:00'))
+                    timestamp_str = dt.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
+                except:
+                    timestamp_str = str(rec.get("CreationTime"))
+            ws_leave.cell(row=current_row_leave, column=5, value=timestamp_str)
+
+            tasks_str = (", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))).replace("Nghỉ phép: ", "")
+            ws_leave.cell(row=current_row_leave, column=6, value=rec.get("Reason") or tasks_str)
             
-            # 2. Nhóm các ngày đó theo tháng
-            monthly_groups = {}
-            for date_str, secs in emp_daily_totals.items():
-                try:
-                    month_key = datetime.strptime(date_str, "%d/%m/%Y").strftime("%Y-%m")
-                    monthly_groups.setdefault(month_key, []).append((date_str, secs))
-                except ValueError:
-                    continue
+            # <<< THAY ĐỔI 2: CẬP NHẬT CỘT DỮ LIỆU >>>
+            ws_leave.cell(row=current_row_leave, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
+            ws_leave.cell(row=current_row_leave, column=8, value=rec.get("Status2", ""))
+            ws_leave.cell(row=current_row_leave, column=9, value=rec.get("LeaveNote", ""))
 
-            # 3. Sắp xếp các tháng
-            sorted_month_keys = sorted(monthly_groups.keys())
-            
-            # 4. Lặp qua từng tháng
-            for month_key in sorted_month_keys:
-                month_days = monthly_groups[month_key]
-                # Sắp xếp các ngày trong tháng
-                sorted_days = sorted(
-                    month_days, 
-                    key=lambda x: datetime.strptime(x[0], "%d/%m/%Y")
-                )
-                
-                running_total = 0 # Reset tổng khi bắt đầu tháng mới
-                
-                # 5. Lặp qua TỪNG NGÀY (chỉ 1 lần/ngày)
-                for date_str, daily_sec in sorted_days:
-                    running_total += daily_sec
-                    h, rem = divmod(running_total, 3600)
-                    m, s = divmod(rem, 60)
-                    monthly_hours_map[(emp_id, date_str)] = f"{int(h)}h {int(m)}m {int(s)}s" if running_total > 0 else ""
-        # <<< KẾT THÚC SỬA LỖI 3 >>>
+            # <<< THAY ĐỔI 3: CẬP NHẬT VÒNG LẶP BORDER >>>
+            for col in range(1, 10): # Chỉ còn 9 cột
+                cell = ws_leave.cell(row=current_row_leave, column=col)
+                cell.border = border
+                cell.alignment = align_left
+            current_row_leave += 1
 
-        # --- 4. Ghi dữ liệu vào Sheet Điểm danh ---
-        grouped = {}
-        for d in attendance_data:
-            date_str = d.get("_vn_date_str", "")
-            if not date_str:
-                continue
-            try:
-                rec_date = datetime.strptime(date_str, "%d/%m/%Y")
-                if start_dt.date() <= rec_date.date() <= end_dt.date():
-                    key = (d.get("EmployeeId", ""), d.get("EmployeeName", ""), date_str)
-                    grouped.setdefault(key, []).append(d)
-            except:
-                continue
+        # === TÊN FILE ===
+        export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
+        filename = get_export_filename("Báo cáo tổng hợp", start_date, end_date, export_date_str)
 
-        start_row = 2
-        for i, ((emp_id, emp_name, date_str), records) in enumerate(grouped.items()):
-            row = start_row + i
-            ws_att.cell(row=row, column=1, value=emp_id)
-            ws_att.cell(row=row, column=2, value=emp_name)
-            ws_att.cell(row=row, column=3, value=date_str)
+        output = BytesIO()
+         wb.save(output)
+        output.seek(0)
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
-            daily_sec = daily_hours_map.get((emp_id, date_str), 0)
-            h_d, rem_d = divmod(daily_sec, 3600)
-            m_d, s_d = divmod(rem_d, 60)
-            ws_att.cell(row=row, column=14, value=f"{int(h_d)}h {int(m_d)}m {int(s_d)}s" if daily_sec > 0 else "")
-
-            ws_att.cell(row=row, column=15, value=monthly_hours_map.get((emp_id, date_str), ""))
-
-            checkin_counter = 0
-            for rec in sorted(records, key=lambda x: x.get("Timestamp") or datetime.min):
-                if rec.get("CheckType") == "checkin" and checkin_counter < 9:
-                    time_str = ""
-                    if rec.get("Timestamp"):
-                        try:
-                            ts = rec["Timestamp"]
-                            if isinstance(ts, str):
-                                ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                            time_str = ts.astimezone(VN_TZ).strftime("%H:%M:%S")
-                        except:
-                            time_str = ""
-                    tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
-                    cell_value = "; ".join(filter(None, [time_str, rec.get("ProjectId", ""), tasks_str, rec.get("Address", ""), rec.get("CheckinNote", "")]))
-                    ws_att.cell(row=row, column=4 + checkin_counter, value=cell_value)
-                    checkin_counter += 1
-                elif rec.get("CheckType") == "checkout":
-                    time_str = ""
-                    if rec.get("Timestamp"):
-                        try:
-                            ts = rec["Timestamp"]
-                            if isinstance(ts, str):
-                                ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                            time_str = ts.astimezone(VN_TZ).strftime("%H:%M:%S")
-                        except:
-                            time_str = ""
-                    tasks_str = ", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))
-                    cell_value = "; ".join(filter(None, [time_str, rec.get("ProjectId", ""), tasks_str, rec.get("Address", ""), rec.get("CheckinNote", "")]))
-                    ws_att.cell(row=row, column=13, value=cell_value)
-
-            for col in range(1, 16):
-                cell = ws_att.cell(row=row, column=col)
-                cell.border = border
-                cell.alignment = align_left
-
-        # ================= SHEET: NGHỈ PHÉP (LOGIC CŨ VẪN GIỮ NGUYÊN) =================
-        ws_leave = wb["Nghỉ phép"]
-
-        headers = ["Mã NV", "Tên NV", "Ngày Nghỉ", "Số ngày nghỉ", "Ngày tạo đơn", "Lý do",
-                   "Ngày Duyệt/Từ chối Lần đầu", "Trạng thái Lần đầu", "Ngày Duyệt/Từ chối Lần cuối",
-                   "Trạng thái Lần cuối", "Ghi chú"]
-        for i, h in enumerate(headers, 1):
-            ws_leave.cell(row=1, column=i, value=h)
-
-        current_row_leave = 2
-        export_year = end_dt.year
-        export_month = end_dt.month
-
-        for rec in leave_data: # Sử dụng leave_data đã lọc
-            display_date_raw = rec.get("DisplayDate", "").strip()
-            leave_days, is_overlap = calculate_leave_days_for_month(rec, export_year, export_month)
-
-            def reformat_date(match):
-                return datetime.strptime(match.group(0), "%Y-%m-%d").strftime("%d/%m/%Y")
-            display_date = re.sub(r"\d{4}-\d{2}-\d{2}", reformat_date, display_date_raw)
-
-            ws_leave.cell(row=current_row_leave, column=1, value=rec.get("EmployeeId", ""))
-            ws_leave.cell(row=current_row_leave, column=2, value=rec.get("EmployeeName", ""))
-            ws_leave.cell(row=current_row_leave, column=3, value=display_date)
-            ws_leave.cell(row=current_row_leave, column=4, value=leave_days if is_overlap else 0)
-
-            timestamp_str = ""
-            if rec.get("CreationTime"):
-                try:
-                    ct = rec['CreationTime']
-                    dt = ct if isinstance(ct, datetime) else datetime.fromisoformat(ct.replace('Z', '+00:00'))
-                    timestamp_str = dt.astimezone(VN_TZ).strftime('%d/%m/%Y %H:%M:%S')
-                except:
-                    timestamp_str = str(rec.get("CreationTime"))
-            ws_leave.cell(row=current_row_leave, column=5, value=timestamp_str)
-
-            tasks_str = (", ".join(rec.get("Tasks", [])) if isinstance(rec.get("Tasks"), list) else str(rec.get("Tasks", ""))).replace("Nghỉ phép: ", "")
-            ws_leave.cell(row=current_row_leave, column=6, value=rec.get("Reason") or tasks_str)
-            ws_leave.cell(row=current_row_leave, column=7, value=get_formatted_approval_date(rec.get("ApprovalDate1")))
-            ws_leave.cell(row=current_row_leave, column=8, value=rec.get("Status1", ""))
-            ws_leave.cell(row=current_row_leave, column=9, value=get_formatted_approval_date(rec.get("ApprovalDate2")))
-            ws_leave.cell(row=current_row_leave, column=10, value=rec.get("Status2", ""))
-            ws_leave.cell(row=current_row_leave, column=11, value=rec.get("LeaveNote", ""))
-
-            for col in range(1, 12):
-                cell = ws_leave.cell(row=current_row_leave, column=col)
-                cell.border = border
-                cell.alignment = align_left
-            current_row_leave += 1
-
-        # === TÊN FILE ===
-        export_date_str = datetime.now(VN_TZ).strftime('%d-%m-%Y')
-        filename = get_export_filename("Báo cáo tổng hợp", start_date, end_date, export_date_str)
-
-        output = BytesIO()
-        wb.save(output)
-        output.seek(0)
-        return send_file(
-            output,
-            as_attachment=True,
-            download_name=filename,
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-    except Exception as e:
-        print(f"Lỗi export combined: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        print(f"Lỗi export combined: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
         
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
 
 
 
