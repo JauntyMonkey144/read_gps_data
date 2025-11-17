@@ -113,9 +113,18 @@
     .export-range-option.active {
       display: block;
     }
+    header { padding: 10px 30px; background: #fff; border-bottom: 1px solid #ddd;
+             display:flex; justify-content:space-between; align-items:center; }
+    .header-title { font-size: 1.5rem; font-weight: bold; color: #333; }
+    .header-clock { font-size: 1rem; color:#007bff; }
+    footer { margin-top: 40px; padding: 15px; background: #f5f5f5; text-align: center; color: #666; }
   </style>
 </head>
 <body>
+  <header>
+    <span class="header-title">Sun Automation</span>
+    <span class="header-clock" id="headerClock"></span>
+  </header>
   <h1>Dữ liệu Chấm công & Nghỉ phép</h1>
   <div id="messageArea"></div>
   <div id="greeting"></div>
@@ -295,7 +304,7 @@
       <div id="exportModalMessage" class="msg" style="display:none; margin-top: 10px;"></div>
     </div>
   </div>
-
+  <footer>&copy; 2025 Sun Automation - Ứng dụng điểm danh GPS + FaceID</footer>
   <script>
     let currentTab = "attendance";
     let currentFilter = "hôm nay";
