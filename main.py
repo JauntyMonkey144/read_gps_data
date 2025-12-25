@@ -18,7 +18,7 @@ CORS(app, methods=["GET", "POST"])
 
 # ---- Init App ----
 # ---- Cấu hình Domain chính cho ứng dụng ----
-app.config["SERVER_NAME"] = os.environ.get("SERVER_NAME", "system.sun-automation.id.vn")
+app.config["SERVER_NAME"] = os.environ.get("SERVER_NAME")
 app.config["PREFERRED_URL_SCHEME"] = "https"
 
 # ---- Timezone VN ----
@@ -31,7 +31,7 @@ DB_NAME = os.getenv("DB_NAME", "Sun_Database_1")
 
 # ---- Resend API Config ----
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "system@sun-automation.id.vn")
+RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL")
 
 # ==============================================================================
 # CẤU HÌNH KẾT NỐI MONGODB MỚI (HỖ TRỢ SERVERLESS)
@@ -1175,3 +1175,4 @@ def export_combined_to_excel():
 
 # if __name__ == "__main__":
 #     app.run(host="0.0.0.0", port=5000, debug=False)
+
